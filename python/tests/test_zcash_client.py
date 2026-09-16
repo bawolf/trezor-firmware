@@ -55,6 +55,13 @@ OTHER_TRANSFER_ID = bytes(range(16, 32))
 REFERENCE_HEIGHT = FIXTURE_MANIFEST["corpus_height"]
 DIVERSIFIER_INDEX = bytes(11)
 
+VIEWING_KEYS = {
+    MAINNET: "uview17j0q0nnczz63ducvkhe409f4r8sa2gx88unakv64k95dpe4r2hvn3lhe2gdfn00vsl830682a7tdhzwuhtsw2dp7usgxzdgqxujgu4pv50xrhuakfuk294xjcuhrs5ag0esenlp4wsawqmuqaaspykcplgk0vrds7fm0hrp3up2mmzgh7rdfhycgu2xp8",
+    TESTNET: "uviewtest1frzzf669pvkxdjsgwf6y43tvuulek5l3fujvjsfrddrqs07mvpmaa2tua4jhdw4n3ekkqdxq9zgl53r8axe6l3sdzddlwuv3fz6tkyzv4xfkpfmkuevv2q46sapk5d3lhp7m5te04k7ulpv9j3sa08w7akay2xlpj68ly3355l0pgcydz3kvu5c335ggc",
+}
+# Generated independently with published orchard 0.15.3 FullViewingKey and
+# zcash_address 0.13.0 Ufvk APIs from the public seed bytes 00..1f.
+
 CHUNK = zcash.CHUNK_BYTES
 
 
@@ -312,12 +319,13 @@ def test_get_address_rejects_bad_diversifier(diversifier: object) -> None:
 @pytest.mark.parametrize("network", NETWORKS)
 @pytest.mark.parametrize("account", ACCOUNTS)
 def test_get_viewing_key(network: messages.ZcashNetwork, account: int) -> None:
-    key = "uview1example" if network is MAINNET else "uviewtest1example"
+    key = VIEWING_KEYS[network]
     session = scripted(messages.ZcashViewingKey(key=key))
     assert zcash.get_viewing_key(session, network, account) == key
     assert sent(session) == [
         messages.ZcashGetViewingKey(network=network, account=account)
     ]
+    assert not remaining(session)
 
 
 def test_viewing_key_export_has_no_full_selector() -> None:
@@ -361,9 +369,13 @@ def test_viewing_key_wrong_response_type_returns_no_key_material() -> None:
     "network, key",
     [
         (MAINNET, ""),
-        (MAINNET, "uviewtest1cross-network"),
-        (TESTNET, "uview1cross-network"),
+        (MAINNET, VIEWING_KEYS[TESTNET]),
+        (TESTNET, VIEWING_KEYS[MAINNET]),
         (TESTNET, b"uviewtest1wrong-type"),
+        (MAINNET, "uview1example"),
+        (MAINNET, VIEWING_KEYS[MAINNET].upper()),
+        (MAINNET, VIEWING_KEYS[MAINNET][:-1] + "q"),
+        (MAINNET, VIEWING_KEYS[MAINNET] + "q"),
     ],
 )
 def test_get_viewing_key_rejects_invalid_or_cross_network_response(
@@ -377,6 +389,96 @@ def test_get_viewing_key_rejects_invalid_or_cross_network_response(
         zcash.get_viewing_key(session, network, 0)
     assert_cancelled(session)
     assert not session.is_invalid
+
+
+def _encode_malformed_ufvk(hrp: str, payload: bytes) -> str:
+    jumbled = bytearray(payload)
+    zcash._f4jumble(jumbled, inverse=False)
+    data = zcash._convert_bits(jumbled, 8, 5, pad=True)
+    return zcash._bech32m_encode(hrp, data)
+
+
+@pytest.mark.parametrize(
+    "payload",
+    [
+        bytes((2, 96)) + bytes(96) + b"uview" + bytes(11),
+        bytes((3, 95)) + bytes(96) + b"uview" + bytes(11),
+        bytes((3, 96)) + bytes(96) + b"uview" + bytes(10) + b"x",
+        bytes((3, 48)) + bytes(48) + bytes((3, 46)) + bytes(46) + b"uview" + bytes(11),
+    ],
+    ids=["wrong-typecode", "wrong-item-length", "wrong-padding", "two-items"],
+)
+def test_get_viewing_key_rejects_well_checksummed_non_orchard_shapes(
+    payload: bytes,
+) -> None:
+    key = _encode_malformed_ufvk("uview", payload)
+    assert len(key) == 195
+    session = scripted(
+        messages.ZcashViewingKey(key=key),
+        messages.Failure(code=messages.FailureType.ActionCancelled),
+    )
+    with pytest.raises(exceptions.ProtocolError, match="Invalid Zcash viewing key"):
+        zcash.get_viewing_key(session, MAINNET, 0)
+    assert_cancelled(session)
+    assert not session.is_invalid
+
+
+def test_get_viewing_key_rejects_noncanonical_bit_conversion() -> None:
+    hrp, data = zcash._bech32m_decode(VIEWING_KEYS[MAINNET])
+    data[-1] |= 1  # the final three bits are required zero padding
+    key = zcash._bech32m_encode(hrp, data)
+    session = scripted(
+        messages.ZcashViewingKey(key=key),
+        messages.Failure(code=messages.FailureType.ActionCancelled),
+    )
+    with pytest.raises(exceptions.ProtocolError, match="Invalid Zcash viewing key"):
+        zcash.get_viewing_key(session, MAINNET, 0)
+    assert_cancelled(session)
+    assert not session.is_invalid
+    assert not remaining(session)
+
+
+def test_get_viewing_key_rejects_noncanonical_compact_size() -> None:
+    payload = b"\xfd\x03\x00\x60" + bytes(96) + b"uview" + bytes(11)
+    key = _encode_malformed_ufvk("uview", payload)
+    assert len(key) > 195
+    session = scripted(
+        messages.ZcashViewingKey(key=key),
+        messages.Failure(code=messages.FailureType.ActionCancelled),
+    )
+    with pytest.raises(exceptions.ProtocolError, match="Invalid Zcash viewing key"):
+        zcash.get_viewing_key(session, MAINNET, 0)
+    assert_cancelled(session)
+    assert not session.is_invalid
+    assert not remaining(session)
+
+
+def test_get_viewing_key_rejects_bech32_instead_of_bech32m() -> None:
+    hrp, data = zcash._bech32m_decode(VIEWING_KEYS[MAINNET])
+    values = zcash._bech32_hrp_expand(hrp) + data + [0] * 6
+    checksum = zcash._bech32_polymod(values) ^ 1
+    checksum_values = [(checksum >> (5 * (5 - index))) & 31 for index in range(6)]
+    key = (
+        hrp
+        + "1"
+        + "".join(zcash._BECH32_CHARSET[item] for item in data + checksum_values)
+    )
+    session = scripted(
+        messages.ZcashViewingKey(key=key),
+        messages.Failure(code=messages.FailureType.ActionCancelled),
+    )
+    with pytest.raises(exceptions.ProtocolError, match="Invalid Zcash viewing key"):
+        zcash.get_viewing_key(session, MAINNET, 0)
+    assert_cancelled(session)
+    assert not session.is_invalid
+    assert not remaining(session)
+
+
+def test_ufvk_envelope_check_does_not_replace_orchard_key_parsing() -> None:
+    key = _encode_malformed_ufvk(
+        "uview", bytes((3, 96)) + bytes(96) + b"uview" + bytes(11)
+    )
+    assert zcash._has_canonical_orchard_ufvk_envelope(key, MAINNET)
 
 
 def test_malformed_response_cancels_and_raises_protocol_error() -> None:
