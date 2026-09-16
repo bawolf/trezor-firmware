@@ -9,6 +9,7 @@ members = [
     "sec",
     "io",
     "ironwood",
+    "ironwood-receive",
     "upymod",
     "rust",
     "projects/*",
@@ -66,6 +67,7 @@ debug = false
 strip = true
 
 [workspace.dependencies]
+aes = { version = "=0.8.4", default-features = false, features = ["zeroize"] }
 blake2b_simd = { version = "=1.0.2", default-features = false, features = ["uninline_portable"] }
 cfg-if = "1.0"
 cty = "0.2.2"
@@ -76,6 +78,7 @@ minicbor = { version = "1.0.0", default-features = false }
 num-derive = "0.4.2"
 num-traits = { version = "0.2.19", default-features = false, features = ["libm"] }
 orchard = { version = "=0.15.3", default-features = false }
+trezor-pasta-curves = { package = "pasta_curves", git = "https://github.com/jarys/pasta_curves", rev = "e11dfe4089d0da24483094a99cceb89f32974c17", default-features = false, features = ["uninline-portable"] }
 pareen = { version = "0.3.3", path = "../../rust/pareen", default-features = false, features = ["libm", "easer"] }
 pczt = { version = "=0.9.3", default-features = false, features = ["orchard"] }
 qrcodegen-no-heap = { version = "1.8.1", path = "../vendor/QR-Code-generator/rust-no-heap" }
@@ -85,6 +88,7 @@ sapling = { package = "sapling-crypto", version = "=0.7.0", default-features = f
 spin = { version = "0.9.9", features = ["rwlock", "spin_mutex", "lazy"], default-features = false }
 static-alloc = "0.2.6"
 transparent = { package = "zcash_transparent", version = "=0.10.0", default-features = false }
+trezor-ironwood-receive = { path = "ironwood-receive", default-features = false }
 trezor-thp = { path = "../../rust/trezor-thp" }
 trezor-tjpgdec = { version = "0.1.0", path = "../../rust/trezor-tjpgdec" }
 ufmt = "0.2.0"
