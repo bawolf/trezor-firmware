@@ -153,17 +153,19 @@ impl FullViewingKey {
         material.zeroize();
         key
     }
+
+    fn write(&self, output: &mut [u8; 96]) {
+        output[..32].copy_from_slice(self.ak.to_repr().as_ref());
+        output[32..64].copy_from_slice(self.nk.to_repr().as_ref());
+        output[64..].copy_from_slice(self.rivk.to_repr().as_ref());
+    }
 }
 
-/// Derives one external Orchard receiver without a Rust global allocator.
-/// Kept out of line so firmware stack analysis reports the operation boundary.
-#[inline(never)]
-pub fn derive_external_receiver(
+fn derive_account_full_viewing_key(
     seed: &[u8],
     network: Network,
     account: u32,
-    diversifier_index: [u8; 11],
-) -> Result<[u8; 43]> {
+) -> Result<FullViewingKey> {
     if seed.len() != RESTORED_SLIP39_SEED_BYTES
         && !(MIN_ZIP32_SEED_BYTES..=MAX_SEED_BYTES).contains(&seed.len())
     {
@@ -179,6 +181,19 @@ pub fn derive_external_receiver(
     }
     let full_viewing_key = FullViewingKey::from_spending_key(&extended.spending_key)?;
     extended.zeroize();
+    Ok(full_viewing_key)
+}
+
+/// Derives one external Orchard receiver without a Rust global allocator.
+/// Kept out of line so firmware stack analysis reports the operation boundary.
+#[inline(never)]
+pub fn derive_external_receiver(
+    seed: &[u8],
+    network: Network,
+    account: u32,
+    diversifier_index: [u8; 11],
+) -> Result<[u8; 43]> {
+    let full_viewing_key = derive_account_full_viewing_key(seed, network, account)?;
 
     let mut diversifier_key = full_viewing_key.diversifier_key();
     let diversifier = ff1::encrypt_diversifier_index(&diversifier_key, diversifier_index);
@@ -190,4 +205,19 @@ pub fn derive_external_receiver(
     receiver[..11].copy_from_slice(&diversifier);
     receiver[11..].copy_from_slice(transmission_key.to_bytes().as_ref());
     Ok(receiver)
+}
+
+/// Writes the account's Orchard full viewing key as `ak || nk || rivk`.
+///
+/// The output contains viewing authority only. This operation does not expose
+/// the spending key or spend-authorizing scalar.
+#[inline(never)]
+pub fn derive_full_viewing_key(
+    seed: &[u8],
+    network: Network,
+    account: u32,
+    output: &mut [u8; 96],
+) -> Result<()> {
+    derive_account_full_viewing_key(seed, network, account)?.write(output);
+    Ok(())
 }
