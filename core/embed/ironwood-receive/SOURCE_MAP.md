@@ -37,6 +37,11 @@ the historical Trezor work:
   `3708458dee7f359ac6c9c5558023ed481be87e5372c43ebd7f2ca7ad23c12026`,
   `COPYING.md`
   `1b0f8332e3f8b72835e1bf816a7471103c74e82b16c149e08f36136e175d9846`.
+  Copies are tracked in `licenses/pasta-curves/`; their text is unchanged, with
+  trailing blank lines normalized for the repository. The tracked hashes are
+  `3828dc9528439762d750e0350cc0421c7b65c29ca960b369b82951e7616a2a4a`,
+  `a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2`, and
+  `83cb0e5d720687fb724ee31124ce67c70e643ca0ae8ea3419b98eed8f1545df0`.
 
 The fork removes boxed hash-to-curve state and its allocation feature gate. It
 is pinned because published `pasta_curves` 0.5.1 and `orchard` 0.15.3 require
