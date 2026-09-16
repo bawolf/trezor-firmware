@@ -10,3 +10,13 @@ def derive_receiver(
     diversifier_index: AnyBytes,
 ) -> bytes:
     """Internal synchronous adapter; seed must come from device wallet state."""
+
+
+# rust/src/micropython/ironwood.rs
+def derive_viewing_key(
+    seed: bytes,
+    network: int,
+    account: int,
+    output: AnyBuffer,
+) -> None:
+    """Fill a 96-byte Orchard FVK buffer from device wallet state."""

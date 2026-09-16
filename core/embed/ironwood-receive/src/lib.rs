@@ -1,11 +1,11 @@
 #![no_std]
 #![forbid(unsafe_code)]
 #![deny(clippy::all)]
-//! Allocation-free Orchard receiver derivation for Trezor firmware.
+//! Allocation-free Orchard receiver and viewing-key derivation for Trezor firmware.
 //!
-//! The implementation is a current Rust port of the receiver primitives from
-//! Trezor's historical `zcash-orchard` branch. It intentionally exposes one
-//! typed operation and no generic cryptographic building blocks.
+//! The implementation is a current Rust port of the key primitives from
+//! Trezor's historical `zcash-orchard` branch. It intentionally exposes only
+//! typed product operations and no generic cryptographic building blocks.
 
 mod ff1;
 mod generators;
@@ -15,7 +15,7 @@ mod sinsemilla;
 const MAINNET_COIN_TYPE: u32 = 133;
 const TESTNET_COIN_TYPE: u32 = 1;
 
-pub use keys::derive_external_receiver;
+pub use keys::{derive_external_receiver, derive_full_viewing_key};
 
 /// Network selected and validated by the device application.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

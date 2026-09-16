@@ -1685,6 +1685,10 @@ pub enum TranslatedString {
     buttons__cancel_sign = 1295,  // "Cancel sign"
     #[cfg(feature = "universal_fw")]
     zcash__weak_backup_warning = 1296,  // "This wallet uses a weaker backup. Move funds to a new wallet with a stronger backup."
+    #[cfg(feature = "universal_fw")]
+    zcash__export_viewing_key = 1297,  // "Export Zcash viewing key?"
+    #[cfg(feature = "universal_fw")]
+    zcash__viewing_key_warning = 1298,  // "The connected app will be able to see and link all activity for this account, but cannot spend."
 }
 
 impl TranslatedString {
@@ -2989,6 +2993,8 @@ impl TranslatedString {
                 "",
                 "Cancel sign",
                 "This wallet uses a weaker backup. Move funds to a new wallet with a stronger backup.",
+                "Export Zcash viewing key?",
+                "The connected app will be able to see and link all activity for this account, but cannot spend.",
             );
 
             #[cfg(all(feature = "debug", feature = "universal_fw"))]
@@ -4291,6 +4297,8 @@ impl TranslatedString {
                 19111,
                 19122,
                 19206,
+                19231,
+                19326,
             ];
 
             #[cfg(all(feature = "debug", not(feature = "universal_fw")))]
@@ -5592,6 +5600,8 @@ impl TranslatedString {
                 "",
                 "Cancel sign",
                 "This wallet uses a weaker backup. Move funds to a new wallet with a stronger backup.",
+                "Export Zcash viewing key?",
+                "The connected app will be able to see and link all activity for this account, but cannot spend.",
             );
 
             #[cfg(all(feature = "debug", not(feature = "universal_fw")))]
@@ -6894,6 +6904,8 @@ impl TranslatedString {
                 19111,
                 19122,
                 19206,
+                19231,
+                19326,
             ];
 
             #[cfg(all(not(feature = "debug"), feature = "universal_fw"))]
@@ -8195,6 +8207,8 @@ impl TranslatedString {
                 "",
                 "Cancel sign",
                 "This wallet uses a weaker backup. Move funds to a new wallet with a stronger backup.",
+                "Export Zcash viewing key?",
+                "The connected app will be able to see and link all activity for this account, but cannot spend.",
             );
 
             #[cfg(all(not(feature = "debug"), feature = "universal_fw"))]
@@ -9497,6 +9511,8 @@ impl TranslatedString {
                 19111,
                 19122,
                 19206,
+                19231,
+                19326,
             ];
 
             #[cfg(all(not(feature = "debug"), not(feature = "universal_fw")))]
@@ -10798,6 +10814,8 @@ impl TranslatedString {
                 "",
                 "Cancel sign",
                 "This wallet uses a weaker backup. Move funds to a new wallet with a stronger backup.",
+                "Export Zcash viewing key?",
+                "The connected app will be able to see and link all activity for this account, but cannot spend.",
             );
 
             #[cfg(all(not(feature = "debug"), not(feature = "universal_fw")))]
@@ -12100,6 +12118,8 @@ impl TranslatedString {
                 19111,
                 19122,
                 19206,
+                19231,
+                19326,
             ];
 
         } else if #[cfg(feature = "layout_caesar")] {
@@ -13402,6 +13422,8 @@ impl TranslatedString {
                 "",
                 "Cancel sign",
                 "This wallet uses a weaker backup. Move funds to a new wallet with a stronger backup.",
+                "Export Zcash viewing key?",
+                "The connected app will be able to see and link all activity for this account, but cannot spend.",
             );
 
             #[cfg(all(feature = "debug", feature = "universal_fw"))]
@@ -14704,6 +14726,8 @@ impl TranslatedString {
                 16961,
                 16972,
                 17056,
+                17081,
+                17176,
             ];
 
             #[cfg(all(feature = "debug", not(feature = "universal_fw")))]
@@ -16005,6 +16029,8 @@ impl TranslatedString {
                 "",
                 "Cancel sign",
                 "This wallet uses a weaker backup. Move funds to a new wallet with a stronger backup.",
+                "Export Zcash viewing key?",
+                "The connected app will be able to see and link all activity for this account, but cannot spend.",
             );
 
             #[cfg(all(feature = "debug", not(feature = "universal_fw")))]
@@ -17307,6 +17333,8 @@ impl TranslatedString {
                 16961,
                 16972,
                 17056,
+                17081,
+                17176,
             ];
 
             #[cfg(all(not(feature = "debug"), feature = "universal_fw"))]
@@ -18608,6 +18636,8 @@ impl TranslatedString {
                 "",
                 "Cancel sign",
                 "This wallet uses a weaker backup. Move funds to a new wallet with a stronger backup.",
+                "Export Zcash viewing key?",
+                "The connected app will be able to see and link all activity for this account, but cannot spend.",
             );
 
             #[cfg(all(not(feature = "debug"), feature = "universal_fw"))]
@@ -19910,6 +19940,8 @@ impl TranslatedString {
                 16961,
                 16972,
                 17056,
+                17081,
+                17176,
             ];
 
             #[cfg(all(not(feature = "debug"), not(feature = "universal_fw")))]
@@ -21211,6 +21243,8 @@ impl TranslatedString {
                 "",
                 "Cancel sign",
                 "This wallet uses a weaker backup. Move funds to a new wallet with a stronger backup.",
+                "Export Zcash viewing key?",
+                "The connected app will be able to see and link all activity for this account, but cannot spend.",
             );
 
             #[cfg(all(not(feature = "debug"), not(feature = "universal_fw")))]
@@ -22513,6 +22547,8 @@ impl TranslatedString {
                 16961,
                 16972,
                 17056,
+                17081,
+                17176,
             ];
 
         } else if #[cfg(feature = "layout_delizia")] {
@@ -23815,6 +23851,8 @@ impl TranslatedString {
                 "",
                 "Cancel sign",
                 "This wallet uses a weaker backup. Move funds to a new wallet with a stronger backup.",
+                "Export Zcash viewing key?",
+                "The connected app will be able to see and link all activity for this account, but cannot spend.",
             );
 
             #[cfg(all(feature = "debug", feature = "universal_fw"))]
@@ -25117,6 +25155,8 @@ impl TranslatedString {
                 19060,
                 19071,
                 19155,
+                19180,
+                19275,
             ];
 
             #[cfg(all(feature = "debug", not(feature = "universal_fw")))]
@@ -26418,6 +26458,8 @@ impl TranslatedString {
                 "",
                 "Cancel sign",
                 "This wallet uses a weaker backup. Move funds to a new wallet with a stronger backup.",
+                "Export Zcash viewing key?",
+                "The connected app will be able to see and link all activity for this account, but cannot spend.",
             );
 
             #[cfg(all(feature = "debug", not(feature = "universal_fw")))]
@@ -27720,6 +27762,8 @@ impl TranslatedString {
                 19060,
                 19071,
                 19155,
+                19180,
+                19275,
             ];
 
             #[cfg(all(not(feature = "debug"), feature = "universal_fw"))]
@@ -29021,6 +29065,8 @@ impl TranslatedString {
                 "",
                 "Cancel sign",
                 "This wallet uses a weaker backup. Move funds to a new wallet with a stronger backup.",
+                "Export Zcash viewing key?",
+                "The connected app will be able to see and link all activity for this account, but cannot spend.",
             );
 
             #[cfg(all(not(feature = "debug"), feature = "universal_fw"))]
@@ -30323,6 +30369,8 @@ impl TranslatedString {
                 19060,
                 19071,
                 19155,
+                19180,
+                19275,
             ];
 
             #[cfg(all(not(feature = "debug"), not(feature = "universal_fw")))]
@@ -31624,6 +31672,8 @@ impl TranslatedString {
                 "",
                 "Cancel sign",
                 "This wallet uses a weaker backup. Move funds to a new wallet with a stronger backup.",
+                "Export Zcash viewing key?",
+                "The connected app will be able to see and link all activity for this account, but cannot spend.",
             );
 
             #[cfg(all(not(feature = "debug"), not(feature = "universal_fw")))]
@@ -32926,6 +32976,8 @@ impl TranslatedString {
                 19060,
                 19071,
                 19155,
+                19180,
+                19275,
             ];
 
         } else if #[cfg(feature = "layout_eckhart")] {
@@ -34228,6 +34280,8 @@ impl TranslatedString {
                 "Review",
                 "Cancel sign",
                 "This wallet uses a weaker backup. Move funds to a new wallet with a stronger backup.",
+                "Export Zcash viewing key?",
+                "The connected app will be able to see and link all activity for this account, but cannot spend.",
             );
 
             #[cfg(all(feature = "debug", feature = "universal_fw"))]
@@ -35530,6 +35584,8 @@ impl TranslatedString {
                 20496,
                 20507,
                 20591,
+                20616,
+                20711,
             ];
 
             #[cfg(all(feature = "debug", not(feature = "universal_fw")))]
@@ -36831,6 +36887,8 @@ impl TranslatedString {
                 "Review",
                 "Cancel sign",
                 "This wallet uses a weaker backup. Move funds to a new wallet with a stronger backup.",
+                "Export Zcash viewing key?",
+                "The connected app will be able to see and link all activity for this account, but cannot spend.",
             );
 
             #[cfg(all(feature = "debug", not(feature = "universal_fw")))]
@@ -38133,6 +38191,8 @@ impl TranslatedString {
                 20496,
                 20507,
                 20591,
+                20616,
+                20711,
             ];
 
             #[cfg(all(not(feature = "debug"), feature = "universal_fw"))]
@@ -39434,6 +39494,8 @@ impl TranslatedString {
                 "Review",
                 "Cancel sign",
                 "This wallet uses a weaker backup. Move funds to a new wallet with a stronger backup.",
+                "Export Zcash viewing key?",
+                "The connected app will be able to see and link all activity for this account, but cannot spend.",
             );
 
             #[cfg(all(not(feature = "debug"), feature = "universal_fw"))]
@@ -40736,6 +40798,8 @@ impl TranslatedString {
                 20496,
                 20507,
                 20591,
+                20616,
+                20711,
             ];
 
             #[cfg(all(not(feature = "debug"), not(feature = "universal_fw")))]
@@ -42037,6 +42101,8 @@ impl TranslatedString {
                 "Review",
                 "Cancel sign",
                 "This wallet uses a weaker backup. Move funds to a new wallet with a stronger backup.",
+                "Export Zcash viewing key?",
+                "The connected app will be able to see and link all activity for this account, but cannot spend.",
             );
 
             #[cfg(all(not(feature = "debug"), not(feature = "universal_fw")))]
@@ -43339,6 +43405,8 @@ impl TranslatedString {
                 20496,
                 20507,
                 20591,
+                20616,
+                20711,
             ];
 
         }
@@ -45019,6 +45087,10 @@ impl TranslatedString {
         (Qstr::MP_QSTR_words__weight, Self::words__weight),
         (Qstr::MP_QSTR_words__writable, Self::words__writable),
         (Qstr::MP_QSTR_words__yes, Self::words__yes),
+        #[cfg(feature = "universal_fw")]
+        (Qstr::MP_QSTR_zcash__export_viewing_key, Self::zcash__export_viewing_key),
+        #[cfg(feature = "universal_fw")]
+        (Qstr::MP_QSTR_zcash__viewing_key_warning, Self::zcash__viewing_key_warning),
         #[cfg(feature = "universal_fw")]
         (Qstr::MP_QSTR_zcash__weak_backup_warning, Self::zcash__weak_backup_warning),
     ];
