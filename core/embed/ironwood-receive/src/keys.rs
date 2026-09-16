@@ -8,7 +8,8 @@ use zeroize::{Zeroize, ZeroizeOnDrop};
 
 use crate::{Error, Network, Result, ff1, generators, sinsemilla};
 
-const MIN_SEED_BYTES: usize = 32;
+const RESTORED_SLIP39_SEED_BYTES: usize = 16;
+const MIN_ZIP32_SEED_BYTES: usize = 32;
 const MAX_SEED_BYTES: usize = 252;
 const ZIP32_HARDENED_BIT: u32 = 1 << 31;
 const ZIP32_ORCHARD_PURPOSE: u32 = 32;
@@ -163,7 +164,9 @@ pub fn derive_external_receiver(
     account: u32,
     diversifier_index: [u8; 11],
 ) -> Result<[u8; 43]> {
-    if !(MIN_SEED_BYTES..=MAX_SEED_BYTES).contains(&seed.len()) {
+    if seed.len() != RESTORED_SLIP39_SEED_BYTES
+        && !(MIN_ZIP32_SEED_BYTES..=MAX_SEED_BYTES).contains(&seed.len())
+    {
         return Err(Error::InvalidSeedLength);
     }
     if account > 0x7fff_ffff {

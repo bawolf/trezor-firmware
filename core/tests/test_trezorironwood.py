@@ -29,9 +29,17 @@ class TestIronwoodReceiver(unittest.TestCase):
         for length in (10, 12):
             with self.assertRaises(ValueError):
                 self.derive_receiver(self.seed, 1, 0, bytes(length))
-        for length in (16, 31, 253):
+        for length in (15, 17, 31, 253):
             with self.assertRaises(RuntimeError):
                 self.derive_receiver(bytes(length), 1, 0, bytes(11))
+
+    def test_restored_128_bit_slip39_seed(self):
+        expected = bytes.fromhex(
+            "8b446ad4a86e639364748511325865bef5778af22f520fd0f95eec80f6ea3ef2012fd4eaabbb32bb14aea1"
+        )
+        self.assertEqual(
+            self.derive_receiver(bytes([0xA5]) * 16, 1, 0, bytes(11)), expected
+        )
 
     def test_argument_types(self):
         valid = (self.seed, 1, 9, bytes(11))

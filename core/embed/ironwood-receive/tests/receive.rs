@@ -76,8 +76,8 @@ fn network_and_account_are_bound() {
 }
 
 #[test]
-fn rejects_seed_lengths_outside_zip32_range() {
-    for seed in [&[0u8; 16][..], &[0u8; 31], &[0u8; 253]] {
+fn rejects_unsupported_seed_lengths() {
+    for seed in [&[0u8; 15][..], &[0u8; 17], &[0u8; 31], &[0u8; 253]] {
         assert_eq!(
             derive_external_receiver(seed, Network::Testnet, 0, [0; 11]),
             Err(Error::InvalidSeedLength),
@@ -109,6 +109,18 @@ fn accepts_zip32_boundaries() {
             68, 51, 9, 102, 238, 142, 5, 237, 98, 57, 203, 66, 204, 143, 156, 72, 224, 137, 55,
             187, 95, 145, 112, 201, 127, 48, 240, 92, 225, 236, 144, 34, 225, 149, 65, 95, 153, 73,
             41, 198, 13, 231, 36,
+        ],
+    );
+}
+
+#[test]
+fn preserves_restored_128_bit_slip39_mapping() {
+    assert_eq!(
+        derive_external_receiver(&[0xa5; 16], Network::Testnet, 0, [0; 11]).unwrap(),
+        [
+            139, 68, 106, 212, 168, 110, 99, 147, 100, 116, 133, 17, 50, 88, 101, 190, 245, 119,
+            138, 242, 47, 82, 15, 208, 249, 94, 236, 128, 246, 234, 62, 242, 1, 47, 212, 234, 171,
+            187, 50, 187, 20, 174, 161,
         ],
     );
 }
