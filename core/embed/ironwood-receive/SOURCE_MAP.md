@@ -23,6 +23,12 @@ SHA-256 `aebfb562b424d3bf11ede866aee819f9e9cc26a9a597a1ea3756f894eddc0301`.
 The fixed inputs are seed bytes `00..1f`, Testnet coin type, account 9, external
 scope, and the six full-width diversifier indices listed in the test.
 
+The restored 128-bit SLIP-39 golden uses the same Orchard 0.15.3 oracle with
+seed `[0xa5; 16]`, Testnet, account 0, and index 0. It preserves the historical
+Trezor mapping for existing wallets as permitted by ZIP 315. Product callers
+must show the weaker-backup warning before allowing receive, viewing, or spend;
+the native primitive deliberately performs no UI or backup-type policy.
+
 The Pallas implementation is reused from the exact fork and revision used by
 the historical Trezor work:
 
