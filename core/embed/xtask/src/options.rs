@@ -1,4 +1,4 @@
-use anyhow::Result;
+use anyhow::{Result, bail};
 use clap::Args;
 use serde::Deserialize;
 
@@ -107,12 +107,14 @@ macro_rules! build_options {
                 let o = preset_options
                     .overlay(args.options.clone());
 
-                Ok(Self {
+                let resolved = Self {
                     project: args.project,
                     model: args.model,
                     emulator: args.emulator,
                     $($name: <$ty as ResolveValue>::resolve(o.$name),)+
-                })
+                };
+                resolved.validate()?;
+                Ok(resolved)
             }
         }
 
@@ -206,6 +208,10 @@ build_options! {
     #[arg(long, num_args = 0..=1, default_missing_value = "true")]
     map miniscript: bool,
 
+    /// Enable experimental Safe 5 Ironwood support
+    #[arg(long, num_args = 0..=1, default_missing_value = "true")]
+    map ironwood: bool,
+
     /// Disable UI animations
     #[arg(long, num_args = 0..=1, default_missing_value = "true")]
     map disable_animation: bool,
@@ -271,6 +277,19 @@ build_options! {
 }
 
 impl ResolvedBuildArgs {
+    /// Validates options against the user-selected top-level build target.
+    ///
+    /// This runs while resolving [`BuildArgs`], before a firmware build clones
+    /// the resolved arguments for its dependencies. Options that a dependency
+    /// project does not map are intentionally ignored when resolving features
+    /// for that cloned dependency build.
+    fn validate(&self) -> Result<()> {
+        if self.ironwood && (self.project != Project::Firmware || self.model != Model::T3T1) {
+            bail!("--ironwood is supported only for Safe 5/T3T1 firmware builds");
+        }
+        Ok(())
+    }
+
     /// Determines the Cargo profile to use
     pub fn cargo_profile_name(&self) -> &'static str {
         if self.debug {
