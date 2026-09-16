@@ -52,6 +52,10 @@ MP_REGISTER_MODULE(MP_QSTR_coveragedata, mp_module_coveragedata);
 MP_REGISTER_MODULE(MP_QSTR_trezorlog, mp_module_trezorlog);
 #endif
 
+#ifdef USE_IRONWOOD
+MP_REGISTER_MODULE(MP_QSTR_trezorironwood, mp_module_trezorironwood);
+#endif
+
 #ifdef USE_MINISCRIPT
 MP_REGISTER_MODULE(MP_QSTR_trezorminiscript, mp_module_trezorminiscript);
 #endif

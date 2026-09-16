@@ -287,6 +287,9 @@ impl ResolvedBuildArgs {
         if self.ironwood && (self.project != Project::Firmware || self.model != Model::T3T1) {
             bail!("--ironwood is supported only for Safe 5/T3T1 firmware builds");
         }
+        if self.ironwood && self.btc_only {
+            bail!("--ironwood cannot be combined with --btc-only");
+        }
         Ok(())
     }
 

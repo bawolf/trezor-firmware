@@ -27,6 +27,9 @@ mod qstr_generated;
 pub use error::Error;
 pub use obj::Obj;
 
+#[cfg(feature = "ironwood")]
+mod ironwood;
+
 #[cfg(feature = "miniscript")]
 mod miniscript;
 
