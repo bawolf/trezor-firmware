@@ -305,3 +305,12 @@ if not utils.BITCOIN_ONLY:
     TronDelegateResourceContract = 2211
     TronUnDelegateResourceContract = 2212
     TronWithdrawBalance = 2213
+    ZcashGetAddress = 32100
+    ZcashAddress = 32101
+    ZcashGetViewingKey = 32102
+    ZcashViewingKey = 32103
+    ZcashSignPczt = 32104
+    ZcashPcztRequest = 32105
+    ZcashPcztAck = 32106
+    ZcashSignedPczt = 32107
+    ZcashSignedPcztAck = 32108

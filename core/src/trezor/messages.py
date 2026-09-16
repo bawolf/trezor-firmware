@@ -82,6 +82,7 @@ if TYPE_CHECKING:
     from trezor.enums import TronRawContractType  # noqa: F401
     from trezor.enums import TronResourceCode  # noqa: F401
     from trezor.enums import WordRequestType  # noqa: F401
+    from trezor.enums import ZcashNetwork  # noqa: F401
 
     class BenchmarkListNames(protobuf.MessageType):
 
@@ -8115,4 +8116,158 @@ if TYPE_CHECKING:
 
         @classmethod
         def is_type_of(cls, msg: Any) -> TypeGuard["WebAuthnCredential"]:
+            return isinstance(msg, cls)
+
+    class ZcashGetAddress(protobuf.MessageType):
+        network: "ZcashNetwork"
+        account: "int"
+        diversifier_index: "AnyBytes"
+
+        def __init__(
+            self,
+            *,
+            network: "ZcashNetwork",
+            account: "int",
+            diversifier_index: "AnyBytes",
+        ) -> None:
+            pass
+
+        @classmethod
+        def is_type_of(cls, msg: Any) -> TypeGuard["ZcashGetAddress"]:
+            return isinstance(msg, cls)
+
+    class ZcashAddress(protobuf.MessageType):
+        address: "str"
+
+        def __init__(
+            self,
+            *,
+            address: "str",
+        ) -> None:
+            pass
+
+        @classmethod
+        def is_type_of(cls, msg: Any) -> TypeGuard["ZcashAddress"]:
+            return isinstance(msg, cls)
+
+    class ZcashGetViewingKey(protobuf.MessageType):
+        network: "ZcashNetwork"
+        account: "int"
+
+        def __init__(
+            self,
+            *,
+            network: "ZcashNetwork",
+            account: "int",
+        ) -> None:
+            pass
+
+        @classmethod
+        def is_type_of(cls, msg: Any) -> TypeGuard["ZcashGetViewingKey"]:
+            return isinstance(msg, cls)
+
+    class ZcashViewingKey(protobuf.MessageType):
+        key: "str"
+
+        def __init__(
+            self,
+            *,
+            key: "str",
+        ) -> None:
+            pass
+
+        @classmethod
+        def is_type_of(cls, msg: Any) -> TypeGuard["ZcashViewingKey"]:
+            return isinstance(msg, cls)
+
+    class ZcashSignPczt(protobuf.MessageType):
+        network: "ZcashNetwork"
+        account: "int"
+        pczt_length: "int"
+        host_reference_height: "int"
+
+        def __init__(
+            self,
+            *,
+            network: "ZcashNetwork",
+            account: "int",
+            pczt_length: "int",
+            host_reference_height: "int",
+        ) -> None:
+            pass
+
+        @classmethod
+        def is_type_of(cls, msg: Any) -> TypeGuard["ZcashSignPczt"]:
+            return isinstance(msg, cls)
+
+    class ZcashPcztRequest(protobuf.MessageType):
+        transfer_id: "AnyBytes"
+        offset: "int"
+        length: "int"
+
+        def __init__(
+            self,
+            *,
+            transfer_id: "AnyBytes",
+            offset: "int",
+            length: "int",
+        ) -> None:
+            pass
+
+        @classmethod
+        def is_type_of(cls, msg: Any) -> TypeGuard["ZcashPcztRequest"]:
+            return isinstance(msg, cls)
+
+    class ZcashPcztAck(protobuf.MessageType):
+        transfer_id: "AnyBytes"
+        offset: "int"
+        data: "AnyBytes"
+
+        def __init__(
+            self,
+            *,
+            transfer_id: "AnyBytes",
+            offset: "int",
+            data: "AnyBytes",
+        ) -> None:
+            pass
+
+        @classmethod
+        def is_type_of(cls, msg: Any) -> TypeGuard["ZcashPcztAck"]:
+            return isinstance(msg, cls)
+
+    class ZcashSignedPczt(protobuf.MessageType):
+        transfer_id: "AnyBytes"
+        pczt_length: "int"
+        offset: "int"
+        data: "AnyBytes"
+
+        def __init__(
+            self,
+            *,
+            transfer_id: "AnyBytes",
+            pczt_length: "int",
+            offset: "int",
+            data: "AnyBytes",
+        ) -> None:
+            pass
+
+        @classmethod
+        def is_type_of(cls, msg: Any) -> TypeGuard["ZcashSignedPczt"]:
+            return isinstance(msg, cls)
+
+    class ZcashSignedPcztAck(protobuf.MessageType):
+        transfer_id: "AnyBytes"
+        next_offset: "int"
+
+        def __init__(
+            self,
+            *,
+            transfer_id: "AnyBytes",
+            next_offset: "int",
+        ) -> None:
+            pass
+
+        @classmethod
+        def is_type_of(cls, msg: Any) -> TypeGuard["ZcashSignedPcztAck"]:
             return isinstance(msg, cls)

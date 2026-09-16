@@ -476,6 +476,10 @@ if TYPE_CHECKING:
         DelegateResourceContract = 57
         UnDelegateResourceContract = 58
 
+    class ZcashNetwork(IntEnum):
+        Mainnet = 0
+        Testnet = 1
+
     class MessageType(IntEnum):
         Initialize = 0
         Ping = 1
@@ -775,3 +779,12 @@ if TYPE_CHECKING:
         BenchmarkResult = 9103
         TelemetryGet = 1100
         Telemetry = 1101
+        ZcashGetAddress = 32100
+        ZcashAddress = 32101
+        ZcashGetViewingKey = 32102
+        ZcashViewingKey = 32103
+        ZcashSignPczt = 32104
+        ZcashPcztRequest = 32105
+        ZcashPcztAck = 32106
+        ZcashSignedPczt = 32107
+        ZcashSignedPcztAck = 32108
