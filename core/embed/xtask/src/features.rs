@@ -193,7 +193,124 @@ pub fn configure_cargo(args: &ResolvedBuildArgs, cmd: &mut process::Command) -> 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::args::Project;
+    use crate::args::{BuildArgs, Model, Project};
+    use crate::options::BuildOptions;
+
+    fn ironwood_build_args(project: Project, model: Model) -> BuildArgs {
+        BuildArgs {
+            project,
+            model,
+            emulator: false,
+            preset: None,
+            options: BuildOptions {
+                ironwood: Some(true),
+                ..BuildOptions::default()
+            },
+        }
+    }
+
+    #[test]
+    fn omits_ironwood_by_default() {
+        let args = ResolvedBuildArgs {
+            model: Model::T3T1,
+            frozen: true,
+            pyopt: true,
+            ..ResolvedBuildArgs::default()
+        };
+
+        let features = resolve_features(&args).unwrap().features;
+        assert!(!features.contains(&"ironwood".to_string()));
+    }
+
+    #[test]
+    fn enables_ironwood_for_safe_5_firmware() {
+        let args = ResolvedBuildArgs {
+            model: Model::T3T1,
+            ironwood: true,
+            frozen: true,
+            pyopt: true,
+            ..ResolvedBuildArgs::default()
+        };
+
+        let features = resolve_features(&args).unwrap().features;
+        assert!(features.contains(&"ironwood".to_string()));
+    }
+
+    #[test]
+    fn enables_ironwood_for_safe_5_firmware_emulator() {
+        let args = ResolvedBuildArgs {
+            model: Model::T3T1,
+            emulator: true,
+            ironwood: true,
+            frozen: true,
+            pyopt: true,
+            ..ResolvedBuildArgs::default()
+        };
+
+        let features = resolve_features(&args).unwrap().features;
+        assert!(features.contains(&"ironwood".to_string()));
+    }
+
+    #[test]
+    fn rejects_ironwood_for_other_models() {
+        let error = ResolvedBuildArgs::from_build_args(&ironwood_build_args(
+            Project::Firmware,
+            Model::T3W1,
+        ))
+        .unwrap_err();
+        assert_eq!(
+            error.to_string(),
+            "--ironwood is supported only for Safe 5/T3T1 firmware builds"
+        );
+    }
+
+    #[test]
+    fn rejects_ironwood_for_other_projects() {
+        let error =
+            ResolvedBuildArgs::from_build_args(&ironwood_build_args(Project::Kernel, Model::T3T1))
+                .unwrap_err();
+        assert_eq!(
+            error.to_string(),
+            "--ironwood is supported only for Safe 5/T3T1 firmware builds"
+        );
+    }
+
+    #[test]
+    fn omits_ironwood_from_firmware_dependency_builds() {
+        let firmware_args = ResolvedBuildArgs::from_build_args(&ironwood_build_args(
+            Project::Firmware,
+            Model::T3T1,
+        ))
+        .unwrap();
+        let firmware_features = resolve_features(&firmware_args).unwrap().features;
+        assert!(firmware_features.contains(&"ironwood".to_string()));
+
+        let dependency_args = ResolvedBuildArgs {
+            project: Project::Kernel,
+            ..firmware_args
+        };
+
+        let features = resolve_features(&dependency_args).unwrap().features;
+        assert!(!features.contains(&"ironwood".to_string()));
+    }
+
+    #[test]
+    fn accepts_explicitly_disabled_ironwood_for_unsupported_targets() {
+        let args = BuildArgs {
+            project: Project::Kernel,
+            model: Model::T3W1,
+            emulator: false,
+            preset: None,
+            options: BuildOptions {
+                ironwood: Some(false),
+                ..BuildOptions::default()
+            },
+        };
+        let resolved = ResolvedBuildArgs::from_build_args(&args).unwrap();
+
+        let features = resolve_features(&resolved).unwrap().features;
+        assert!(!features.contains(&"ironwood".to_string()));
+    }
 
     #[test]
     fn rejects_insecure_storage_in_production_builds() {
