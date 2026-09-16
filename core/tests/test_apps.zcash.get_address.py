@@ -34,6 +34,7 @@ class TestIronwoodGetAddress(unittest.TestCase):
         self.session = [b"session-a"]
         self.wallet_seed = bytes(range(32))
         self.receiver = bytes(range(43))
+        self.real_call_native = get_address._call_native
 
         self._patch(utils, "USE_IRONWOOD", True)
         self._patch(utils, "USE_THP", False)
@@ -124,9 +125,7 @@ class TestIronwoodGetAddress(unittest.TestCase):
 
     @unittest.skipUnless(utils.USE_IRONWOOD, "requires native Ironwood support")
     def test_real_native_receiver_is_encoded_by_the_handler(self):
-        from trezorironwood import derive_receiver
-
-        self._patch(get_address, "_call_native", derive_receiver)
+        self._patch(get_address, "_call_native", self.real_call_native)
         response = await_result(
             get_address.get_address(self._message(ZcashNetwork.Testnet, 9))
         )
