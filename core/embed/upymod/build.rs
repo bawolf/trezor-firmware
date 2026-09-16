@@ -68,6 +68,10 @@ fn main() -> Result<()> {
             lib.add_define("MICROPY_TREZOR_MEMPERF", Some("1"));
         }
 
+        if cfg!(feature = "ironwood") {
+            lib.add_define("USE_IRONWOOD", Some("1"));
+        }
+
         if cfg!(feature = "miniscript") {
             lib.add_define("USE_MINISCRIPT", Some("1"));
         }
@@ -950,6 +954,7 @@ impl<'a> MpyBuilder<'a> {
         let button = py_bool(cfg!(feature = "button"));
         let emulator = py_bool(cfg!(feature = "emulator"));
         let haptic = py_bool(cfg!(feature = "haptic"));
+        let ironwood = py_bool(cfg!(feature = "ironwood"));
         let mcu_attestation = py_bool(cfg!(feature = "mcu_attestation"));
         let miniscript = py_bool(cfg!(feature = "miniscript"));
         let n1w1 = py_bool(cfg!(feature = "n1w1"));
@@ -976,6 +981,7 @@ impl<'a> MpyBuilder<'a> {
             format!(r"s/utils\.USE_BLE/{ble}/g"),
             format!(r"s/utils\.USE_BUTTON/{button}/g"),
             format!(r"s/utils\.USE_HAPTIC/{haptic}/g"),
+            format!(r"s/utils\.USE_IRONWOOD/{ironwood}/g"),
             format!(r"s/utils\.USE_N1W1/{n1w1}/g"),
             format!(r"s/utils\.USE_MINISCRIPT/{miniscript}/g"),
             format!(r"s/utils\.USE_MCU_ATTESTATION/{mcu_attestation}/g"),
