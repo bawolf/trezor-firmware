@@ -26,6 +26,7 @@ class _Context:
         self.cache = _Cache(state)
 
 
+@unittest.skipUnless(not utils.BITCOIN_ONLY, "altcoin")
 class TestIronwoodGetAddress(unittest.TestCase):
     def setUp(self):
         self.patchers = []
@@ -110,7 +111,7 @@ class TestIronwoodGetAddress(unittest.TestCase):
             kwargs = address_calls[0][2]
             self.assertEqual(kwargs["address"], expected)
             self.assertEqual(kwargs["address_qr"], expected)
-            self.assertNotIn("title", kwargs)
+            self.assertFalse("title" in kwargs)
             self.assertEqual(kwargs["network"], label)
             self.assertEqual(kwargs["account"], account_label)
             self.assertEqual(kwargs["path"], path)
@@ -120,6 +121,23 @@ class TestIronwoodGetAddress(unittest.TestCase):
                 [call[0] for call in self.calls],
                 ["seed", "native", "stack_clear", "address"],
             )
+
+    @unittest.skipUnless(utils.USE_IRONWOOD, "requires native Ironwood support")
+    def test_real_native_receiver_is_encoded_by_the_handler(self):
+        from trezorironwood import derive_receiver
+
+        self._patch(get_address, "_call_native", derive_receiver)
+        response = await_result(
+            get_address.get_address(self._message(ZcashNetwork.Testnet, 9))
+        )
+        expected = "utest1pxwu0ctu3sgmzje5pswsk5mcuxv9l25sr8um5f30ftakls0dgx8quzms8xe4n9k9ue6dj3qh0esy7a8dxfkways7w76xzryjsqxjtvgu"
+        self.assertEqual(response.address, expected)
+        self.assertEqual(self.calls[-1][2]["address"], expected)
+        self.assertEqual(self.calls[-1][2]["address_qr"], expected)
+        self.assertEqual(
+            [call[0] for call in self.calls],
+            ["seed", "stack_clear", "address"],
+        )
 
     def test_weak_backup_warning_precedes_raw_16_byte_seed_derivation(self):
         self.wallet_seed = bytes(range(16))
@@ -228,7 +246,7 @@ class TestIronwoodGetAddress(unittest.TestCase):
 
     def test_native_errors_are_stable_and_clear_stack(self):
         for error, message in (
-            (ValueError(), "Zcash request violates device policy"),
+            (ValueError(), "Zcash receiver derivation failed"),
             (RuntimeError(), "Zcash receiver derivation failed"),
         ):
             self.calls.clear()

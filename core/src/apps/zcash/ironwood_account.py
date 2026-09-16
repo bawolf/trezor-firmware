@@ -35,12 +35,18 @@ def validate_network_account(network: int, account: int) -> tuple[str, str, int]
 
 
 def validate_diversifier_index(diversifier_index: AnyBytes) -> None:
+    # The protobuf decoder owns the buffer type; this policy owns its exact width.
     if len(diversifier_index) != 11:
         raise wire.DataError(MALFORMED_REQUEST)
 
 
 def account_path(coin_type: int, account: int) -> str:
-    return f"m/32'/{coin_type}'/{account}'"
+    from apps.common import paths
+
+    hardened = paths.HARDENED
+    return paths.address_n_to_str(
+        [32 | hardened, coin_type | hardened, account | hardened]
+    )
 
 
 def account_label(account: int) -> str:
@@ -71,7 +77,11 @@ def has_weak_backup() -> bool:
 
     backup_type = mnemonic.get_type()
     if backup_type == BackupType.Bip39:
-        word_count = len(secret.split())
+        # Avoid split(), which would leave a list of secret word copies on the heap.
+        word_count = 1
+        for byte in secret:
+            if byte == 0x20:
+                word_count += 1
         if word_count not in (12, 18, 24):
             raise wire.ProcessError(UNSUPPORTED_BACKUP)
         return word_count != 24
