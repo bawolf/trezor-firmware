@@ -41,13 +41,17 @@ for prefix in DEBUG_PREFIXES:
     mp_prefix = f"MP_QSTR_{prefix}__"
     qstrings_debug |= {qstr for qstr in qstrings if qstr.startswith(mp_prefix)}
 
-qstrings_btconly = qstrings - qstrings_universal - qstrings_debug
+# Module-local qstrs whose Rust implementation is feature-gated.
+qstrings_ironwood = qstrings & {"MP_QSTR_derive_receiver"}
+
+qstrings_btconly = qstrings - qstrings_universal - qstrings_debug - qstrings_ironwood
 
 # sort result alphabetically
 digits = range(10)
 qstrings_btconly_sorted = sorted(qstrings_btconly)
 qstrings_universal_sorted = sorted(qstrings_universal)
 qstrings_debug_sorted = sorted(qstrings_debug)
+qstrings_ironwood_sorted = sorted(qstrings_ironwood)
 %>\
 % for digit in digits:
   MP_QSTR_${digit};
@@ -62,6 +66,11 @@ qstrings_debug_sorted = sorted(qstrings_debug)
 #endif
 #if !PYOPT
 % for qstr in qstrings_debug_sorted:
+  ${qstr};
+% endfor
+#endif
+#ifdef USE_IRONWOOD
+% for qstr in qstrings_ironwood_sorted:
   ${qstr};
 % endfor
 #endif

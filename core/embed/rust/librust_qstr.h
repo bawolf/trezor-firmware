@@ -353,7 +353,6 @@ static void _librust_qstrs(void) {
   MP_QSTR_debug;
   MP_QSTR_decode;
   MP_QSTR_deinit;
-  MP_QSTR_derive_receiver;
   MP_QSTR_description;
   MP_QSTR_details_title;
   MP_QSTR_device_name;
@@ -1592,5 +1591,8 @@ static void _librust_qstrs(void) {
 #if !PYOPT
   MP_QSTR_debug__loading_seed;
   MP_QSTR_debug__loading_seed_not_recommended;
+#endif
+#ifdef USE_IRONWOOD
+  MP_QSTR_derive_receiver;
 #endif
 }
