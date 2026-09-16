@@ -8,6 +8,7 @@ members = [
     "sys",
     "sec",
     "io",
+    "ironwood",
     "upymod",
     "rust",
     "projects/*",
@@ -65,6 +66,7 @@ debug = false
 strip = true
 
 [workspace.dependencies]
+blake2b_simd = { version = "=1.0.2", default-features = false, features = ["uninline_portable"] }
 cfg-if = "1.0"
 cty = "0.2.2"
 easer = { version = "0.3.0", default-features = false, features = ["libm"] }
@@ -73,15 +75,24 @@ log = { version = "0.4.29", features = ["max_level_trace", "release_max_level_of
 minicbor = { version = "1.0.0", default-features = false }
 num-derive = "0.4.2"
 num-traits = { version = "0.2.19", default-features = false, features = ["libm"] }
+orchard = { version = "=0.15.3", default-features = false }
 pareen = { version = "0.3.3", path = "../../rust/pareen", default-features = false, features = ["libm", "easer"] }
+pczt = { version = "=0.9.3", default-features = false, features = ["orchard"] }
 qrcodegen-no-heap = { version = "1.8.1", path = "../vendor/QR-Code-generator/rust-no-heap" }
+rand_chacha = { version = "=0.3.1", default-features = false }
+rand_core = { version = "=0.6.4", default-features = false }
+sapling = { package = "sapling-crypto", version = "=0.7.0", default-features = false }
 spin = { version = "0.9.9", features = ["rwlock", "spin_mutex", "lazy"], default-features = false }
 static-alloc = "0.2.6"
+transparent = { package = "zcash_transparent", version = "=0.10.0", default-features = false }
 trezor-thp = { path = "../../rust/trezor-thp" }
 trezor-tjpgdec = { version = "0.1.0", path = "../../rust/trezor-tjpgdec" }
 ufmt = "0.2.0"
 unsize = "1.1.0"
 without-alloc = "0.2.2"
+zcash_note_encryption = { version = "=0.4.1", default-features = false }
+zcash_primitives = { version = "=0.30.1", default-features = false }
+zcash_protocol = { version = "=0.10.5", default-features = false }
 zeroize = { version = "1.8.2", default-features = false, features = ["zeroize_derive"] }
 
 models = { path = "models" }
