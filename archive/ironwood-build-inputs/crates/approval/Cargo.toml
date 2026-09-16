@@ -1,0 +1,29 @@
+[package]
+name = "ironwood-approval"
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+publish = false
+
+[features]
+default = ["std"]
+std = ["rand_core/getrandom"]
+
+[dependencies]
+pczt = { path = "../../upstream/librustzcash/pczt", default-features = false, features = ["orchard"] }
+orchard = { version = "=0.15.3", default-features = false }
+zcash_protocol = { path = "../../upstream/librustzcash/components/zcash_protocol", default-features = false }
+zcash_note_encryption = { version = "=0.4.1", default-features = false }
+blake2b_simd = { version = "1", default-features = false }
+rand_core = { version = "0.6", default-features = false }
+
+zcash_primitives = { path = "../../upstream/librustzcash/zcash_primitives", default-features = false }
+transparent = { package = "zcash_transparent", path = "../../upstream/librustzcash/zcash_transparent", default-features = false }
+sapling = { package = "sapling-crypto", version = "0.7", default-features = false }
+
+[dev-dependencies]
+pczt = { path = "../../upstream/librustzcash/pczt", features = ["signer", "io-finalizer", "zcp-builder"] }
+zcash_primitives = { path = "../../upstream/librustzcash/zcash_primitives", default-features = false }
+zcash_protocol = { path = "../../upstream/librustzcash/components/zcash_protocol", features = ["local-consensus"] }
+rand_chacha = "0.3"
+serde_json = "1"

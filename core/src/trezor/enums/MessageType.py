@@ -305,3 +305,12 @@ if not utils.BITCOIN_ONLY:
     TronDelegateResourceContract = 2211
     TronUnDelegateResourceContract = 2212
     TronWithdrawBalance = 2213
+    IronwoodSignPczt = 32000
+    IronwoodPcztRequest = 32001
+    IronwoodPcztAck = 32002
+    IronwoodSignedPczt = 32003
+    IronwoodSignedPcztAck = 32004
+    IronwoodMemoryTraceRequest = 32005
+    IronwoodMemoryTrace = 32006
+    IronwoodGetAddress = 32007
+    IronwoodAddress = 32008

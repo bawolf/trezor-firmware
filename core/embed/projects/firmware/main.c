@@ -64,6 +64,28 @@ extern const void nrf_app_size;
 
 #endif
 
+#ifdef IRONWOOD_TARGET_NATIVE_COMPILE_ONLY
+#if !defined(TREZOR_MODEL_T3T1) || !defined(STM32U585xx) || \
+    defined(USE_SECMON_LAYOUT) || \
+    !defined(__ARM_FEATURE_CMSE) || __ARM_FEATURE_CMSE != 3 || \
+    defined(TREZOR_EMULATOR) || defined(KERNEL_MODE) || \
+    defined(SECURE_MODE) || PRODUCTION
+#error "synthetic native bridge requires an unprivileged nonproduction T3T1 app"
+#endif
+#if MICROPY_GC_SPLIT_HEAP != 1 || MICROPY_GC_SPLIT_HEAP_AUTO != 0
+#error "synthetic native bridge requires the static split GC heap"
+#endif
+extern uint8_t _heap_aux1_start;
+extern uint8_t _heap_aux1_end;
+extern void ironwood_target_arena_init(void);
+extern void ironwood_target_arena_check_cold(void);
+// One-time Core lifetime binding; target adapter rejects unsupported contexts.
+extern void ironwood_bind_executor(void);
+extern void ironwood_bridge_require_executor(void);
+extern void ironwood_test_cancel(void);
+extern void ironwood_bridge_require_idle(void);
+#endif
+
 LOG_DECLARE(coreapp_main)
 
 int main_func(uint32_t cmd, void *arg) {
@@ -143,6 +165,10 @@ int main_func(uint32_t cmd, void *arg) {
   // GC init
   LOG_INF("Starting GC");
   gc_init(&_heap_start, &_heap_end);
+#ifdef IRONWOOD_TARGET_NATIVE_COMPILE_ONLY
+  // Register the static AUX1 tail after each GC initialization, before mp_init.
+  gc_add(&_heap_aux1_start, &_heap_aux1_end);
+#endif
 
   // Interpreter init
   LOG_INF("Starting interpreter");
@@ -150,12 +176,24 @@ int main_func(uint32_t cmd, void *arg) {
   mp_obj_list_init(mp_sys_path, 0);
   mp_obj_list_append(mp_sys_path, MP_OBJ_NEW_QSTR(MP_QSTR__dot_frozen));
 
+#ifdef IRONWOOD_TARGET_NATIVE_COMPILE_ONLY
+  ironwood_bind_executor();
+  ironwood_bridge_require_executor();
+  ironwood_target_arena_check_cold();
+#endif
+
   // Execute the main script
   LOG_INF("Executing main script");
   pyexec_frozen_module("main.py", false);
 
   // Clean up
   LOG_INF("Main script finished, cleaning up");
+#ifdef IRONWOOD_TARGET_NATIVE_COMPILE_ONLY
+  // Still on the VM executor. Python finally handles ordinary request failures.
+  ironwood_bridge_require_executor();
+  ironwood_test_cancel();
+  ironwood_bridge_require_idle();
+#endif
   mp_deinit();
 
   // Python code shouldn't ever exit, avoid black screen if it does
@@ -191,6 +229,11 @@ __attribute((no_stack_protector)) void reset_handler(uint32_t cmd, void *arg,
   // Initialize stack protector
   extern uint32_t __stack_chk_guard;
   __stack_chk_guard = random_value;
+
+#ifdef IRONWOOD_TARGET_NATIVE_COMPILE_ONLY
+  ironwood_target_arena_init();
+  ironwood_target_arena_check_cold();
+#endif
 
   // Now everything is perfectly initialized and we can do anything
   // in C code

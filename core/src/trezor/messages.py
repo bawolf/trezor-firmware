@@ -4617,6 +4617,140 @@ if TYPE_CHECKING:
         def is_type_of(cls, msg: Any) -> TypeGuard["EvoluIndexManagementResponse"]:
             return isinstance(msg, cls)
 
+    class IronwoodSignPczt(protobuf.MessageType):
+        total_length: "int"
+
+        def __init__(
+            self,
+            *,
+            total_length: "int",
+        ) -> None:
+            pass
+
+        @classmethod
+        def is_type_of(cls, msg: Any) -> TypeGuard["IronwoodSignPczt"]:
+            return isinstance(msg, cls)
+
+    class IronwoodPcztRequest(protobuf.MessageType):
+        transfer_id: "AnyBytes"
+        offset: "int"
+        length: "int"
+
+        def __init__(
+            self,
+            *,
+            transfer_id: "AnyBytes",
+            offset: "int",
+            length: "int",
+        ) -> None:
+            pass
+
+        @classmethod
+        def is_type_of(cls, msg: Any) -> TypeGuard["IronwoodPcztRequest"]:
+            return isinstance(msg, cls)
+
+    class IronwoodPcztAck(protobuf.MessageType):
+        transfer_id: "AnyBytes"
+        offset: "int"
+        data: "AnyBytes"
+
+        def __init__(
+            self,
+            *,
+            transfer_id: "AnyBytes",
+            offset: "int",
+            data: "AnyBytes",
+        ) -> None:
+            pass
+
+        @classmethod
+        def is_type_of(cls, msg: Any) -> TypeGuard["IronwoodPcztAck"]:
+            return isinstance(msg, cls)
+
+    class IronwoodSignedPczt(protobuf.MessageType):
+        transfer_id: "AnyBytes"
+        total_length: "int"
+        offset: "int"
+        data: "AnyBytes"
+
+        def __init__(
+            self,
+            *,
+            transfer_id: "AnyBytes",
+            total_length: "int",
+            offset: "int",
+            data: "AnyBytes",
+        ) -> None:
+            pass
+
+        @classmethod
+        def is_type_of(cls, msg: Any) -> TypeGuard["IronwoodSignedPczt"]:
+            return isinstance(msg, cls)
+
+    class IronwoodSignedPcztAck(protobuf.MessageType):
+        transfer_id: "AnyBytes"
+        next_offset: "int"
+
+        def __init__(
+            self,
+            *,
+            transfer_id: "AnyBytes",
+            next_offset: "int",
+        ) -> None:
+            pass
+
+        @classmethod
+        def is_type_of(cls, msg: Any) -> TypeGuard["IronwoodSignedPcztAck"]:
+            return isinstance(msg, cls)
+
+    class IronwoodMemoryTraceRequest(protobuf.MessageType):
+
+        @classmethod
+        def is_type_of(cls, msg: Any) -> TypeGuard["IronwoodMemoryTraceRequest"]:
+            return isinstance(msg, cls)
+
+    class IronwoodMemoryTrace(protobuf.MessageType):
+        data: "AnyBytes"
+
+        def __init__(
+            self,
+            *,
+            data: "AnyBytes",
+        ) -> None:
+            pass
+
+        @classmethod
+        def is_type_of(cls, msg: Any) -> TypeGuard["IronwoodMemoryTrace"]:
+            return isinstance(msg, cls)
+
+    class IronwoodGetAddress(protobuf.MessageType):
+        diversifier_index: "AnyBytes"
+
+        def __init__(
+            self,
+            *,
+            diversifier_index: "AnyBytes",
+        ) -> None:
+            pass
+
+        @classmethod
+        def is_type_of(cls, msg: Any) -> TypeGuard["IronwoodGetAddress"]:
+            return isinstance(msg, cls)
+
+    class IronwoodAddress(protobuf.MessageType):
+        address: "str"
+
+        def __init__(
+            self,
+            *,
+            address: "str",
+        ) -> None:
+            pass
+
+        @classmethod
+        def is_type_of(cls, msg: Any) -> TypeGuard["IronwoodAddress"]:
+            return isinstance(msg, cls)
+
     class MoneroTransactionSourceEntry(protobuf.MessageType):
         outputs: "list[MoneroOutputEntry]"
         real_output: "int | None"

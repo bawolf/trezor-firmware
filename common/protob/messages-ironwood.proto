@@ -1,0 +1,61 @@
+syntax = "proto2";
+package hw.trezor.messages.ironwood;
+
+// Local synthetic test protocol, no upstream ID reservation.
+// Required scalar integers are uint32; all tags fit one byte.
+/** @start
+ * @next IronwoodPcztRequest
+ */
+message IronwoodSignPczt {
+    required uint32 total_length = 1; // 1..65536
+}
+/** @next IronwoodPcztAck */
+message IronwoodPcztRequest {
+    required bytes transfer_id = 1; // Exactly 16 bytes
+    required uint32 offset = 2;
+    required uint32 length = 3; // min(1024, remaining)
+}
+/** @next IronwoodPcztRequest
+ * @next IronwoodSignedPczt
+ * @next ButtonRequest
+ */
+message IronwoodPcztAck {
+    required bytes transfer_id = 1;
+    required uint32 offset = 2;
+    required bytes data = 3;
+}
+/** @next IronwoodSignedPcztAck */
+message IronwoodSignedPczt {
+    required bytes transfer_id = 1;
+    required uint32 total_length = 2; // 1..65536, fixed across response
+    required uint32 offset = 3;
+    required bytes data = 4; // Exactly min(1024, remaining)
+}
+/** @next IronwoodSignedPczt
+ * @next Success
+ */
+message IronwoodSignedPcztAck {
+    required bytes transfer_id = 1;
+    required uint32 next_offset = 2;
+}
+
+/** @start
+ * @next IronwoodMemoryTrace
+ */
+message IronwoodMemoryTraceRequest {
+}
+// Counters only, retrieved after the synthetic workflow cleanup.
+message IronwoodMemoryTrace {
+    required bytes data = 1; // Exactly 80 bytes: LE u32 version=1, mask, 6 triples.
+}
+
+/** @start
+ * @next ButtonRequest
+ * @next IronwoodAddress
+ */
+message IronwoodGetAddress {
+    required bytes diversifier_index = 1; // Exactly11LEbytes; fixed regtest account9.
+}
+message IronwoodAddress {
+    required string address = 1; // Full UA returned only after on-device confirmation.
+}

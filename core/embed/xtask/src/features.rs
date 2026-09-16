@@ -132,7 +132,12 @@ fn forward_color_choice(cmd: &mut process::Command) {
 
 /// Configures a cargo command with the appropriate arguments and features.
 pub fn configure_cargo(args: &ResolvedBuildArgs, cmd: &mut process::Command) -> Result<()> {
-    let resolved = resolve_features(args)?;
+    let mut resolved = resolve_features(args)?;
+    // Disposable composition test tree: always include the guarded test caller.
+    // Production must still fail its existing guards, never silently omit Ironwood.
+    if matches!(args.project, crate::args::Project::Firmware) {
+        resolved.features.push("ironwood_native_caller".into());
+    }
     let mut rebuild_std = false;
 
     cmd.args(["--package", args.project.package_name(args.emulator)]);
@@ -201,7 +206,11 @@ pub fn configure_cargo(args: &ResolvedBuildArgs, cmd: &mut process::Command) -> 
     }
 
     if rebuild_std {
-        cmd.arg("-Zbuild-std=core");
+        cmd.arg(if matches!(args.project, crate::args::Project::Firmware) {
+            "-Zbuild-std=core,alloc"
+        } else {
+            "-Zbuild-std=core"
+        });
     }
 
     forward_color_choice(cmd);

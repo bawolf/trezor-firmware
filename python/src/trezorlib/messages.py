@@ -839,6 +839,15 @@ class MessageType(IntEnum):
     BenchmarkResult = 9103
     TelemetryGet = 1100
     Telemetry = 1101
+    IronwoodSignPczt = 32000
+    IronwoodPcztRequest = 32001
+    IronwoodPcztAck = 32002
+    IronwoodSignedPczt = 32003
+    IronwoodSignedPcztAck = 32004
+    IronwoodMemoryTraceRequest = 32005
+    IronwoodMemoryTrace = 32006
+    IronwoodGetAddress = 32007
+    IronwoodAddress = 32008
 
 
 class BenchmarkListNames(protobuf.MessageType):
@@ -6241,6 +6250,146 @@ class EvoluIndexManagementResponse(protobuf.MessageType):
         rotation_index: Optional["int"] = None,
     ) -> None:
         self.rotation_index = rotation_index
+
+
+class IronwoodSignPczt(protobuf.MessageType):
+    MESSAGE_WIRE_TYPE = 32000
+    FIELDS = {
+        1: protobuf.Field("total_length", "uint32", repeated=False, required=True),
+    }
+
+    def __init__(
+        self,
+        *,
+        total_length: "int",
+    ) -> None:
+        self.total_length = total_length
+
+
+class IronwoodPcztRequest(protobuf.MessageType):
+    MESSAGE_WIRE_TYPE = 32001
+    FIELDS = {
+        1: protobuf.Field("transfer_id", "bytes", repeated=False, required=True),
+        2: protobuf.Field("offset", "uint32", repeated=False, required=True),
+        3: protobuf.Field("length", "uint32", repeated=False, required=True),
+    }
+
+    def __init__(
+        self,
+        *,
+        transfer_id: "bytes",
+        offset: "int",
+        length: "int",
+    ) -> None:
+        self.transfer_id = transfer_id
+        self.offset = offset
+        self.length = length
+
+
+class IronwoodPcztAck(protobuf.MessageType):
+    MESSAGE_WIRE_TYPE = 32002
+    FIELDS = {
+        1: protobuf.Field("transfer_id", "bytes", repeated=False, required=True),
+        2: protobuf.Field("offset", "uint32", repeated=False, required=True),
+        3: protobuf.Field("data", "bytes", repeated=False, required=True),
+    }
+
+    def __init__(
+        self,
+        *,
+        transfer_id: "bytes",
+        offset: "int",
+        data: "bytes",
+    ) -> None:
+        self.transfer_id = transfer_id
+        self.offset = offset
+        self.data = data
+
+
+class IronwoodSignedPczt(protobuf.MessageType):
+    MESSAGE_WIRE_TYPE = 32003
+    FIELDS = {
+        1: protobuf.Field("transfer_id", "bytes", repeated=False, required=True),
+        2: protobuf.Field("total_length", "uint32", repeated=False, required=True),
+        3: protobuf.Field("offset", "uint32", repeated=False, required=True),
+        4: protobuf.Field("data", "bytes", repeated=False, required=True),
+    }
+
+    def __init__(
+        self,
+        *,
+        transfer_id: "bytes",
+        total_length: "int",
+        offset: "int",
+        data: "bytes",
+    ) -> None:
+        self.transfer_id = transfer_id
+        self.total_length = total_length
+        self.offset = offset
+        self.data = data
+
+
+class IronwoodSignedPcztAck(protobuf.MessageType):
+    MESSAGE_WIRE_TYPE = 32004
+    FIELDS = {
+        1: protobuf.Field("transfer_id", "bytes", repeated=False, required=True),
+        2: protobuf.Field("next_offset", "uint32", repeated=False, required=True),
+    }
+
+    def __init__(
+        self,
+        *,
+        transfer_id: "bytes",
+        next_offset: "int",
+    ) -> None:
+        self.transfer_id = transfer_id
+        self.next_offset = next_offset
+
+
+class IronwoodMemoryTraceRequest(protobuf.MessageType):
+    MESSAGE_WIRE_TYPE = 32005
+
+
+class IronwoodMemoryTrace(protobuf.MessageType):
+    MESSAGE_WIRE_TYPE = 32006
+    FIELDS = {
+        1: protobuf.Field("data", "bytes", repeated=False, required=True),
+    }
+
+    def __init__(
+        self,
+        *,
+        data: "bytes",
+    ) -> None:
+        self.data = data
+
+
+class IronwoodGetAddress(protobuf.MessageType):
+    MESSAGE_WIRE_TYPE = 32007
+    FIELDS = {
+        1: protobuf.Field("diversifier_index", "bytes", repeated=False, required=True),
+    }
+
+    def __init__(
+        self,
+        *,
+        diversifier_index: "bytes",
+    ) -> None:
+        self.diversifier_index = diversifier_index
+
+
+class IronwoodAddress(protobuf.MessageType):
+    MESSAGE_WIRE_TYPE = 32008
+    FIELDS = {
+        1: protobuf.Field("address", "string", repeated=False, required=True),
+    }
+
+    def __init__(
+        self,
+        *,
+        address: "str",
+    ) -> None:
+        self.address = address
 
 
 class MoneroTransactionSourceEntry(protobuf.MessageType):

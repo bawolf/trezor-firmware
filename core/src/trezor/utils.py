@@ -5,6 +5,7 @@ from trezorutils import (  # noqa: F401
     EMULATOR,
     HOMESCREEN_MAXSIZE,
     INTERNAL_MODEL,
+    IRONWOOD_NATIVE_CALLER,
     MODEL,
     MODEL_FULL_NAME,
     MODEL_USB_MANUFACTURER,

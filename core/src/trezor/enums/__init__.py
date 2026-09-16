@@ -773,3 +773,12 @@ if TYPE_CHECKING:
         BenchmarkResult = 9103
         TelemetryGet = 1100
         Telemetry = 1101
+        IronwoodSignPczt = 32000
+        IronwoodPcztRequest = 32001
+        IronwoodPcztAck = 32002
+        IronwoodSignedPczt = 32003
+        IronwoodSignedPcztAck = 32004
+        IronwoodMemoryTraceRequest = 32005
+        IronwoodMemoryTrace = 32006
+        IronwoodGetAddress = 32007
+        IronwoodAddress = 32008

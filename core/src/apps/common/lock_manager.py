@@ -203,6 +203,11 @@ def can_lock_device() -> bool:
 
 def lock_device(interrupt_workflow: bool = True) -> None:
     if can_lock_device():
+        if utils.IRONWOOD_NATIVE_CALLER:
+            import ironwood_test
+
+            # Invalidate even when this lock does not interrupt the workflow.
+            ironwood_test.cancel()
         config.lock()
         filters.append(_pinlock_filter)
         set_homescreen()

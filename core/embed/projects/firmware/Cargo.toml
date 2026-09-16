@@ -9,6 +9,14 @@ color-eyre.workspace = true
 xbuild.workspace = true
 
 [dependencies]
+# Path assumes the future derivative is work/target-native-integration/firmware.
+ironwood-emulator-bridge = { path = "../../../../archive/ironwood-build-inputs/rust", optional = true }
+# Keep the existing crypto code compact on this small processor.
+blake2b_simd = { version = "=1.0.2", default-features = false, features = ["uninline_portable"], optional = true }
+pasta_curves = { version = "=0.5.1", default-features = false, features = ["uninline-portable"], optional = true }
+ff = { version = "=0.13.0", default-features = false, optional = true }
+linked_list_allocator = { version = "=0.10.6", default-features = false, optional = true }
+spin = { version = "=0.9.9", default-features = false, features = ["spin_mutex"], optional = true }
 crypto.workspace = true
 io.workspace = true
 models.workspace = true
@@ -19,6 +27,21 @@ trezor_lib.workspace = true
 upymod.workspace = true
 
 [features]
+
+# Explicit trusted native test caller; the compile-only configuration stays unrouted.
+ironwood_native_caller = ["ironwood_target_native_compile_only", "upymod/ironwood_native_caller"]
+
+# Opt-in callable synthetic scaffolding for link measurement; trusted caller required.
+# No boot invocation or wire handler; sign internally approves the matching token.
+ironwood_target_native_compile_only = [
+    "dep:ironwood-emulator-bridge",
+    "dep:blake2b_simd",
+    "dep:pasta_curves",
+    "dep:ff",
+    "dep:linked_list_allocator",
+    "dep:spin",
+    "upymod/ironwood_target_native_compile_only",
+]
 
 # --------------------------------------------------------------------------
 # Build options

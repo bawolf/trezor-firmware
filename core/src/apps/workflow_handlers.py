@@ -25,6 +25,15 @@ def _find_message_handler_module(msg_type: int) -> str:
     from trezor import utils
     from trezor.enums import MessageType
 
+    # Native synthetic test flow: resolve its module only for an actual request.
+    if utils.IRONWOOD_NATIVE_CALLER and msg_type == MessageType.IronwoodSignPczt:
+        return "apps.zcash.sign_pczt"
+    if utils.IRONWOOD_NATIVE_CALLER and msg_type == MessageType.IronwoodMemoryTraceRequest:
+        return "apps.zcash.memory_trace"
+
+    if utils.IRONWOOD_NATIVE_CALLER and msg_type == MessageType.IronwoodGetAddress:
+        return "apps.zcash.receive_test"
+
     # debug
     if __debug__ and msg_type == MessageType.LoadDevice:
         return "apps.debug.load_device"

@@ -47,6 +47,11 @@ def padding(hrp: str) -> bytes:
 
 
 def encode(receivers: dict[Typecode, bytes], coin: CoinInfo) -> str:
+    return _encode(receivers, PREFIXES[coin.coin_name])
+
+
+def _encode(receivers: dict[Typecode, bytes], hrp: str) -> str:
+    """Encode with the prefix selected by a trusted firmware caller."""
     from trezor.crypto.bech32 import bech32_encode
     from trezor.utils import empty_bytearray
 
@@ -76,7 +81,6 @@ def encode(receivers: dict[Typecode, bytes], coin: CoinInfo) -> str:
         write_compact_size(w, length)
         write_bytes_fixed(w, raw_bytes, length)
 
-    hrp = PREFIXES[coin.coin_name]
     write_bytes_fixed(w, padding(hrp), 16)
     f4jumble(memoryview(w))
     converted = convertbits(w, 8, 5)
@@ -84,6 +88,12 @@ def encode(receivers: dict[Typecode, bytes], coin: CoinInfo) -> str:
 
 
 def decode(addr_str: str, coin: CoinInfo) -> dict[int, bytes]:
+    return _decode(addr_str, PREFIXES[coin.coin_name])
+
+
+def _decode(addr_str: str, hrp: str) -> dict[int, bytes]:
+    """Decode against the prefix selected by a trusted firmware caller."""
+    expected_hrp = hrp
     from trezor.crypto.bech32 import bech32_decode
     from trezor.utils import BufferReader
     from trezor.wire import DataError
@@ -99,7 +109,7 @@ def decode(addr_str: str, coin: CoinInfo) -> dict[int, bytes]:
     assert hrp is not None  # to satisfy typecheckers
     assert data is not None  # to satisfy typecheckers
     assert encoding is not None  # to satisfy typecheckers
-    if hrp != PREFIXES[coin.coin_name]:
+    if hrp != expected_hrp:
         raise DataError("Unexpected address prefix.")
     if encoding != Encoding.BECH32M:
         raise DataError("Bech32m encoding required.")

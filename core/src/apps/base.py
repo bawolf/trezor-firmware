@@ -382,6 +382,10 @@ else:
     async def handle_Initialize(msg: Initialize) -> Features:
         import storage.cache_codec as cache_codec
 
+        if utils.IRONWOOD_NATIVE_CALLER:
+            import ironwood_test
+
+            ironwood_test.cancel()
         session_id = cache_codec.start_session(msg.session_id)
 
         if not utils.BITCOIN_ONLY:
@@ -442,6 +446,10 @@ async def handle_SetBusy(msg: SetBusy) -> Success:
 
 
 async def handle_EndSession(msg: EndSession) -> Success:
+    if utils.IRONWOOD_NATIVE_CALLER:
+        import ironwood_test
+
+        ironwood_test.cancel()
     ctx = context.get_context()
     ctx.release()
     return Success()

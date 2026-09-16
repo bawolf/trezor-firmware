@@ -115,3 +115,9 @@ toml = "0.8.23"
 zlib-rs = "0.6.3"
 
 xbuild = { path = "xbuild" }
+
+[patch.crates-io]
+orchard = { path = "../../archive/ironwood-build-inputs/key-cleanup/orchard-0.15.3" }
+reddsa = { path = "../../archive/ironwood-build-inputs/key-cleanup/reddsa-0.5.1" }
+pasta_curves = { path = "../../archive/ironwood-build-inputs/key-cleanup/pasta_curves-0.5.1" }
+sinsemilla = { path = "../../archive/ironwood-build-inputs/sinsemilla-compute/crate" }

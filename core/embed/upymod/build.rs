@@ -114,6 +114,37 @@ fn main() -> Result<()> {
             "modtrezorutils/modtrezorutils.c",
         ]);
 
+        if cfg!(feature = "ironwood_target_native_compile_only") {
+            if current_model_id()? != "T3T1"
+                || !cfg!(feature = "mcu_stm32u58")
+                || cfg!(feature = "emulator")
+                || cfg!(feature = "app_loading")
+                || !cfg!(feature = "pyopt")
+            {
+                bail!("synthetic native integration requires T3T1, pyopt, and no app loading");
+            }
+            lib.add_private_define("IRONWOOD_TARGET_NATIVE_COMPILE_ONLY", Some("1"));
+            // Public: downstream C and Rust bindings must share the GC state layout.
+            lib.add_define("MICROPY_GC_SPLIT_HEAP", Some("1"));
+            lib.add_define("MICROPY_GC_SPLIT_HEAP_AUTO", Some("0"));
+            lib.add_source("modironwood_test/modironwood_test.c");
+            lib.add_source("modironwood_test/executor.c");
+        }
+
+        if cfg!(feature = "ironwood_native_caller") {
+            if !cfg!(feature = "frozen")
+                || !cfg!(feature = "universal_fw")
+                || !cfg!(feature = "layout_delizia")
+                || cfg!(feature = "thp")
+            {
+                bail!(
+                    "native Ironwood caller requires frozen universal Delizia firmware without THP"
+                );
+            }
+            lib.add_private_define("IRONWOOD_NATIVE_CALLER", Some("1"));
+            lib.add_source("modironwood_test/memory_trace.c");
+        }
+
         if cfg!(feature = "sd_card") {
             lib.add_sources(["modtrezorio/ff.c", "modtrezorio/ffunicode.c"]);
         }
@@ -515,6 +546,9 @@ impl<'a> MpyBuilder<'a> {
             .context("Failed to collect protobuf sources")?;
 
         inputs.remove(protob_dir, "messages-bootloader.proto");
+        if !cfg!(feature = "ironwood_native_caller") {
+            inputs.remove(protob_dir, "messages-ironwood.proto");
+        }
 
         if cfg!(not(feature = "thp")) {
             inputs.remove(protob_dir, "messages-thp.proto");
@@ -942,6 +976,7 @@ impl<'a> MpyBuilder<'a> {
         let btc_only = py_bool(cfg!(not(feature = "universal_fw")));
         let button = py_bool(cfg!(feature = "button"));
         let emulator = py_bool(cfg!(feature = "emulator"));
+        let ironwood_native_caller = py_bool(cfg!(feature = "ironwood_native_caller"));
         let haptic = py_bool(cfg!(feature = "haptic"));
         let mcu_attestation = py_bool(cfg!(feature = "mcu_attestation"));
         let n1w1 = py_bool(cfg!(feature = "n1w1"));
@@ -964,6 +999,7 @@ impl<'a> MpyBuilder<'a> {
         let mut exprs: Vec<String> = vec![
             format!(r"s/utils\.BITCOIN_ONLY/{btc_only}/g"),
             format!(r"s/utils\.EMULATOR/{emulator}/g"),
+            format!(r"s/utils\.IRONWOOD_NATIVE_CALLER/{ironwood_native_caller}/g"),
             format!(r"s/utils\.USE_BACKLIGHT/{backlight}/g"),
             format!(r"s/utils\.USE_BLE/{ble}/g"),
             format!(r"s/utils\.USE_BUTTON/{button}/g"),
@@ -1259,6 +1295,12 @@ impl<'a> MpyBuilder<'a> {
 
         if cfg!(not(feature = "pyopt")) && cfg!(feature = "emulator") {
             files.add(src, "prof/*.py")?;
+        }
+
+        if !cfg!(feature = "ironwood_native_caller") {
+            files.remove(src, "apps/zcash/sign_pczt.py");
+            files.remove(src, "apps/zcash/ironwood_review.py");
+            files.remove(src, "apps/zcash/memory_trace.py");
         }
 
         Ok(files)

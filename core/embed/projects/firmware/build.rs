@@ -1,14 +1,31 @@
 use std::env;
 use std::path::PathBuf;
 
-use xbuild::{CLibrary, Result, bail_unsupported};
+use xbuild::{CLibrary, Result, bail, bail_unsupported};
 
 fn main() -> Result<()> {
-    xbuild::build_and_link("firmware", |lib| {
+    // Reuse xbuild's existing binary-type linker selection for this experiment.
+    let binary_type = if cfg!(feature = "ironwood_target_native_compile_only") {
+        "firmware_ironwood"
+    } else {
+        "firmware"
+    };
+    xbuild::build_and_link(binary_type, |lib| {
         lib.import_lib("io")?;
         lib.import_lib("upymod")?;
 
         lib.add_includes(["."]);
+
+        if cfg!(feature = "ironwood_target_native_compile_only") {
+            if xbuild::current_model_id()? != "T3T1"
+                || !cfg!(feature = "mcu_stm32u58")
+                || cfg!(feature = "secmon_layout")
+                || cfg!(feature = "production")
+            {
+                bail!("synthetic native integration requires nonproduction T3T1 without secmon layout");
+            }
+            lib.add_define("IRONWOOD_TARGET_NATIVE_COMPILE_ONLY", Some("1"));
+        }
 
         lib.add_include("../../rust"); // Cyclic dependency
 

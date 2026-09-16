@@ -18,6 +18,10 @@ io.workspace = true
 
 [features]
 
+# Only for the isolated partial T3W1 native compile proposal.
+ironwood_target_native_compile_only = []
+ironwood_native_caller = ["ironwood_target_native_compile_only"]
+
 # --------------------------------------------------------------------------
 # MCU selection - only enable one of these at a time
 # --------------------------------------------------------------------------
