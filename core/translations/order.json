@@ -1295,5 +1295,7 @@
   "1293": "words__undelegate",
   "1294": "buttons__review",
   "1295": "buttons__cancel_sign",
-  "1296": "zcash__weak_backup_warning"
+  "1296": "zcash__weak_backup_warning",
+  "1297": "zcash__export_viewing_key",
+  "1298": "zcash__viewing_key_warning"
 }

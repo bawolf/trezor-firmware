@@ -1203,5 +1203,7 @@ class TR:
     words__weight: str = "Weight"
     words__writable: str = "Writable"
     words__yes: str = "Yes"
+    zcash__export_viewing_key: str = "Export Zcash viewing key?"
+    zcash__viewing_key_warning: str = "The connected app will be able to see and link all activity for this account, but cannot spend."
     zcash__weak_backup_warning: str = "This wallet uses a weaker backup. Move funds to a new wallet with a stronger backup."
 

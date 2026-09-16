@@ -29,6 +29,15 @@ Trezor mapping for existing wallets as permitted by ZIP 315. Product callers
 must show the weaker-backup warning before allowing receive, viewing, or spend;
 the native primitive deliberately performs no UI or backup-type policy.
 
+The viewing-key fixtures use published `orchard` 0.15.3 directly through
+`SpendingKey::from_zip32_seed` and `FullViewingKey::to_bytes`, then published
+`zcash_address` 0.13.0 through `Ufvk::try_from_items` and `Encoding::encode`.
+The public seed is bytes `00..1f`; fixtures cover Mainnet accounts 0 and 9 and
+Testnet account 7. The independent oracle parses every raw 96-byte value back
+through `FullViewingKey::from_bytes` before encoding it. These APIs establish
+that the serialized component is `ak || nk || rivk` and contains no spending
+key or spend-authorizing scalar.
+
 The Pallas implementation is reused from the exact fork and revision used by
 the historical Trezor work:
 

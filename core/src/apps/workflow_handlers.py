@@ -245,6 +245,8 @@ def _find_message_handler_module(msg_type: int) -> str:
         # zcash / ironwood
         if utils.USE_IRONWOOD and msg_type == MessageType.ZcashGetAddress:
             return "apps.zcash.get_address"
+        if utils.USE_IRONWOOD and msg_type == MessageType.ZcashGetViewingKey:
+            return "apps.zcash.get_viewing_key"
 
     raise ValueError
 
