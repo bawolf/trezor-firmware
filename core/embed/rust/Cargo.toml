@@ -30,6 +30,7 @@ pareen.workspace = true
 qrcodegen-no-heap.workspace = true
 spin.workspace = true
 static-alloc.workspace = true
+trezor-ironwood-receive = { workspace = true, optional = true }
 trezor-thp = { workspace = true, optional = true }
 trezor-tjpgdec.workspace = true
 ufmt.workspace = true
@@ -75,6 +76,7 @@ layout_bolt = []
 layout_caesar = []
 layout_delizia = []
 layout_eckhart = []
+ironwood = ["dep:trezor-ironwood-receive"]
 micropython = ["dep:upymod"]
 miniscript = []
 n1w1 = []
@@ -170,4 +172,3 @@ default = []
 emulator = ["io/emulator", "upymod?/emulator"]
 mcu_stm32f429 = ["mcu_stm32f4"]
 mcu_stm32f4 = []
-

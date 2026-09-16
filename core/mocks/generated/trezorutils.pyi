@@ -264,6 +264,8 @@ USE_BACKLIGHT: bool
 """Whether the hardware supports backlight brightness control."""
 USE_HAPTIC: bool
 """Whether the hardware supports haptic feedback."""
+USE_IRONWOOD: bool
+"""Whether the native Ironwood receiver adapter is enabled."""
 USE_RGB_LED: bool
 """Whether the hardware supports RGB LED."""
 USE_OPTIGA: bool

@@ -276,6 +276,17 @@ mod tests {
     }
 
     #[test]
+    fn rejects_ironwood_for_bitcoin_only_firmware() {
+        let mut args = ironwood_build_args(Project::Firmware, Model::T3T1);
+        args.options.btc_only = Some(true);
+        let error = ResolvedBuildArgs::from_build_args(&args).unwrap_err();
+        assert_eq!(
+            error.to_string(),
+            "--ironwood cannot be combined with --btc-only"
+        );
+    }
+
+    #[test]
     fn omits_ironwood_from_firmware_dependency_builds() {
         let firmware_args = ResolvedBuildArgs::from_build_args(&ironwood_build_args(
             Project::Firmware,
