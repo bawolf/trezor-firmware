@@ -4,13 +4,16 @@ from common import *  # isort:skip
 from mock import patch
 from trezor import TR, utils, wire
 from trezor.enums import ButtonRequestType, MessageType, ZcashNetwork
-from trezor.messages import ZcashGetAddress
 from trezor.ui import layouts
 from trezor.wire import context
 
-from apps import workflow_handlers
 from apps.common import seed
-from apps.zcash import get_address, ironwood_account
+
+if not utils.BITCOIN_ONLY:
+    from trezor.messages import ZcashGetAddress
+
+    from apps import workflow_handlers
+    from apps.zcash import get_address, ironwood_account
 
 
 class _Cache:
