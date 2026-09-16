@@ -1,0 +1,31 @@
+[package]
+name = "trezor-ironwood"
+version = "0.0.0"
+edition = "2024"
+publish = false
+
+[features]
+default = []
+# Host-only test access. The crate rejects this feature on bare-metal targets.
+test = []
+
+[dependencies]
+# Exact versions live in the embed workspace manifest. Every production
+# dependency is default-off; the crate enables only the portable features it uses.
+blake2b_simd.workspace = true
+orchard.workspace = true
+pczt.workspace = true
+rand_core.workspace = true
+sapling.workspace = true
+transparent.workspace = true
+zcash_note_encryption.workspace = true
+zcash_primitives.workspace = true
+zcash_protocol.workspace = true
+zeroize = { workspace = true }
+
+[dev-dependencies]
+pczt = { workspace = true, features = ["signer", "io-finalizer", "zcp-builder"] }
+rand_chacha.workspace = true
+rand_core = { workspace = true, features = ["getrandom"] }
+serde_json.workspace = true
+zcash_protocol = { workspace = true, features = ["local-consensus"] }
