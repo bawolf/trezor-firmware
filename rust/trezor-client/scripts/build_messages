@@ -31,6 +31,7 @@ FEATURES = {
     "Tezos": "tezos",
     "Tron": "tron",
     "WebAuthn": "webauthn",
+    "Zcash": "zcash",
 }
 MACRO = "trezor_message_impl"
 INDENT = "    "
