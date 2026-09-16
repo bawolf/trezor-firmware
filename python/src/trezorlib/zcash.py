@@ -22,9 +22,9 @@ coordinate an allocation.
 
 The host is untrusted by the device, and the device is untrusted by the host.
 Every transfer field is validated against the declared transfer before it is
-used to slice or allocate. Returned address and viewing-key strings are checked
-for the selected network prefix; canonical decoding belongs to the consuming
-wallet. There is no retry, no resume, and no partial result.
+used to slice or allocate. Returned viewing keys are fully decoded and checked
+for the one Orchard-only product shape. There is no retry, no resume, and no
+partial result.
 
 Any *host-detected* violation cancels the device workflow and then raises, so
 the device is not left mid-workflow holding pending consent. A device-sent
@@ -33,6 +33,7 @@ the device is not left mid-workflow holding pending consent. A device-sent
 
 from __future__ import annotations
 
+import hashlib
 import typing as t
 
 from . import exceptions, messages, protobuf
@@ -63,6 +64,12 @@ TRANSFER_ID_BYTES = 16
 MAX_ACCOUNT = 2**31 - 1
 
 _UINT32_MAX = 2**32 - 1
+
+_BECH32_CHARSET = "qpzry9x8gf2tvdw0s3jn54khce6mua7l"
+_BECH32_CHARSET_INDEX = {char: index for index, char in enumerate(_BECH32_CHARSET)}
+_BECH32M_CONST = 0x2BC830A3
+_ORCHARD_FVK_BYTES = 96
+_UNIFIED_FVK_BYTES = 114
 
 # Capability gating is deliberately absent. `Features.Capability` value 30 is
 # only the lowest free candidate at this baseline, not an upstream assignment,
@@ -147,7 +154,9 @@ def get_viewing_key(
         session, messages.ZcashGetViewingKey(network=network, account=account)
     )
     key = _expect(session, response, messages.ZcashViewingKey).key
-    return _check_encoded_text(session, key, network, "viewing key")
+    if not _has_canonical_orchard_ufvk_envelope(key, network):
+        _cancel_and_fail(session, "Invalid Zcash viewing key")
+    return key
 
 
 @workflow()
@@ -231,17 +240,13 @@ def _check_encoded_text(
     session: "Session",
     value: object,
     network: messages.ZcashNetwork,
-    kind: t.Literal["address", "viewing key"],
+    kind: t.Literal["address"],
 ) -> str:
     """Reject empty or cross-network encodings before returning host-visible data."""
     prefixes = {
         "address": {
             messages.ZcashNetwork.Mainnet: "u1",
             messages.ZcashNetwork.Testnet: "utest1",
-        },
-        "viewing key": {
-            messages.ZcashNetwork.Mainnet: "uview1",
-            messages.ZcashNetwork.Testnet: "uviewtest1",
         },
     }
     prefix = prefixes[kind][network]
@@ -252,6 +257,147 @@ def _check_encoded_text(
     ):
         _cancel_and_fail(session, f"Invalid Zcash {kind}")
     return value
+
+
+def _has_canonical_orchard_ufvk_envelope(
+    value: object, network: messages.ZcashNetwork
+) -> bool:
+    """Validate the canonical ZIP-316 envelope and Orchard-only item shape.
+
+    The consuming wallet must still parse the 96-byte item as an Orchard FVK;
+    this transport check deliberately does not implement Orchard field math.
+    """
+    hrp = {
+        messages.ZcashNetwork.Mainnet: "uview",
+        messages.ZcashNetwork.Testnet: "uviewtest",
+    }[network]
+    expected_length = 195 if network is messages.ZcashNetwork.Mainnet else 199
+    if (
+        type(value) is not str
+        or len(value) != expected_length
+        or value != value.lower()
+    ):
+        return False
+
+    try:
+        encoded_hrp, data = _bech32m_decode(value)
+        if encoded_hrp != hrp:
+            return False
+        jumbled = bytearray(_convert_bits(data, 5, 8, pad=False))
+        if len(jumbled) != _UNIFIED_FVK_BYTES:
+            return False
+        _f4jumble(jumbled, inverse=True)
+    except (KeyError, ValueError):
+        return False
+
+    padding = hrp.encode() + bytes(16 - len(hrp))
+    if jumbled[:2] != bytes((3, _ORCHARD_FVK_BYTES)) or jumbled[98:] != padding:
+        return False
+
+    # A successful decode is not enough: only the unique canonical spelling is
+    # accepted, so future decoder changes cannot silently normalize a response.
+    _f4jumble(jumbled, inverse=False)
+    canonical_data = _convert_bits(jumbled, 8, 5, pad=True)
+    return _bech32m_encode(hrp, canonical_data) == value
+
+
+def _bech32m_decode(value: str) -> tuple[str, list[int]]:
+    separator = value.rfind("1")
+    if separator <= 0 or separator + 7 > len(value):
+        raise ValueError("Invalid Bech32m separator")
+    hrp = value[:separator]
+    data = [_BECH32_CHARSET_INDEX[char] for char in value[separator + 1 :]]
+    if _bech32_polymod(_bech32_hrp_expand(hrp) + data) != _BECH32M_CONST:
+        raise ValueError("Invalid Bech32m checksum")
+    return hrp, data[:-6]
+
+
+def _bech32m_encode(hrp: str, data: list[int]) -> str:
+    values = _bech32_hrp_expand(hrp) + data + [0] * 6
+    checksum = _bech32_polymod(values) ^ _BECH32M_CONST
+    checksum_values = [(checksum >> (5 * (5 - index))) & 31 for index in range(6)]
+    return hrp + "1" + "".join(_BECH32_CHARSET[item] for item in data + checksum_values)
+
+
+def _bech32_hrp_expand(hrp: str) -> list[int]:
+    return [ord(char) >> 5 for char in hrp] + [0] + [ord(char) & 31 for char in hrp]
+
+
+def _bech32_polymod(values: t.Iterable[int]) -> int:
+    generators = (0x3B6A57B2, 0x26508E6D, 0x1EA119FA, 0x3D4233DD, 0x2A1462B3)
+    checksum = 1
+    for value in values:
+        top = checksum >> 25
+        checksum = ((checksum & 0x1FFFFFF) << 5) ^ value
+        for index, generator in enumerate(generators):
+            if (top >> index) & 1:
+                checksum ^= generator
+    return checksum
+
+
+def _convert_bits(
+    data: t.Iterable[int], from_bits: int, to_bits: int, *, pad: bool
+) -> list[int]:
+    accumulator = 0
+    bit_count = 0
+    result = []
+    output_mask = (1 << to_bits) - 1
+    accumulator_mask = (1 << (from_bits + to_bits - 1)) - 1
+    for value in data:
+        if value < 0 or value >> from_bits:
+            raise ValueError("Invalid base-conversion input")
+        accumulator = ((accumulator << from_bits) | value) & accumulator_mask
+        bit_count += from_bits
+        while bit_count >= to_bits:
+            bit_count -= to_bits
+            result.append((accumulator >> bit_count) & output_mask)
+
+    if pad:
+        if bit_count:
+            result.append((accumulator << (to_bits - bit_count)) & output_mask)
+    elif bit_count >= from_bits or (
+        (accumulator << (to_bits - bit_count)) & output_mask
+    ):
+        raise ValueError("Invalid base-conversion padding")
+    return result
+
+
+def _f4jumble(message: bytearray, *, inverse: bool) -> None:
+    left_length = min(64, len(message) // 2)
+    left = memoryview(message)[:left_length]
+    right = memoryview(message)[left_length:]
+
+    def xor(target: memoryview, mask: bytes) -> None:
+        for index in range(len(target)):
+            target[index] ^= mask[index]
+
+    def g_round(round_index: int) -> None:
+        for block_index in range((len(right) + 63) // 64):
+            personalization = (
+                b"UA_F4Jumble_G"
+                + bytes((round_index,))
+                + block_index.to_bytes(2, "little")
+            )
+            mask = hashlib.blake2b(left, person=personalization).digest()
+            xor(right[block_index * 64 : (block_index + 1) * 64], mask)
+
+    def h_round(round_index: int) -> None:
+        personalization = b"UA_F4Jumble_H" + bytes((round_index, 0, 0))
+        mask = hashlib.blake2b(
+            right, digest_size=len(left), person=personalization
+        ).digest()
+        xor(left, mask)
+
+    if inverse:
+        h_round(1)
+        g_round(1)
+        h_round(0)
+        g_round(0)
+    else:
+        g_round(0)
+        h_round(0)
+        g_round(1)
+        h_round(1)
 
 
 def _cancel_and_fail(session: "Session", reason: str) -> t.NoReturn:
