@@ -28,7 +28,7 @@ def _derive_receiver(
     try:
         return _call_native(seed, network, account, diversifier_index)
     finally:
-        # The native derivation holds secret intermediates on its stack only.
+        # Clear completed native stack frames before any await.
         utils.zero_unused_stack()
 
 
@@ -45,10 +45,14 @@ async def get_address(msg: ZcashGetAddress) -> ZcashAddress:
     if not utils.USE_IRONWOOD:
         raise wire.ProcessError("Ironwood is not supported")
 
+    network = msg.network  # local_cache_attribute
+    account = msg.account  # local_cache_attribute
+    diversifier_index = msg.diversifier_index  # local_cache_attribute
+
     coin_name, network_label, coin_type = ironwood_account.validate_network_account(
-        msg.network, msg.account
+        network, account
     )
-    ironwood_account.validate_diversifier_index(msg.diversifier_index)
+    ironwood_account.validate_diversifier_index(diversifier_index)
 
     seed.raise_if_not_initialized()
     session = ironwood_account.snapshot_session()
@@ -67,15 +71,13 @@ async def get_address(msg: ZcashGetAddress) -> ZcashAddress:
         try:
             receiver = _derive_receiver(
                 wallet_seed,
-                msg.network,
-                msg.account,
-                msg.diversifier_index,
+                network,
+                account,
+                diversifier_index,
             )
             if type(receiver) is not bytes or len(receiver) != 43:
                 raise wire.ProcessError("Zcash receiver derivation failed")
-        except ValueError:
-            raise wire.ProcessError(ironwood_account.POLICY_VIOLATION)
-        except RuntimeError:
+        except (ValueError, RuntimeError):
             raise wire.ProcessError("Zcash receiver derivation failed")
     finally:
         del wallet_seed
@@ -87,8 +89,8 @@ async def get_address(msg: ZcashGetAddress) -> ZcashAddress:
         address=address,
         address_qr=address,
         network=network_label,
-        account=ironwood_account.account_label(msg.account),
-        path=ironwood_account.account_path(coin_type, msg.account),
+        account=ironwood_account.account_label(account),
+        path=ironwood_account.account_path(coin_type, account),
         case_sensitive=False,
         br_name="ironwood_receive",
         br_code=ButtonRequestType.Address,

@@ -23,6 +23,7 @@ class _Context:
         self.cache = _Cache(identity)
 
 
+@unittest.skipUnless(not utils.BITCOIN_ONLY, "altcoin")
 class TestIronwoodAccount(unittest.TestCase):
     def test_network_account_and_path_policy(self):
         self.assertEqual(

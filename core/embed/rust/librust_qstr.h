@@ -1122,7 +1122,6 @@ static void _librust_qstrs(void) {
   MP_QSTR_write;
   MP_QSTR_wrong_pin;
   MP_QSTR_xpubs;
-  MP_QSTR_zcash__weak_backup_warning;
 #if !BITCOIN_ONLY
   MP_QSTR_cardano__addr_base;
   MP_QSTR_cardano__addr_enterprise;
@@ -1592,6 +1591,7 @@ static void _librust_qstrs(void) {
   MP_QSTR_u2f__set_template;
   MP_QSTR_u2f__title_get;
   MP_QSTR_u2f__title_set;
+  MP_QSTR_zcash__weak_backup_warning;
 #endif
 #if !PYOPT
   MP_QSTR_debug__loading_seed;
