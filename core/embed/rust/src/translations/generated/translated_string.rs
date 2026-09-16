@@ -1683,6 +1683,7 @@ pub enum TranslatedString {
     words__undelegate = 1293,  // "Undelegate"
     buttons__review = 1294,  // {"Bolt": "", "Caesar": "", "Delizia": "", "Eckhart": "Review"}
     buttons__cancel_sign = 1295,  // "Cancel sign"
+    zcash__weak_backup_warning = 1296,  // "This wallet uses a weaker backup. Move funds to a new wallet with a 24-word or 33-word backup."
 }
 
 impl TranslatedString {
@@ -2986,6 +2987,7 @@ impl TranslatedString {
                 "Undelegate",
                 "",
                 "Cancel sign",
+                "This wallet uses a weaker backup. Move funds to a new wallet with a 24-word or 33-word backup.",
             );
 
             #[cfg(all(feature = "debug", feature = "universal_fw"))]
@@ -4287,6 +4289,7 @@ impl TranslatedString {
                 19111,
                 19111,
                 19122,
+                19216,
             ];
 
             #[cfg(all(feature = "debug", not(feature = "universal_fw")))]
@@ -5587,6 +5590,7 @@ impl TranslatedString {
                 "Undelegate",
                 "",
                 "Cancel sign",
+                "This wallet uses a weaker backup. Move funds to a new wallet with a 24-word or 33-word backup.",
             );
 
             #[cfg(all(feature = "debug", not(feature = "universal_fw")))]
@@ -6888,6 +6892,7 @@ impl TranslatedString {
                 19111,
                 19111,
                 19122,
+                19216,
             ];
 
             #[cfg(all(not(feature = "debug"), feature = "universal_fw"))]
@@ -8188,6 +8193,7 @@ impl TranslatedString {
                 "Undelegate",
                 "",
                 "Cancel sign",
+                "This wallet uses a weaker backup. Move funds to a new wallet with a 24-word or 33-word backup.",
             );
 
             #[cfg(all(not(feature = "debug"), feature = "universal_fw"))]
@@ -9489,6 +9495,7 @@ impl TranslatedString {
                 19111,
                 19111,
                 19122,
+                19216,
             ];
 
             #[cfg(all(not(feature = "debug"), not(feature = "universal_fw")))]
@@ -10789,6 +10796,7 @@ impl TranslatedString {
                 "Undelegate",
                 "",
                 "Cancel sign",
+                "This wallet uses a weaker backup. Move funds to a new wallet with a 24-word or 33-word backup.",
             );
 
             #[cfg(all(not(feature = "debug"), not(feature = "universal_fw")))]
@@ -12090,6 +12098,7 @@ impl TranslatedString {
                 19111,
                 19111,
                 19122,
+                19216,
             ];
 
         } else if #[cfg(feature = "layout_caesar")] {
@@ -13391,6 +13400,7 @@ impl TranslatedString {
                 "Undelegate",
                 "",
                 "Cancel sign",
+                "This wallet uses a weaker backup. Move funds to a new wallet with a 24-word or 33-word backup.",
             );
 
             #[cfg(all(feature = "debug", feature = "universal_fw"))]
@@ -14692,6 +14702,7 @@ impl TranslatedString {
                 16961,
                 16961,
                 16972,
+                17066,
             ];
 
             #[cfg(all(feature = "debug", not(feature = "universal_fw")))]
@@ -15992,6 +16003,7 @@ impl TranslatedString {
                 "Undelegate",
                 "",
                 "Cancel sign",
+                "This wallet uses a weaker backup. Move funds to a new wallet with a 24-word or 33-word backup.",
             );
 
             #[cfg(all(feature = "debug", not(feature = "universal_fw")))]
@@ -17293,6 +17305,7 @@ impl TranslatedString {
                 16961,
                 16961,
                 16972,
+                17066,
             ];
 
             #[cfg(all(not(feature = "debug"), feature = "universal_fw"))]
@@ -18593,6 +18606,7 @@ impl TranslatedString {
                 "Undelegate",
                 "",
                 "Cancel sign",
+                "This wallet uses a weaker backup. Move funds to a new wallet with a 24-word or 33-word backup.",
             );
 
             #[cfg(all(not(feature = "debug"), feature = "universal_fw"))]
@@ -19894,6 +19908,7 @@ impl TranslatedString {
                 16961,
                 16961,
                 16972,
+                17066,
             ];
 
             #[cfg(all(not(feature = "debug"), not(feature = "universal_fw")))]
@@ -21194,6 +21209,7 @@ impl TranslatedString {
                 "Undelegate",
                 "",
                 "Cancel sign",
+                "This wallet uses a weaker backup. Move funds to a new wallet with a 24-word or 33-word backup.",
             );
 
             #[cfg(all(not(feature = "debug"), not(feature = "universal_fw")))]
@@ -22495,6 +22511,7 @@ impl TranslatedString {
                 16961,
                 16961,
                 16972,
+                17066,
             ];
 
         } else if #[cfg(feature = "layout_delizia")] {
@@ -23796,6 +23813,7 @@ impl TranslatedString {
                 "Undelegate",
                 "",
                 "Cancel sign",
+                "This wallet uses a weaker backup. Move funds to a new wallet with a 24-word or 33-word backup.",
             );
 
             #[cfg(all(feature = "debug", feature = "universal_fw"))]
@@ -25097,6 +25115,7 @@ impl TranslatedString {
                 19060,
                 19060,
                 19071,
+                19165,
             ];
 
             #[cfg(all(feature = "debug", not(feature = "universal_fw")))]
@@ -26397,6 +26416,7 @@ impl TranslatedString {
                 "Undelegate",
                 "",
                 "Cancel sign",
+                "This wallet uses a weaker backup. Move funds to a new wallet with a 24-word or 33-word backup.",
             );
 
             #[cfg(all(feature = "debug", not(feature = "universal_fw")))]
@@ -27698,6 +27718,7 @@ impl TranslatedString {
                 19060,
                 19060,
                 19071,
+                19165,
             ];
 
             #[cfg(all(not(feature = "debug"), feature = "universal_fw"))]
@@ -28998,6 +29019,7 @@ impl TranslatedString {
                 "Undelegate",
                 "",
                 "Cancel sign",
+                "This wallet uses a weaker backup. Move funds to a new wallet with a 24-word or 33-word backup.",
             );
 
             #[cfg(all(not(feature = "debug"), feature = "universal_fw"))]
@@ -30299,6 +30321,7 @@ impl TranslatedString {
                 19060,
                 19060,
                 19071,
+                19165,
             ];
 
             #[cfg(all(not(feature = "debug"), not(feature = "universal_fw")))]
@@ -31599,6 +31622,7 @@ impl TranslatedString {
                 "Undelegate",
                 "",
                 "Cancel sign",
+                "This wallet uses a weaker backup. Move funds to a new wallet with a 24-word or 33-word backup.",
             );
 
             #[cfg(all(not(feature = "debug"), not(feature = "universal_fw")))]
@@ -32900,6 +32924,7 @@ impl TranslatedString {
                 19060,
                 19060,
                 19071,
+                19165,
             ];
 
         } else if #[cfg(feature = "layout_eckhart")] {
@@ -34201,6 +34226,7 @@ impl TranslatedString {
                 "Undelegate",
                 "Review",
                 "Cancel sign",
+                "This wallet uses a weaker backup. Move funds to a new wallet with a 24-word or 33-word backup.",
             );
 
             #[cfg(all(feature = "debug", feature = "universal_fw"))]
@@ -35502,6 +35528,7 @@ impl TranslatedString {
                 20490,
                 20496,
                 20507,
+                20601,
             ];
 
             #[cfg(all(feature = "debug", not(feature = "universal_fw")))]
@@ -36802,6 +36829,7 @@ impl TranslatedString {
                 "Undelegate",
                 "Review",
                 "Cancel sign",
+                "This wallet uses a weaker backup. Move funds to a new wallet with a 24-word or 33-word backup.",
             );
 
             #[cfg(all(feature = "debug", not(feature = "universal_fw")))]
@@ -38103,6 +38131,7 @@ impl TranslatedString {
                 20490,
                 20496,
                 20507,
+                20601,
             ];
 
             #[cfg(all(not(feature = "debug"), feature = "universal_fw"))]
@@ -39403,6 +39432,7 @@ impl TranslatedString {
                 "Undelegate",
                 "Review",
                 "Cancel sign",
+                "This wallet uses a weaker backup. Move funds to a new wallet with a 24-word or 33-word backup.",
             );
 
             #[cfg(all(not(feature = "debug"), feature = "universal_fw"))]
@@ -40704,6 +40734,7 @@ impl TranslatedString {
                 20490,
                 20496,
                 20507,
+                20601,
             ];
 
             #[cfg(all(not(feature = "debug"), not(feature = "universal_fw")))]
@@ -42004,6 +42035,7 @@ impl TranslatedString {
                 "Undelegate",
                 "Review",
                 "Cancel sign",
+                "This wallet uses a weaker backup. Move funds to a new wallet with a 24-word or 33-word backup.",
             );
 
             #[cfg(all(not(feature = "debug"), not(feature = "universal_fw")))]
@@ -43305,6 +43337,7 @@ impl TranslatedString {
                 20490,
                 20496,
                 20507,
+                20601,
             ];
 
         }
@@ -44985,5 +45018,6 @@ impl TranslatedString {
         (Qstr::MP_QSTR_words__weight, Self::words__weight),
         (Qstr::MP_QSTR_words__writable, Self::words__writable),
         (Qstr::MP_QSTR_words__yes, Self::words__yes),
+        (Qstr::MP_QSTR_zcash__weak_backup_warning, Self::zcash__weak_backup_warning),
     ];
 }

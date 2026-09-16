@@ -242,6 +242,10 @@ def _find_message_handler_module(msg_type: int) -> str:
         if msg_type == MessageType.SolanaVerifyMessage:
             return "apps.solana.verify_message"
 
+        # zcash / ironwood
+        if utils.USE_IRONWOOD and msg_type == MessageType.ZcashGetAddress:
+            return "apps.zcash.get_address"
+
     raise ValueError
 
 
