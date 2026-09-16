@@ -302,6 +302,8 @@ INTERNAL_MODEL: str
 """Internal model code."""
 HOMESCREEN_MAXSIZE: int
 """Maximum size of user-uploaded homescreen in bytes."""
+IRONWOOD_NATIVE_CALLER: bool
+"""Whether this synthetic native build includes the trusted Ironwood caller."""
 EMULATOR: bool
 """Whether the firmware is running in the emulator."""
 BITCOIN_ONLY: bool

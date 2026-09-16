@@ -211,6 +211,19 @@ trezor_message_impl! {
     EvoluIndexManagementResponse => MessageType_EvoluIndexManagementResponse,
 }
 
+#[cfg(feature = "ironwood")]
+trezor_message_impl! {
+    IronwoodSignPczt => MessageType_IronwoodSignPczt,
+    IronwoodPcztRequest => MessageType_IronwoodPcztRequest,
+    IronwoodPcztAck => MessageType_IronwoodPcztAck,
+    IronwoodSignedPczt => MessageType_IronwoodSignedPczt,
+    IronwoodSignedPcztAck => MessageType_IronwoodSignedPcztAck,
+    IronwoodMemoryTraceRequest => MessageType_IronwoodMemoryTraceRequest,
+    IronwoodMemoryTrace => MessageType_IronwoodMemoryTrace,
+    IronwoodGetAddress => MessageType_IronwoodGetAddress,
+    IronwoodAddress => MessageType_IronwoodAddress,
+}
+
 #[cfg(feature = "monero")]
 trezor_message_impl! {
     MoneroTransactionInitRequest => MessageType_MoneroTransactionInitRequest,

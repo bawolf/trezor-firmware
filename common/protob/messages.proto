@@ -409,6 +409,7 @@ enum MessageType {
     MessageType_Telemetry = 1101 [(bitcoin_only) = true, (wire_out) = true];
 
     // Local synthetic Ironwood test protocol: unassigned upstream IDs.
+    // Ironwood
     MessageType_IronwoodSignPczt = 32000 [(wire_in) = true];
     MessageType_IronwoodPcztRequest = 32001 [(wire_out) = true];
     MessageType_IronwoodPcztAck = 32002 [(wire_in) = true];

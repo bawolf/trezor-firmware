@@ -34,6 +34,7 @@ mod generated {
         "cardano" => messages_cardano
         "eos" => messages_eos
         "evolu" => messages_evolu
+        "ironwood" => messages_ironwood
         "monero" => messages_monero
         "nem" => messages_nem
         "nostr" => messages_nostr

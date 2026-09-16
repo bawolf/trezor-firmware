@@ -623,6 +623,24 @@ pub enum MessageType {
     MessageType_TelemetryGet = 1100,
     // @@protoc_insertion_point(enum_value:hw.trezor.messages.MessageType.MessageType_Telemetry)
     MessageType_Telemetry = 1101,
+    // @@protoc_insertion_point(enum_value:hw.trezor.messages.MessageType.MessageType_IronwoodSignPczt)
+    MessageType_IronwoodSignPczt = 32000,
+    // @@protoc_insertion_point(enum_value:hw.trezor.messages.MessageType.MessageType_IronwoodPcztRequest)
+    MessageType_IronwoodPcztRequest = 32001,
+    // @@protoc_insertion_point(enum_value:hw.trezor.messages.MessageType.MessageType_IronwoodPcztAck)
+    MessageType_IronwoodPcztAck = 32002,
+    // @@protoc_insertion_point(enum_value:hw.trezor.messages.MessageType.MessageType_IronwoodSignedPczt)
+    MessageType_IronwoodSignedPczt = 32003,
+    // @@protoc_insertion_point(enum_value:hw.trezor.messages.MessageType.MessageType_IronwoodSignedPcztAck)
+    MessageType_IronwoodSignedPcztAck = 32004,
+    // @@protoc_insertion_point(enum_value:hw.trezor.messages.MessageType.MessageType_IronwoodMemoryTraceRequest)
+    MessageType_IronwoodMemoryTraceRequest = 32005,
+    // @@protoc_insertion_point(enum_value:hw.trezor.messages.MessageType.MessageType_IronwoodMemoryTrace)
+    MessageType_IronwoodMemoryTrace = 32006,
+    // @@protoc_insertion_point(enum_value:hw.trezor.messages.MessageType.MessageType_IronwoodGetAddress)
+    MessageType_IronwoodGetAddress = 32007,
+    // @@protoc_insertion_point(enum_value:hw.trezor.messages.MessageType.MessageType_IronwoodAddress)
+    MessageType_IronwoodAddress = 32008,
 }
 
 impl ::protobuf::Enum for MessageType {
@@ -932,6 +950,15 @@ impl ::protobuf::Enum for MessageType {
             9103 => ::std::option::Option::Some(MessageType::MessageType_BenchmarkResult),
             1100 => ::std::option::Option::Some(MessageType::MessageType_TelemetryGet),
             1101 => ::std::option::Option::Some(MessageType::MessageType_Telemetry),
+            32000 => ::std::option::Option::Some(MessageType::MessageType_IronwoodSignPczt),
+            32001 => ::std::option::Option::Some(MessageType::MessageType_IronwoodPcztRequest),
+            32002 => ::std::option::Option::Some(MessageType::MessageType_IronwoodPcztAck),
+            32003 => ::std::option::Option::Some(MessageType::MessageType_IronwoodSignedPczt),
+            32004 => ::std::option::Option::Some(MessageType::MessageType_IronwoodSignedPcztAck),
+            32005 => ::std::option::Option::Some(MessageType::MessageType_IronwoodMemoryTraceRequest),
+            32006 => ::std::option::Option::Some(MessageType::MessageType_IronwoodMemoryTrace),
+            32007 => ::std::option::Option::Some(MessageType::MessageType_IronwoodGetAddress),
+            32008 => ::std::option::Option::Some(MessageType::MessageType_IronwoodAddress),
             _ => ::std::option::Option::None
         }
     }
@@ -1236,6 +1263,15 @@ impl ::protobuf::Enum for MessageType {
             "MessageType_BenchmarkResult" => ::std::option::Option::Some(MessageType::MessageType_BenchmarkResult),
             "MessageType_TelemetryGet" => ::std::option::Option::Some(MessageType::MessageType_TelemetryGet),
             "MessageType_Telemetry" => ::std::option::Option::Some(MessageType::MessageType_Telemetry),
+            "MessageType_IronwoodSignPczt" => ::std::option::Option::Some(MessageType::MessageType_IronwoodSignPczt),
+            "MessageType_IronwoodPcztRequest" => ::std::option::Option::Some(MessageType::MessageType_IronwoodPcztRequest),
+            "MessageType_IronwoodPcztAck" => ::std::option::Option::Some(MessageType::MessageType_IronwoodPcztAck),
+            "MessageType_IronwoodSignedPczt" => ::std::option::Option::Some(MessageType::MessageType_IronwoodSignedPczt),
+            "MessageType_IronwoodSignedPcztAck" => ::std::option::Option::Some(MessageType::MessageType_IronwoodSignedPcztAck),
+            "MessageType_IronwoodMemoryTraceRequest" => ::std::option::Option::Some(MessageType::MessageType_IronwoodMemoryTraceRequest),
+            "MessageType_IronwoodMemoryTrace" => ::std::option::Option::Some(MessageType::MessageType_IronwoodMemoryTrace),
+            "MessageType_IronwoodGetAddress" => ::std::option::Option::Some(MessageType::MessageType_IronwoodGetAddress),
+            "MessageType_IronwoodAddress" => ::std::option::Option::Some(MessageType::MessageType_IronwoodAddress),
             _ => ::std::option::Option::None
         }
     }
@@ -1539,6 +1575,15 @@ impl ::protobuf::Enum for MessageType {
         MessageType::MessageType_BenchmarkResult,
         MessageType::MessageType_TelemetryGet,
         MessageType::MessageType_Telemetry,
+        MessageType::MessageType_IronwoodSignPczt,
+        MessageType::MessageType_IronwoodPcztRequest,
+        MessageType::MessageType_IronwoodPcztAck,
+        MessageType::MessageType_IronwoodSignedPczt,
+        MessageType::MessageType_IronwoodSignedPcztAck,
+        MessageType::MessageType_IronwoodMemoryTraceRequest,
+        MessageType::MessageType_IronwoodMemoryTrace,
+        MessageType::MessageType_IronwoodGetAddress,
+        MessageType::MessageType_IronwoodAddress,
     ];
 }
 
@@ -1848,6 +1893,15 @@ impl ::protobuf::EnumFull for MessageType {
             MessageType::MessageType_BenchmarkResult => 295,
             MessageType::MessageType_TelemetryGet => 296,
             MessageType::MessageType_Telemetry => 297,
+            MessageType::MessageType_IronwoodSignPczt => 298,
+            MessageType::MessageType_IronwoodPcztRequest => 299,
+            MessageType::MessageType_IronwoodPcztAck => 300,
+            MessageType::MessageType_IronwoodSignedPczt => 301,
+            MessageType::MessageType_IronwoodSignedPcztAck => 302,
+            MessageType::MessageType_IronwoodMemoryTraceRequest => 303,
+            MessageType::MessageType_IronwoodMemoryTrace => 304,
+            MessageType::MessageType_IronwoodGetAddress => 305,
+            MessageType::MessageType_IronwoodAddress => 306,
         };
         Self::enum_descriptor().value_by_index(index)
     }
@@ -1866,7 +1920,7 @@ impl MessageType {
 }
 
 static file_descriptor_proto_data: &'static [u8] = b"\
-    \n\x0emessages.proto\x12\x12hw.trezor.messages\x1a\roptions.proto*\xe4i\
+    \n\x0emessages.proto\x12\x12hw.trezor.messages\x1a\roptions.proto*\xf5l\
     \n\x0bMessageType\x12(\n\x16MessageType_Initialize\x10\0\x1a\x0c\xb0\xb5\
     \x18\x01\x80\xa6\x1d\x01\x90\xb5\x18\x01\x12\x1e\n\x10MessageType_Ping\
     \x10\x01\x1a\x08\x80\xa6\x1d\x01\x90\xb5\x18\x01\x12%\n\x13MessageType_S\
@@ -2209,17 +2263,27 @@ static file_descriptor_proto_data: &'static [u8] = b"\
     MessageType_BenchmarkResult\x10\x8fG\x1a\x04\x80\xa6\x1d\x01\x12'\n\x18M\
     essageType_TelemetryGet\x10\xcc\x08\x1a\x08\x80\xa6\x1d\x01\x90\xb5\x18\
     \x01\x12$\n\x15MessageType_Telemetry\x10\xcd\x08\x1a\x08\x80\xa6\x1d\x01\
-    \x98\xb5\x18\x01\x1a\x08\xc8\xf3\x18\x01\xd0\xf3\x18\x01\"\x04\x08Z\x10\
-    \\\"\x04\x08M\x10N\"\x04\x08G\x10J\"\x06\x08\xd9\x03\x10\xda\x03\"\x04\
-    \x08r\x10z\"\x05\x08{\x10\x95\x01\"\x06\x08\xdb\x01\x10\xdb\x01\"\x06\
-    \x08\xe0\x01\x10\xe0\x01\"\x06\x08\xe2\x01\x10\xe2\x01\"\x06\x08\xe3\x01\
-    \x10\xe3\x01\"\x06\x08\xe4\x01\x10\xe4\x01\"\x06\x08\xe5\x01\x10\xe5\x01\
-    \"\x06\x08\xe7\x01\x10\xe7\x01\"\x06\x08\xe8\x01\x10\xe8\x01\"\x06\x08\
-    \xe9\x01\x10\xe9\x01\"\x06\x08\xea\x01\x10\xea\x01\"\x06\x08\xec\x01\x10\
-    \xec\x01\"\x06\x08\xed\x01\x10\xed\x01\"\x06\x08\xac\x02\x10\xb0\x02\"\
-    \x06\x08\xb5\x02\x10\xb8\x02\"\x06\x08\xbc\x05\x10\xc5\x05\"\x06\x08\xe9\
-    \x07\x10\xf7\x07\"\x06\x08\xfa\x07\x10\xcb\x08B8\n#com.satoshilabs.trezo\
-    r.lib.protobufB\rTrezorMessage\x80\xa6\x1d\x01\
+    \x98\xb5\x18\x01\x12(\n\x1cMessageType_IronwoodSignPczt\x10\x80\xfa\x01\
+    \x1a\x04\x90\xb5\x18\x01\x12+\n\x1fMessageType_IronwoodPcztRequest\x10\
+    \x81\xfa\x01\x1a\x04\x98\xb5\x18\x01\x12'\n\x1bMessageType_IronwoodPcztA\
+    ck\x10\x82\xfa\x01\x1a\x04\x90\xb5\x18\x01\x12*\n\x1eMessageType_Ironwoo\
+    dSignedPczt\x10\x83\xfa\x01\x1a\x04\x98\xb5\x18\x01\x12-\n!MessageType_I\
+    ronwoodSignedPcztAck\x10\x84\xfa\x01\x1a\x04\x90\xb5\x18\x01\x122\n&Mess\
+    ageType_IronwoodMemoryTraceRequest\x10\x85\xfa\x01\x1a\x04\x90\xb5\x18\
+    \x01\x12+\n\x1fMessageType_IronwoodMemoryTrace\x10\x86\xfa\x01\x1a\x04\
+    \x98\xb5\x18\x01\x12*\n\x1eMessageType_IronwoodGetAddress\x10\x87\xfa\
+    \x01\x1a\x04\x90\xb5\x18\x01\x12'\n\x1bMessageType_IronwoodAddress\x10\
+    \x88\xfa\x01\x1a\x04\x98\xb5\x18\x01\x1a\x08\xc8\xf3\x18\x01\xd0\xf3\x18\
+    \x01\"\x04\x08Z\x10\\\"\x04\x08M\x10N\"\x04\x08G\x10J\"\x06\x08\xd9\x03\
+    \x10\xda\x03\"\x04\x08r\x10z\"\x05\x08{\x10\x95\x01\"\x06\x08\xdb\x01\
+    \x10\xdb\x01\"\x06\x08\xe0\x01\x10\xe0\x01\"\x06\x08\xe2\x01\x10\xe2\x01\
+    \"\x06\x08\xe3\x01\x10\xe3\x01\"\x06\x08\xe4\x01\x10\xe4\x01\"\x06\x08\
+    \xe5\x01\x10\xe5\x01\"\x06\x08\xe7\x01\x10\xe7\x01\"\x06\x08\xe8\x01\x10\
+    \xe8\x01\"\x06\x08\xe9\x01\x10\xe9\x01\"\x06\x08\xea\x01\x10\xea\x01\"\
+    \x06\x08\xec\x01\x10\xec\x01\"\x06\x08\xed\x01\x10\xed\x01\"\x06\x08\xac\
+    \x02\x10\xb0\x02\"\x06\x08\xb5\x02\x10\xb8\x02\"\x06\x08\xbc\x05\x10\xc5\
+    \x05\"\x06\x08\xe9\x07\x10\xf7\x07\"\x06\x08\xfa\x07\x10\xcb\x08B8\n#com\
+    .satoshilabs.trezor.lib.protobufB\rTrezorMessage\x80\xa6\x1d\x01\
 ";
 
 /// `FileDescriptorProto` object which was a source for this generated file
