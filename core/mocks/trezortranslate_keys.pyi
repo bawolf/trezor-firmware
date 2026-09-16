@@ -1203,4 +1203,5 @@ class TR:
     words__weight: str = "Weight"
     words__writable: str = "Writable"
     words__yes: str = "Yes"
+    zcash__weak_backup_warning: str = "This wallet uses a weaker backup. Move funds to a new wallet with a 24-word or 33-word backup."
 

@@ -3594,6 +3594,7 @@
     "words__warning": "Warning",
     "words__weight": "Weight",
     "words__writable": "Writable",
-    "words__yes": "Yes"
+    "words__yes": "Yes",
+    "zcash__weak_backup_warning": "This wallet uses a weaker backup. Move funds to a new wallet with a 24-word or 33-word backup."
   }
 }
