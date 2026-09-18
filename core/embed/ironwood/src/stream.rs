@@ -1,0 +1,478 @@
+//! Incremental, chunk-fed scanner for the exact v2 Ironwood-only PCZT grammar
+//! that `wire::scan` admits (phase 1 of the streaming design). The encoding is
+//! consumed one section at a time (header, each action, trailer) in a fixed
+//! buffer, so the device never holds more than one action's bytes; see
+//! docs/proposals/STREAMING_SIGNING_DESIGN.md §3-4.
+//!
+//! The field grammar mirrors `wire::scan` line for line. Agreement on both
+//! acceptance and error class for every corpus PCZT, mutation, truncation and
+//! chunking is proven by tests/stream_equivalence.rs. Each section budget
+//! bounds what `wire::scan`'s reader can consume before it decides, so the
+//! fixed buffer never changes a verdict.
+
+use zcash_note_encryption::{ENC_CIPHERTEXT_SIZE, OUT_CIPHERTEXT_SIZE};
+use zcash_protocol::value::MAX_MONEY;
+use zeroize::Zeroize;
+
+use crate::{Error, MAX_ACTIONS, MAX_PCZT_BYTES, Result};
+
+const MAGIC: [u8; 8] = *b"PCZT\x02\0\0\0";
+/// Longest encoding the canonical varint reader consumes before deciding.
+const VARINT: usize = 10;
+const TAG: usize = 1;
+
+/// Header bytes: magic, six `u32` varints (one behind the lock-time tag),
+/// `tx_modifiable`, the proprietary count, three pool tags, the Ironwood tag
+/// and the action count.
+pub const HEADER_BUDGET: usize = MAGIC.len() + 6 * VARINT + TAG + 1 + VARINT + 4 * TAG + VARINT;
+
+/// Action bytes: nine tagged 32-byte fields, the optional signature, two
+/// recipients, two values, the FVK, five absent tags, two proprietary counts,
+/// the ephemeral key, the ciphertext variant, both length-prefixed
+/// ciphertexts and the optional OCK.
+pub const ACTION_BUDGET: usize = 9 * (TAG + 32)
+    + (TAG + 64)
+    + 2 * (TAG + 43)
+    + 2 * (TAG + VARINT)
+    + (TAG + 96)
+    + 5 * TAG
+    + 2 * VARINT
+    + 32
+    + VARINT
+    + (VARINT + ENC_CIPHERTEXT_SIZE)
+    + (VARINT + OUT_CIPHERTEXT_SIZE)
+    + (TAG + 32);
+
+/// Trailer bytes: flags, value-sum magnitude and sign, the optional anchor,
+/// the note version and two absent tags.
+pub const TRAILER_BUDGET: usize = 1 + VARINT + TAG + (TAG + 32) + VARINT + 2 * TAG;
+
+/// The largest single section; the scanner's only buffer.
+pub const SECTION_BUDGET: usize = ACTION_BUDGET;
+
+const _: () = assert!(HEADER_BUDGET == 94 && ACTION_BUDGET == 1349 && TRAILER_BUDGET == 57);
+const _: () = assert!(HEADER_BUDGET <= SECTION_BUDGET && TRAILER_BUDGET <= SECTION_BUDGET);
+
+/// The global fields `wire::scan` returns plus the admitted action count.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Header {
+    pub version: u32,
+    pub group: u32,
+    pub branch: u32,
+    pub lock_time: u32,
+    pub expiry: u32,
+    pub coin_type: u32,
+    pub actions: usize,
+}
+
+/// One action's fields, borrowed from the scanner until the next feed.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Action<'a> {
+    pub cv_net: &'a [u8; 32],
+    pub spend: Spend<'a>,
+    pub output: Output<'a>,
+    pub rcv: &'a [u8; 32],
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Spend<'a> {
+    pub nullifier: &'a [u8; 32],
+    pub rk: &'a [u8; 32],
+    /// Checked against the spend value and the sighash by the caller.
+    pub spend_auth_sig: Option<&'a [u8; 64]>,
+    pub recipient: &'a [u8; 43],
+    pub value: u64,
+    pub rho: &'a [u8; 32],
+    pub rseed: &'a [u8; 32],
+    pub fvk: &'a [u8; 96],
+    pub alpha: &'a [u8; 32],
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Output<'a> {
+    pub cmx: &'a [u8; 32],
+    pub ephemeral_key: &'a [u8; 32],
+    pub enc_ciphertext: &'a [u8; ENC_CIPHERTEXT_SIZE],
+    pub out_ciphertext: &'a [u8; OUT_CIPHERTEXT_SIZE],
+    pub recipient: &'a [u8; 43],
+    pub value: u64,
+    pub rseed: &'a [u8; 32],
+    pub ock: Option<&'a [u8; 32]>,
+}
+
+/// Bundle fields after the actions. Yielded only once the last declared byte
+/// has been consumed, so it also marks the end of input.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Trailer<'a> {
+    /// Checked using upstream's versioned flag implementation by the caller.
+    pub flags: u8,
+    pub value_sum: u64,
+    /// Allowed to be deferred in v6.
+    pub anchor: Option<&'a [u8; 32]>,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Item<'a> {
+    Header(Header),
+    Action(Action<'a>),
+    Trailer(Trailer<'a>),
+}
+
+fn malformed(ok: bool) -> Result<()> {
+    if ok { Ok(()) } else { Err(Error::Malformed) }
+}
+
+fn policy(ok: bool) -> Result<()> {
+    if ok { Ok(()) } else { Err(Error::Policy) }
+}
+
+/// Why a section parse stopped: it needs the buffer to hold at least this
+/// many bytes, or it reached a verdict.
+enum Halt {
+    More(usize),
+    Fail(Error),
+}
+
+impl From<Error> for Halt {
+    fn from(error: Error) -> Self {
+        Self::Fail(error)
+    }
+}
+
+type Parse<T> = core::result::Result<T, Halt>;
+
+struct Reader<'a> {
+    rest: &'a [u8],
+    position: usize,
+}
+
+impl<'a> Reader<'a> {
+    fn fixed<const N: usize>(&mut self) -> Parse<&'a [u8; N]> {
+        let (bytes, rest) = self
+            .rest
+            .split_first_chunk::<N>()
+            .ok_or(Halt::More(self.position + N))?;
+        self.rest = rest;
+        self.position += N;
+        Ok(bytes)
+    }
+
+    fn byte(&mut self) -> Parse<u8> {
+        Ok(self.fixed::<1>()?[0])
+    }
+
+    fn tag(&mut self) -> Parse<bool> {
+        match self.byte()? {
+            0 => Ok(false),
+            1 => Ok(true),
+            _ => Err(Error::Malformed.into()),
+        }
+    }
+
+    fn varint(&mut self) -> Parse<u64> {
+        let mut value = 0u64;
+        for i in 0..VARINT {
+            let b = self.byte()?;
+            malformed(i < 9 || b <= 1)?;
+            value |= u64::from(b & 127) << (i * 7);
+            if b & 128 == 0 {
+                malformed(i == 0 || b != 0)?;
+                return Ok(value);
+            }
+        }
+        Err(Error::Malformed.into())
+    }
+
+    fn u32(&mut self) -> Parse<u32> {
+        Ok(self.varint()?.try_into().map_err(|_| Error::Malformed)?)
+    }
+
+    fn absent(&mut self) -> Parse<()> {
+        Ok(policy(!self.tag()?)?)
+    }
+
+    fn required<const N: usize>(&mut self) -> Parse<&'a [u8; N]> {
+        malformed(self.tag()?)?;
+        self.fixed()
+    }
+
+    fn optional<const N: usize>(&mut self) -> Parse<Option<&'a [u8; N]>> {
+        if self.tag()? {
+            Ok(Some(self.fixed()?))
+        } else {
+            Ok(None)
+        }
+    }
+
+    fn empty_map(&mut self) -> Parse<()> {
+        Ok(policy(self.varint()? == 0)?)
+    }
+
+    fn value(&mut self) -> Parse<u64> {
+        malformed(self.tag()?)?;
+        let value = self.varint()?;
+        malformed(value <= MAX_MONEY)?;
+        Ok(value)
+    }
+
+    fn bytes<const N: usize>(&mut self) -> Parse<&'a [u8; N]> {
+        malformed(self.varint()? == N as u64)?;
+        self.fixed()
+    }
+}
+
+fn header(r: &mut Reader<'_>) -> Parse<Header> {
+    malformed(*r.fixed::<8>()? == MAGIC)?;
+    let version = r.u32()?;
+    let group = r.u32()?;
+    let branch = r.u32()?;
+    let lock_time = if r.tag()? { r.u32()? } else { 0 };
+    let expiry = r.u32()?;
+    let coin_type = r.u32()?;
+    policy(r.byte()? == 0)?; // tx_modifiable
+    r.empty_map()?; // global proprietary
+    r.absent()?; // transparent
+    r.absent()?; // sapling
+    r.absent()?; // orchard
+    policy(r.tag()?)?; // ironwood
+    let actions = r.varint()?;
+    if actions == 0 {
+        return Err(Error::Policy.into());
+    }
+    if actions > MAX_ACTIONS as u64 {
+        return Err(Error::Capacity.into());
+    }
+    Ok(Header {
+        version,
+        group,
+        branch,
+        lock_time,
+        expiry,
+        coin_type,
+        actions: actions as usize,
+    })
+}
+
+fn action<'a>(r: &mut Reader<'a>) -> Parse<Action<'a>> {
+    let cv_net = r.required::<32>()?;
+
+    let nullifier = r.required::<32>()?;
+    let rk = r.required::<32>()?;
+    let spend_auth_sig = r.optional::<64>()?;
+    let spend_recipient = r.required::<43>()?;
+    let spend_value = r.value()?;
+    let rho = r.required::<32>()?;
+    let spend_rseed = r.required::<32>()?;
+    let fvk = r.required::<96>()?;
+    r.absent()?; // witness
+    let alpha = r.required::<32>()?;
+    r.absent()?; // zip32_derivation
+    r.absent()?; // dummy_sk
+    r.empty_map()?; // proprietary
+
+    let cmx = r.required::<32>()?;
+    let ephemeral_key = r.fixed::<32>()?;
+    policy(r.varint()? == 0)?; // enc_ciphertext is the Encrypted variant
+    let enc_ciphertext = r.bytes::<ENC_CIPHERTEXT_SIZE>()?;
+    let out_ciphertext = r.bytes::<OUT_CIPHERTEXT_SIZE>()?;
+    let output_recipient = r.required::<43>()?;
+    let output_value = r.value()?;
+    let output_rseed = r.required::<32>()?;
+    let ock = r.optional::<32>()?;
+    r.absent()?; // zip32_derivation
+    r.absent()?; // user_address
+    r.empty_map()?; // proprietary
+
+    let rcv = r.required::<32>()?;
+    Ok(Action {
+        cv_net,
+        spend: Spend {
+            nullifier,
+            rk,
+            spend_auth_sig,
+            recipient: spend_recipient,
+            value: spend_value,
+            rho,
+            rseed: spend_rseed,
+            fvk,
+            alpha,
+        },
+        output: Output {
+            cmx,
+            ephemeral_key,
+            enc_ciphertext,
+            out_ciphertext,
+            recipient: output_recipient,
+            value: output_value,
+            rseed: output_rseed,
+            ock,
+        },
+        rcv,
+    })
+}
+
+fn trailer<'a>(r: &mut Reader<'a>) -> Parse<Trailer<'a>> {
+    let flags = r.byte()?;
+    let value_sum = r.varint()?;
+    malformed(value_sum <= MAX_MONEY)?;
+    policy(!r.tag()?)?; // value sum is non-negative
+    let anchor = r.optional::<32>()?;
+    policy(r.varint()? == 1)?; // note_version V3
+    r.absent()?; // zkproof
+    r.absent()?; // bsk
+    Ok(Trailer {
+        flags,
+        value_sum,
+        anchor,
+    })
+}
+
+#[derive(Clone, Copy)]
+enum Section {
+    Header,
+    Action { next: usize, count: usize },
+    Trailer,
+}
+
+impl Section {
+    const fn budget(self) -> usize {
+        match self {
+            Self::Header => HEADER_BUDGET,
+            Self::Action { .. } => ACTION_BUDGET,
+            Self::Trailer => TRAILER_BUDGET,
+        }
+    }
+}
+
+#[derive(Clone, Copy)]
+enum State {
+    Scan(Section),
+    Done,
+    Failed,
+}
+
+/// Consumes a PCZT of declared length in arbitrary chunks and yields one
+/// section at a time. Any error is final.
+pub struct Scanner {
+    total: usize,
+    /// Stream offset where the current section begins.
+    start: usize,
+    /// Bytes of the current section buffered so far.
+    len: usize,
+    /// Buffered length needed before the section is parsed again.
+    wanted: usize,
+    state: State,
+    buffer: [u8; SECTION_BUDGET],
+}
+
+impl Drop for Scanner {
+    fn drop(&mut self) {
+        self.buffer.zeroize();
+    }
+}
+
+impl Scanner {
+    /// `total` is the transport's declared PCZT length: the capacity bound and
+    /// the exact point where the grammar must end.
+    pub fn new(total: usize) -> Result<Self> {
+        if total > MAX_PCZT_BYTES {
+            return Err(Error::Capacity);
+        }
+        malformed(total >= MAGIC.len())?;
+        Ok(Self {
+            total,
+            start: 0,
+            len: 0,
+            wanted: 0,
+            state: State::Scan(Section::Header),
+            buffer: [0; SECTION_BUDGET],
+        })
+    }
+
+    pub fn is_finished(&self) -> bool {
+        matches!(self.state, State::Done)
+    }
+
+    /// Feeds the next bytes. Returns how many were consumed and the section
+    /// they completed, if any; bytes not consumed belong to the next section
+    /// and must be fed again. A completed section borrows the scanner until
+    /// the next call.
+    pub fn feed(&mut self, chunk: &[u8]) -> Result<(usize, Option<Item<'_>>)> {
+        let section = match self.state {
+            State::Scan(section) => section,
+            State::Done if chunk.is_empty() => return Ok((0, None)),
+            State::Done | State::Failed => return Err(Error::State),
+        };
+        if self.start + self.len + chunk.len() > self.total {
+            self.state = State::Failed;
+            return Err(Error::State);
+        }
+        let budget = section.budget();
+        let copy = chunk.len().min(budget - self.len);
+        self.buffer[self.len..self.len + copy].copy_from_slice(&chunk[..copy]);
+        let old = self.len;
+        self.len += copy;
+        let ended = self.start + self.len == self.total;
+        if self.len < self.wanted && !ended {
+            return Ok((copy, None));
+        }
+
+        let mut reader = Reader {
+            rest: &self.buffer[..self.len],
+            position: 0,
+        };
+        let parsed = match section {
+            Section::Header => header(&mut reader).map(|header| {
+                let next = Section::Action {
+                    next: 0,
+                    count: header.actions,
+                };
+                (Item::Header(header), State::Scan(next))
+            }),
+            Section::Action { next, count } => action(&mut reader).map(|action| {
+                let next = if next + 1 == count {
+                    Section::Trailer
+                } else {
+                    Section::Action {
+                        next: next + 1,
+                        count,
+                    }
+                };
+                (Item::Action(action), State::Scan(next))
+            }),
+            Section::Trailer => {
+                trailer(&mut reader).map(|trailer| (Item::Trailer(trailer), State::Done))
+            }
+        };
+        match parsed {
+            Ok((item, next)) => {
+                let used = reader.position;
+                self.start += used;
+                self.len = 0;
+                self.wanted = 0;
+                // The grammar and the declared length must end together:
+                // otherwise the input is truncated or has trailing bytes.
+                if (self.start == self.total) != matches!(next, State::Done) {
+                    self.state = State::Failed;
+                    return Err(Error::Malformed);
+                }
+                self.state = next;
+                Ok((used - old, Some(item)))
+            }
+            Err(Halt::More(needed)) if !ended && needed <= budget => {
+                self.wanted = needed;
+                Ok((copy, None))
+            }
+            Err(Halt::More(_)) => {
+                self.state = State::Failed;
+                self.len = 0;
+                Err(Error::Malformed)
+            }
+            Err(Halt::Fail(error)) => {
+                self.state = State::Failed;
+                self.len = 0;
+                Err(error)
+            }
+        }
+    }
+}

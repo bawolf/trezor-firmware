@@ -28,8 +28,11 @@ num-derive.workspace = true
 num-traits.workspace = true
 pareen.workspace = true
 qrcodegen-no-heap.workspace = true
+orchard = { workspace = true, optional = true }
+rand_core = { workspace = true, optional = true }
 spin.workspace = true
 static-alloc.workspace = true
+trezor-ironwood = { workspace = true, optional = true }
 trezor-ironwood-receive = { workspace = true, optional = true }
 trezor-thp = { workspace = true, optional = true }
 trezor-tjpgdec.workspace = true
@@ -76,7 +79,12 @@ layout_bolt = []
 layout_caesar = []
 layout_delizia = []
 layout_eckhart = []
-ironwood = ["dep:trezor-ironwood-receive"]
+ironwood = [
+    "dep:orchard",
+    "dep:rand_core",
+    "dep:trezor-ironwood",
+    "dep:trezor-ironwood-receive",
+]
 micropython = ["dep:upymod"]
 miniscript = []
 n1w1 = []

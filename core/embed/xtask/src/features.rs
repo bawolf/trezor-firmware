@@ -1,7 +1,7 @@
 use std::io::IsTerminal;
 use std::{env, io, process};
 
-use anyhow::{Result, bail};
+use anyhow::{bail, Result};
 
 use crate::options::ResolvedBuildArgs;
 use crate::{config, helpers};
@@ -201,7 +201,11 @@ pub fn configure_cargo(args: &ResolvedBuildArgs, cmd: &mut process::Command) -> 
     }
 
     if rebuild_std {
-        cmd.arg("-Zbuild-std=core");
+        if args.ironwood && matches!(args.project, crate::args::Project::Firmware) {
+            cmd.arg("-Zbuild-std=core,alloc");
+        } else {
+            cmd.arg("-Zbuild-std=core");
+        }
     }
 
     forward_color_choice(cmd);

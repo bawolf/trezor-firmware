@@ -314,3 +314,4 @@ if not utils.BITCOIN_ONLY:
     ZcashPcztAck = 32106
     ZcashSignedPczt = 32107
     ZcashSignedPcztAck = 32108
+    ZcashSpendAuthSignatures = 32109

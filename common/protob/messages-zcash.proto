@@ -86,8 +86,12 @@ message ZcashViewingKey {
 
 /**
  * Request: Ask device to review, authorize, and sign an Ironwood v2 PCZT.
- * The device pulls the exact declared byte count in contiguous chunks, then
- * returns the signed result in contiguous chunks.
+ * The device pulls the exact declared byte count in contiguous chunks and
+ * consumes them as a stream, never retaining the whole PCZT. Once every
+ * real spend is signed it returns the spend authorization signatures as
+ * records (ZcashSpendAuthSignatures); the host applies them to its own copy
+ * of the PCZT. The ZcashSignedPczt download messages below are the earlier
+ * whole-PCZT response shape, kept until the response contract is settled.
  * @start
  * @next ZcashPcztRequest
  * @next Failure
@@ -115,6 +119,7 @@ message ZcashPcztRequest {
 /**
  * Request: Host supplies the exact requested chunk.
  * @next ZcashPcztRequest
+ * @next ZcashSpendAuthSignatures
  * @next ZcashSignedPczt
  * @next Failure
  */
@@ -146,4 +151,20 @@ message ZcashSignedPczt {
 message ZcashSignedPcztAck {
     required bytes transfer_id = 1;
     required uint32 next_offset = 2;  // exclusive end offset of the acknowledged chunk
+}
+
+/**
+ * Response: Spend authorization signatures for every real Ironwood spend of
+ * the uploaded PCZT, sent only once all of them exist. `records` is the
+ * concatenation of fixed 66-byte records in ascending action order:
+ *   pool u8 (0x03 = Ironwood) | action_index u8 | signature [64 bytes]
+ * The host applies each record with the pczt crate's
+ * apply_orchard_spend_auth_signature, which verifies it against the indexed
+ * action's rk and the host-computed sighash, so a record cannot be replayed
+ * into another transaction, pool, or action index.
+ * @end
+ */
+message ZcashSpendAuthSignatures {
+    required bytes transfer_id = 1;  // the transfer the records belong to
+    required bytes records = 2;      // n * 66 bytes, 1 <= n <= 8
 }

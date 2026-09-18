@@ -422,4 +422,5 @@ enum MessageType {
     MessageType_ZcashPcztAck = 32106 [(wire_in) = true];
     MessageType_ZcashSignedPczt = 32107 [(wire_out) = true];
     MessageType_ZcashSignedPcztAck = 32108 [(wire_in) = true];
+    MessageType_ZcashSpendAuthSignatures = 32109 [(wire_out) = true];
 }

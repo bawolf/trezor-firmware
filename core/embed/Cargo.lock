@@ -1241,8 +1241,7 @@ checksum = "c08d65885ee38876c4f86fa503fb49d7b507c2b62552df7c70b2fce627e06381"
 [[package]]
 name = "orchard"
 version = "0.15.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e8b67beade27dbebdbfee0819e23170b0b263dc7b4f558ee936151716baf6e1f"
+source = "git+https://github.com/bawolf/orchard?rev=19f6100607e9dfacc10f0fe0d4ac84fb79f610c5#19f6100607e9dfacc10f0fe0d4ac84fb79f610c5"
 dependencies = [
  "aes",
  "bitvec",
@@ -1830,8 +1829,7 @@ checksum = "0fda2ff0d084019ba4d7c6f371c95d8fd75ce3524c3cb8fb653a3023f6323e64"
 [[package]]
 name = "sinsemilla"
 version = "0.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3d268ae0ea06faafe1662e9967cd4f9022014f5eeb798e0c302c876df8b7af9c"
+source = "git+https://github.com/bawolf/sinsemilla?rev=6ca88ff52835899c87ff83489b95c5cda887e8a4#6ca88ff52835899c87ff83489b95c5cda887e8a4"
 dependencies = [
  "group 0.13.0",
  "pasta_curves 0.5.1",
@@ -2039,11 +2037,13 @@ version = "0.0.0"
 dependencies = [
  "blake2b_simd",
  "orchard",
+ "pasta_curves 0.5.1",
  "pczt",
  "rand_chacha",
  "rand_core 0.6.4",
  "sapling-crypto",
  "serde_json",
+ "sinsemilla",
  "zcash_note_encryption",
  "zcash_primitives",
  "zcash_protocol",
@@ -2100,14 +2100,17 @@ dependencies = [
  "models",
  "num-derive",
  "num-traits",
+ "orchard",
  "pareen",
  "qrcodegen-no-heap",
+ "rand_core 0.6.4",
  "rtl",
  "sec",
  "serde_json",
  "spin",
  "static-alloc",
  "sys",
+ "trezor-ironwood",
  "trezor-ironwood-receive",
  "trezor-thp",
  "trezor-tjpgdec",
