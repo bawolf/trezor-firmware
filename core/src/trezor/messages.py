@@ -8271,3 +8271,19 @@ if TYPE_CHECKING:
         @classmethod
         def is_type_of(cls, msg: Any) -> TypeGuard["ZcashSignedPcztAck"]:
             return isinstance(msg, cls)
+
+    class ZcashSpendAuthSignatures(protobuf.MessageType):
+        transfer_id: "AnyBytes"
+        records: "AnyBytes"
+
+        def __init__(
+            self,
+            *,
+            transfer_id: "AnyBytes",
+            records: "AnyBytes",
+        ) -> None:
+            pass
+
+        @classmethod
+        def is_type_of(cls, msg: Any) -> TypeGuard["ZcashSpendAuthSignatures"]:
+            return isinstance(msg, cls)

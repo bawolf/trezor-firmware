@@ -48,6 +48,9 @@ __all__ = [
     "CHUNK_BYTES",
     "MAX_ACCOUNT",
     "MAX_PCZT_BYTES",
+    "POOL_IRONWOOD",
+    "RECORD_BYTES",
+    "SpendAuthSignature",
     "TRANSFER_ID_BYTES",
     "get_address",
     "get_viewing_key",
@@ -58,6 +61,27 @@ __all__ = [
 MAX_PCZT_BYTES = 65_536
 CHUNK_BYTES = 1_024
 TRANSFER_ID_BYTES = 16
+
+# Signature records: pool u8 | action_index u8 | signature[64], ascending index
+# order, one per real spend, at most one per admitted action.
+POOL_IRONWOOD = 0x03
+RECORD_BYTES = 66
+MAX_ACTIONS = 8
+
+
+class SpendAuthSignature(t.NamedTuple):
+    """One spend authorization signature returned by the device.
+
+    Apply it to the host's copy of the PCZT with the `pczt` crate's
+    `Signer::apply_orchard_spend_auth_signature`, which verifies the signature
+    against the indexed action's `rk` and the host-computed sighash before
+    storing it. This library carries no PCZT parser, so it does not apply
+    records itself.
+    """
+
+    action_index: int
+    signature: bytes
+
 
 # ZIP-32 account index bound. The device derives m/32'/coin_type'/account'
 # itself; the host cannot supply an arbitrary derivation path.
@@ -166,16 +190,16 @@ def sign_pczt(
     network: messages.ZcashNetwork,
     account: int,
     host_reference_height: int,
-) -> bytes:
-    """Upload, review, authorize, sign, and return the exact admitted PCZT.
+) -> list[SpendAuthSignature]:
+    """Upload and review a PCZT; return the device's spend authorization signatures.
 
-    `host_reference_height` is a host assertion that the device displays as
-    unverified; it is not a header, checkpoint, or proof of chain state.
+    `host_reference_height` is a host assertion used by device policy only; it
+    is not a header, checkpoint, or proof of chain state.
 
-    The returned PCZT may be a canonical reserialization rather than being
-    byte-for-byte equal to `pczt`. Before finalizing it, the caller must parse
-    it and verify that it is the expected signed update of the submitted PCZT;
-    this transfer layer does not interpret PCZT semantics.
+    The device streams the PCZT and never returns it. The result is one
+    `SpendAuthSignature` per real Ironwood spend in ascending action order; the
+    caller applies them to its own copy of `pczt` (see `SpendAuthSignature`),
+    which is also where each signature is verified against the transaction.
     """
     _check_network(network)
     _check_account(account)
@@ -195,8 +219,8 @@ def sign_pczt(
         ),
     )
     request = _expect(session, response, messages.ZcashPcztRequest)
-    transfer_id, first_chunk = _upload(session, request, pczt)
-    return _download(session, transfer_id, first_chunk)
+    transfer_id, signatures = _upload(session, request, pczt)
+    return _parse_records(session, transfer_id, signatures)
 
 
 def _cancel(session: "Session") -> None:
@@ -431,10 +455,10 @@ def _upload(
     session: "Session",
     request: messages.ZcashPcztRequest,
     pczt: bytes,
-) -> tuple[bytes, messages.ZcashSignedPczt]:
+) -> tuple[bytes, messages.ZcashSpendAuthSignatures]:
     """Serve device-pulled chunks until the entire PCZT has been uploaded.
 
-    Returns the latched transfer ID and the first signed-response chunk.
+    Returns the latched transfer ID and the signature response.
     """
     total = len(pczt)
     transfer_id = request.transfer_id
@@ -466,55 +490,46 @@ def _upload(
         offset = end
 
         if offset == total:
-            # The upload is complete, so the device owes us the signed result.
-            return transfer_id, _expect(session, response, messages.ZcashSignedPczt)
+            # The upload is complete, so the device owes us the signatures.
+            return transfer_id, _expect(
+                session, response, messages.ZcashSpendAuthSignatures
+            )
 
         request = _expect(session, response, messages.ZcashPcztRequest)
 
 
-def _download(
+def _parse_records(
     session: "Session",
     transfer_id: bytes,
-    first_chunk: messages.ZcashSignedPczt,
-) -> bytes:
-    """Collect signed chunks, returning bytes only once the result is complete."""
-    chunk = first_chunk
-    # Contract order: prove identity, then bound the length, then allocate.
-    if chunk.transfer_id != transfer_id:
-        _cancel_and_fail(session, "Changed transfer ID")
-    total = chunk.pczt_length
-    if not 1 <= total <= MAX_PCZT_BYTES:
-        _cancel_and_fail(session, "Invalid signed PCZT length")
+    response: messages.ZcashSpendAuthSignatures,
+) -> list[SpendAuthSignature]:
+    """Split the record blob, rejecting anything but the one admissible shape.
 
-    signed = bytearray(total)
-    # As in `_upload`, the identity checks below are trivially true on the first
-    # pass and load-bearing on every later one.
-    offset = 0
-    while True:
-        if chunk.transfer_id != transfer_id:
-            _cancel_and_fail(session, "Changed transfer ID")
-        if chunk.pczt_length != total:
-            _cancel_and_fail(session, "Changed signed PCZT length")
-        if chunk.offset != offset:
-            _cancel_and_fail(session, "Unexpected signed PCZT chunk offset")
-        if len(chunk.data) != min(CHUNK_BYTES, total - offset):
-            _cancel_and_fail(session, "Unexpected signed PCZT chunk length")
+    The device workflow has already finished, so a violation here raises
+    without cancelling; the caller must not use any of the records.
+    """
+    if response.transfer_id != transfer_id:
+        raise exceptions.ProtocolError("Changed transfer ID")
+    records = response.records
+    if (
+        type(records) is not bytes
+        or len(records) == 0
+        or len(records) % RECORD_BYTES
+        or len(records) // RECORD_BYTES > MAX_ACTIONS
+    ):
+        raise exceptions.ProtocolError("Invalid Zcash signature records")
 
-        end = offset + len(chunk.data)
-        signed[offset:end] = chunk.data
-        offset = end
-
-        response = _call(
-            session,
-            messages.ZcashSignedPcztAck(
-                transfer_id=transfer_id,
-                next_offset=offset,
-            ),
-        )
-
-        if offset == total:
-            # Only a complete transfer may terminate, and only with Success.
-            _expect(session, response, messages.Success)
-            return bytes(signed)
-
-        chunk = _expect(session, response, messages.ZcashSignedPczt)
+    signatures: list[SpendAuthSignature] = []
+    previous_index = -1
+    for start in range(0, len(records), RECORD_BYTES):
+        pool, action_index = records[start], records[start + 1]
+        signature = records[start + 2 : start + RECORD_BYTES]
+        if (
+            pool != POOL_IRONWOOD
+            or action_index <= previous_index
+            or action_index >= MAX_ACTIONS
+        ):
+            raise exceptions.ProtocolError("Invalid Zcash signature records")
+        previous_index = action_index
+        signatures.append(SpendAuthSignature(action_index, signature))
+    return signatures

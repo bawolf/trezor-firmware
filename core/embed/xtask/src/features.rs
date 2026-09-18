@@ -182,7 +182,11 @@ pub fn configure_cargo(args: &ResolvedBuildArgs, cmd: &mut process::Command) -> 
     }
 
     if rebuild_std {
-        cmd.arg("-Zbuild-std=core");
+        if args.ironwood && matches!(args.project, crate::args::Project::Firmware) {
+            cmd.arg("-Zbuild-std=core,alloc");
+        } else {
+            cmd.arg("-Zbuild-std=core");
+        }
     }
 
     forward_color_choice(cmd);

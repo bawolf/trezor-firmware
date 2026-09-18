@@ -42,7 +42,16 @@ for prefix in DEBUG_PREFIXES:
     qstrings_debug |= {qstr for qstr in qstrings if qstr.startswith(mp_prefix)}
 
 # Module-local qstrs whose Rust implementation is feature-gated.
-qstrings_ironwood = qstrings & {"MP_QSTR_derive_receiver", "MP_QSTR_derive_viewing_key"}
+qstrings_ironwood = qstrings & {
+    "MP_QSTR_derive_receiver",
+    "MP_QSTR_derive_viewing_key",
+    "MP_QSTR_session_approve",
+    "MP_QSTR_session_begin",
+    "MP_QSTR_session_cancel",
+    "MP_QSTR_session_feed",
+    "MP_QSTR_session_region_high_water",
+    "MP_QSTR_session_sign",
+}
 
 qstrings_btconly = qstrings - qstrings_universal - qstrings_debug - qstrings_ironwood
 

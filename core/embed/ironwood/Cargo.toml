@@ -13,6 +13,8 @@ test = []
 # Exact versions live in the embed workspace manifest. Every production
 # dependency is default-off; the crate enables only the portable features it uses.
 blake2b_simd.workspace = true
+ironwood-pasta-curves.workspace = true
+ironwood-sinsemilla.workspace = true
 orchard.workspace = true
 pczt.workspace = true
 rand_core.workspace = true

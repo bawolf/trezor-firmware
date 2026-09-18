@@ -21,7 +21,13 @@
     feature(lang_items)
 )]
 #![cfg_attr(feature = "layout_bolt", feature(trait_alias))]
+#![cfg_attr(
+    all(feature = "ironwood", target_arch = "arm"),
+    feature(alloc_error_handler)
+)]
 
+#[cfg(feature = "ironwood")]
+extern crate alloc;
 #[macro_use]
 extern crate num_derive;
 
@@ -34,6 +40,13 @@ mod coverage;
 #[cfg(feature = "universal_fw")]
 mod definitions;
 mod io;
+#[cfg(all(feature = "ironwood", target_arch = "arm"))]
+mod ironwood_allocator;
+#[cfg(all(feature = "ironwood", not(target_arch = "arm")))]
+#[path = "ironwood_unix_allocator.rs"]
+mod ironwood_allocator;
+#[cfg(feature = "ironwood")]
+mod ironwood_signing;
 mod maybe_trace;
 #[cfg(feature = "micropython")]
 mod micropython;

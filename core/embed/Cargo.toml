@@ -77,6 +77,8 @@ log = { version = "0.4.29", features = ["max_level_trace", "release_max_level_of
 minicbor = { version = "1.0.0", default-features = false }
 num-derive = "0.4.2"
 num-traits = { version = "0.2.19", default-features = false, features = ["libm"] }
+ironwood-pasta-curves = { package = "pasta_curves", version = "=0.5.1", default-features = false, features = ["uninline-portable"] }
+ironwood-sinsemilla = { package = "sinsemilla", version = "=0.1.0", default-features = false, features = ["computed-generators"] }
 orchard = { version = "=0.15.3", default-features = false }
 trezor-pasta-curves = { package = "pasta_curves", git = "https://github.com/jarys/pasta_curves", rev = "e11dfe4089d0da24483094a99cceb89f32974c17", default-features = false, features = ["uninline-portable"] }
 pareen = { version = "0.3.3", path = "../../rust/pareen", default-features = false, features = ["libm", "easer"] }
@@ -89,6 +91,7 @@ spin = { version = "0.9.9", features = ["rwlock", "spin_mutex", "lazy"], default
 static-alloc = "0.2.6"
 transparent = { package = "zcash_transparent", version = "=0.10.0", default-features = false }
 trezor-ironwood-receive = { path = "ironwood-receive", default-features = false }
+trezor-ironwood = { path = "ironwood", default-features = false }
 trezor-thp = { path = "../../rust/trezor-thp" }
 trezor-tjpgdec = { version = "0.1.0", path = "../../rust/trezor-tjpgdec" }
 ufmt = "0.2.0"
@@ -130,3 +133,9 @@ toml = "0.8.23"
 zlib-rs = "0.6.3"
 
 xbuild = { path = "xbuild" }
+
+[patch.crates-io]
+# Signing flash probe only: exact-base Sinsemilla computed-generators commit on the user fork, pinned by full SHA.
+sinsemilla = { git = "https://github.com/bawolf/sinsemilla", rev = "6ca88ff52835899c87ff83489b95c5cda887e8a4" }
+# Signing flash probe only: exact-base Orchard direct-scope classifier commit on the user fork, pinned by full SHA.
+orchard = { git = "https://github.com/bawolf/orchard", rev = "19f6100607e9dfacc10f0fe0d4ac84fb79f610c5" }

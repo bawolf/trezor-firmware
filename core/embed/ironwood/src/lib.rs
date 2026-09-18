@@ -18,8 +18,11 @@ extern crate alloc;
 
 use alloc::vec::Vec;
 
+mod digest;
 mod effects;
 mod error;
+mod session;
+mod stream;
 mod wire;
 
 /// Test-only access to bounded wire admission; not a production signing API.
@@ -38,6 +41,7 @@ use pczt::Pczt;
 use pczt::roles::low_level_signer::{OrchardParseError, Signer as LowLevelSigner};
 use pczt::roles::verifier::{OrchardError, Verifier};
 use rand_core::{CryptoRng, RngCore};
+pub use session::{Event, Session, SignatureRecord, Signatures};
 /// Maximum number of admitted Ironwood actions.
 pub use wire::MAX_ACTIONS;
 /// Maximum uploaded or returned PCZT size. A transport enforces this before

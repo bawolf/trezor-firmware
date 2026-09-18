@@ -855,6 +855,7 @@ class MessageType(IntEnum):
     ZcashPcztAck = 32106
     ZcashSignedPczt = 32107
     ZcashSignedPcztAck = 32108
+    ZcashSpendAuthSignatures = 32109
 
 
 class BenchmarkListNames(protobuf.MessageType):
@@ -10351,3 +10352,20 @@ class ZcashSignedPcztAck(protobuf.MessageType):
     ) -> None:
         self.transfer_id = transfer_id
         self.next_offset = next_offset
+
+
+class ZcashSpendAuthSignatures(protobuf.MessageType):
+    MESSAGE_WIRE_TYPE = 32109
+    FIELDS = {
+        1: protobuf.Field("transfer_id", "bytes", repeated=False, required=True),
+        2: protobuf.Field("records", "bytes", repeated=False, required=True),
+    }
+
+    def __init__(
+        self,
+        *,
+        transfer_id: "bytes",
+        records: "bytes",
+    ) -> None:
+        self.transfer_id = transfer_id
+        self.records = records

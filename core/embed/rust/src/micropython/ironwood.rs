@@ -1,13 +1,15 @@
 use core::ffi::CStr;
 
+use trezor_ironwood::MAX_ACTIONS;
 use trezor_ironwood_receive::{derive_external_receiver, derive_full_viewing_key, Network};
 
+use crate::ironwood_signing::{self, Failure, Step, RECORD_LEN};
 use crate::micropython::buffer::{get_buffer, get_buffer_mut};
-use crate::micropython::ffi;
 use crate::micropython::map::Map;
 use crate::micropython::module::Module;
 use crate::micropython::qstr::Qstr;
-use crate::micropython::{util, Error, Obj};
+use crate::micropython::tuple::Tuple;
+use crate::micropython::{ffi, util, Error, Obj};
 
 fn parse_u32(value: Obj, range_message: &'static CStr) -> Result<u32, Error> {
     u32::try_from(value).map_err(|error| match error {
@@ -84,6 +86,143 @@ extern "C" fn derive_viewing_key(n_args: usize, args: *const Obj) -> Obj {
     unsafe { util::try_with_args_and_kwargs(n_args, args, &Map::EMPTY, block) }
 }
 
+/// Python raises `DataError` for `ValueError` and `ProcessError` for
+/// `RuntimeError`, so only malformed bytes become a `ValueError`.
+fn failure(failure: Failure) -> Error {
+    match failure {
+        Failure::Malformed => Error::ValueError(c"Malformed PCZT"),
+        Failure::Policy => Error::RuntimeError(c"PCZT violates device policy"),
+        Failure::State => Error::RuntimeError(c"Invalid signing state"),
+        Failure::Signing => Error::RuntimeError(c"Signing failed"),
+    }
+}
+
+fn parse_network(value: Obj) -> Result<trezor_ironwood::Network, Error> {
+    match parse_u32(value, c"Invalid network")? {
+        0 => Ok(trezor_ironwood::Network::Mainnet),
+        1 => Ok(trezor_ironwood::Network::Testnet),
+        _ => Err(Error::ValueError(c"Invalid network")),
+    }
+}
+
+extern "C" fn session_begin(n_args: usize, args: *const Obj) -> Obj {
+    let block = |args: &[Obj], _kwargs: &Map| {
+        if args.len() != 8 {
+            return Err(Error::TypeError);
+        }
+        let network = parse_network(args[1])?;
+        let account = parse_u32(args[2], c"Invalid account")?;
+        let host_reference_height = parse_u32(args[3], c"Invalid host reference height")?;
+        let maximum_fee = u64::try_from(args[4])?;
+        let expiry_window = parse_u32(args[5], c"Invalid expiry window")?;
+        let declared_len = usize::try_from(args[6])?;
+        // The seed must be immutable bytes and the region a bytearray, so the two
+        // borrows below cannot alias and the region cannot be a view of something
+        // Python could resize or free under the allocator.
+        if !unsafe { ffi::mp_type_bytes.is_type_of(args[0]) }
+            || !unsafe { ffi::mp_type_bytearray.is_type_of(args[7]) }
+        {
+            return Err(Error::TypeError);
+        }
+        // Any earlier request must release its blocks before the region changes.
+        ironwood_signing::cancel();
+        // SAFETY: no MicroPython code or GC-visible allocation runs while the
+        // buffers are borrowed; the region pointer outlives the borrow by design
+        // (the handler keeps the bytearray referenced until `session_cancel`).
+        let region = unsafe { get_buffer_mut(args[7])? };
+        crate::ironwood_allocator::install_region(region);
+        let seed = unsafe { get_buffer(args[0])? };
+        ironwood_signing::begin(
+            seed,
+            network,
+            account,
+            host_reference_height,
+            maximum_fee,
+            expiry_window,
+            declared_len,
+        )
+        .map_err(failure)?;
+        Ok(Obj::const_none())
+    };
+
+    unsafe { util::try_with_args_and_kwargs(n_args, args, &Map::EMPTY, block) }
+}
+
+extern "C" fn session_feed(n_args: usize, args: *const Obj) -> Obj {
+    let block = |args: &[Obj], _kwargs: &Map| {
+        if args.len() != 1 {
+            return Err(Error::TypeError);
+        }
+        // SAFETY: the chunk is borrowed for the call only and not mutated.
+        let chunk = unsafe { get_buffer(args[0])? };
+        let (consumed, step) = ironwood_signing::feed(chunk).map_err(failure)?;
+        let (kind, payload): (u8, Obj) = match step {
+            Step::Continue => (0, Obj::const_none()),
+            Step::Output(output) => (
+                1,
+                Tuple::alloc(&[
+                    Obj::try_from(output.action_index)?,
+                    Obj::try_from(&output.receiver[..])?,
+                    Obj::try_from(output.value)?,
+                    Obj::from(output.is_change),
+                ])?
+                .into(),
+            ),
+            Step::Review(totals) => (
+                2,
+                Tuple::alloc(&[
+                    Obj::try_from(totals.expiry_height)?,
+                    Obj::try_from(totals.blocks_until_expiry)?,
+                    Obj::try_from(totals.input_total)?,
+                    Obj::try_from(totals.payment_total)?,
+                    Obj::try_from(totals.change_total)?,
+                    Obj::try_from(totals.fee)?,
+                    Obj::try_from(totals.padding_outputs)?,
+                    Obj::try_from(totals.payment_outputs)?,
+                ])?
+                .into(),
+            ),
+        };
+        Ok(Tuple::alloc(&[Obj::try_from(consumed)?, Obj::from(kind), payload])?.into())
+    };
+
+    unsafe { util::try_with_args_and_kwargs(n_args, args, &Map::EMPTY, block) }
+}
+
+extern "C" fn session_approve() -> Obj {
+    let block = || {
+        ironwood_signing::approve().map_err(failure)?;
+        Ok(Obj::const_none())
+    };
+    unsafe { util::try_or_raise(block) }
+}
+
+extern "C" fn session_sign(seed: Obj) -> Obj {
+    let block = || {
+        if !unsafe { ffi::mp_type_bytes.is_type_of(seed) } {
+            return Err(Error::TypeError);
+        }
+        let mut records = [0u8; MAX_ACTIONS * RECORD_LEN];
+        let count = {
+            // SAFETY: the seed is borrowed for the derivation only.
+            let seed = unsafe { get_buffer(seed)? };
+            ironwood_signing::sign(seed, &mut records).map_err(failure)?
+        };
+        Obj::try_from(&records[..count * RECORD_LEN])
+    };
+    unsafe { util::try_or_raise(block) }
+}
+
+extern "C" fn session_cancel() -> Obj {
+    ironwood_signing::cancel();
+    Obj::const_none()
+}
+
+extern "C" fn session_region_high_water() -> Obj {
+    let block = || Obj::try_from(crate::ironwood_allocator::region_high_water());
+    unsafe { util::try_or_raise(block) }
+}
+
 #[no_mangle]
 #[rustfmt::skip]
 pub static mp_module_trezorironwood: Module = obj_module! {
@@ -103,4 +242,39 @@ pub static mp_module_trezorironwood: Module = obj_module! {
     /// ) -> None:
     ///     """Fill a 96-byte Orchard FVK buffer from device wallet state."""
     Qstr::MP_QSTR_derive_viewing_key => obj_fn_var!(4, 4, derive_viewing_key).as_obj(),
+    /// def session_begin(
+    ///     seed: bytes,
+    ///     network: int,
+    ///     account: int,
+    ///     host_reference_height: int,
+    ///     maximum_fee: int,
+    ///     expiry_window: int,
+    ///     pczt_length: int,
+    ///     region: bytearray,
+    /// ) -> None:
+    ///     """Start streaming one PCZT for the account derived from the wallet seed.
+    ///     `region` backs every allocation of the signing core on the device and must
+    ///     stay referenced, unresized, until `session_cancel`."""
+    Qstr::MP_QSTR_session_begin => obj_fn_var!(8, 8, session_begin).as_obj(),
+    /// def session_feed(chunk: AnyBytes) -> tuple[int, int, tuple | None]:
+    ///     """Consume PCZT bytes. Returns (consumed, kind, payload): kind 0 needs more
+    ///     bytes; kind 1 is a payment output to confirm, payload
+    ///     (action_index, receiver, value, is_change); kind 2 is the review, payload
+    ///     (expiry_height, blocks_until_expiry, input_total, payment_total,
+    ///     change_total, fee, padding_outputs, payment_outputs). Unconsumed bytes
+    ///     must be fed again. ValueError: malformed; RuntimeError: rejected."""
+    Qstr::MP_QSTR_session_feed => obj_fn_var!(1, 1, session_feed).as_obj(),
+    /// def session_approve() -> None:
+    ///     """Record consent for the reviewed PCZT; call only after the trusted totals screen."""
+    Qstr::MP_QSTR_session_approve => obj_fn_0!(session_approve).as_obj(),
+    /// def session_sign(seed: bytes) -> bytes:
+    ///     """Sign every real spend and end the session. Returns concatenated
+    ///     66-byte records: pool (0x03) | action_index | signature[64]."""
+    Qstr::MP_QSTR_session_sign => obj_fn_1!(session_sign).as_obj(),
+    /// def session_cancel() -> None:
+    ///     """End the session, if any, and wipe its state."""
+    Qstr::MP_QSTR_session_cancel => obj_fn_0!(session_cancel).as_obj(),
+    /// def session_region_high_water() -> int:
+    ///     """Bytes of the region used so far (device only; 0 on the emulator)."""
+    Qstr::MP_QSTR_session_region_high_water => obj_fn_0!(session_region_high_water).as_obj(),
 };
