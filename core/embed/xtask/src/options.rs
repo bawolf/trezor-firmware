@@ -212,6 +212,12 @@ build_options! {
     #[arg(long, num_args = 0..=1, default_missing_value = "true")]
     map ironwood: bool,
 
+    /// Include MEASUREMENT-ONLY Ironwood op-timing scaffolding (bench + region
+    /// telemetry). Default-OFF; excluded from production builds (Fable R1).
+    /// Requires --ironwood.
+    #[arg(long, num_args = 0..=1, default_missing_value = "true")]
+    map ironwood_measurement: bool,
+
     /// Disable UI animations
     #[arg(long, num_args = 0..=1, default_missing_value = "true")]
     map disable_animation: bool,
@@ -289,6 +295,9 @@ impl ResolvedBuildArgs {
         }
         if self.ironwood && self.btc_only {
             bail!("--ironwood cannot be combined with --btc-only");
+        }
+        if self.ironwood_measurement && !self.ironwood {
+            bail!("--ironwood-measurement requires --ironwood");
         }
         Ok(())
     }

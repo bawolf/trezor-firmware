@@ -32,8 +32,8 @@ def _derive_receiver(
         utils.zero_unused_stack()
 
 
-def _op_timing_bench() -> str:
-    # MEASUREMENT-ONLY per-operation latency bench (signing-op-timing build).
+def _op_timing_bench() -> str | None:
+    # MEASUREMENT-ONLY per-operation latency bench (ironwood-measurement build).
     # Times the two candidate per-action verification costs in isolation, so a
     # hardware run can attribute the ~23 s per real spend to Sinsemilla hashing
     # versus Pallas scalar multiplication. Each op is one native call timed with
@@ -41,9 +41,18 @@ def _op_timing_bench() -> str:
     # accumulator so nothing is optimised away. Uses the same computed-generator
     # Sinsemilla and pinned Pasta the signing path links. Changes no signing
     # behavior.
+    #
+    # The `bench` / `session_region_high_water` native bindings exist ONLY when
+    # the firmware was built with the `ironwood-measurement` Cargo feature. In a
+    # PRODUCTION build (default, feature OFF) they are absent, the import below
+    # raises ImportError, and this returns None so the reserved diversifier index
+    # derives normally instead of running any bench (Fable review R1).
     import utime
 
-    from trezorironwood import bench, session_region_high_water
+    try:
+        from trezorironwood import bench, session_region_high_water
+    except ImportError:
+        return None
 
     # `bench` ignores this argument (it allocates from the boot-lifetime `.buf`
     # region the signing path installs), so pass an EMPTY bytearray. A 96 KiB GC
@@ -121,12 +130,16 @@ async def get_address(msg: ZcashGetAddress) -> ZcashAddress:
     )
     ironwood_account.validate_diversifier_index(diversifier_index)
 
-    # MEASUREMENT-ONLY: the reserved all-0xff diversifier index never addresses a
-    # real note; it triggers the per-operation latency bench and returns the
-    # timings in a ProcessError instead of deriving an address. Absent from real
-    # address flows and changes no signing behavior.
+    # MEASUREMENT-ONLY (ironwood-measurement builds): the reserved all-0xff
+    # diversifier index triggers the per-operation latency bench and returns the
+    # timings in a ProcessError instead of deriving an address. In a PRODUCTION
+    # build (default) the bench binding is absent, `_op_timing_bench()` returns
+    # None, and this index derives normally like any other — so the valid
+    # diversifier index 2^88-1 stays usable and no bench runs pre-consent (R1).
     if bytes(diversifier_index) == b"\xff" * 11:
-        raise wire.ProcessError(_op_timing_bench())
+        bench_timings = _op_timing_bench()
+        if bench_timings is not None:
+            raise wire.ProcessError(bench_timings)
 
     seed.raise_if_not_initialized()
     session = ironwood_account.snapshot_session()

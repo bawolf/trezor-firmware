@@ -8,6 +8,10 @@ publish = false
 default = []
 # Host-only test access. The crate rejects this feature on bare-metal targets.
 test = []
+# Measurement-only op-timing scaffolding (the `bench` module). Default-OFF so
+# production builds exclude it entirely (Fable review R1). A measurement image
+# for on-device op-timing sweeps must be built with this feature enabled.
+ironwood-measurement = []
 
 [dependencies]
 # Exact versions live in the embed workspace manifest. Every production

@@ -259,7 +259,6 @@ async def _stream_and_sign(
         session_approve,
         session_begin,
         session_feed,
-        session_region_high_water,
         session_sign,
     )
 
@@ -354,7 +353,16 @@ async def _stream_and_sign(
     # set (Pasta table + orchard OnceBox caches) already allocated when each
     # session began; after session 1 it must stay CONSTANT — any upward drift is
     # a cross-session leak. boot_peak is the boot-monotone max (only grows).
-    session_peak, in_use_at_begin, boot_peak = session_region_high_water()
+    # MEASUREMENT-ONLY region counters. `session_region_high_water` exists only
+    # in ironwood-measurement builds; in a PRODUCTION build (default) the binding
+    # is absent (it exposes internal region layout to the host) so the counters
+    # report 0 and the signing path is unaffected (Fable review R1/#2).
+    try:
+        from trezorironwood import session_region_high_water
+
+        session_peak, in_use_at_begin, boot_peak = session_region_high_water()
+    except ImportError:
+        session_peak = in_use_at_begin = boot_peak = 0
     action_count = payments
     debug_timings = (
         "derive_ms=%d feed_ms=%d sign_ms=%d action_count=%d "
