@@ -128,6 +128,11 @@ extern "C" fn session_begin(n_args: usize, args: *const Obj) -> Obj {
         // whole boot (fixes cross-session staleness of the Pasta table / orchard
         // OnceBox caches; docs/decisions/2026-09-18-cross-session-region-lifetime.md).
         crate::ironwood_allocator::install_region();
+        // Measurement bookkeeping: reset the per-session region peak and sample
+        // the bytes already in use (the persistent Pasta table + orchard OnceBox
+        // caches after session 1) BEFORE `begin` allocates, so the sweep can see a
+        // flat per-session peak and a constant in-use-at-begin (a leak otherwise).
+        crate::ironwood_allocator::mark_session_begin();
         // SAFETY: the seed is borrowed for this call only and not mutated.
         let seed = unsafe { get_buffer(args[0])? };
         ironwood_signing::begin(
@@ -217,7 +222,17 @@ extern "C" fn session_cancel() -> Obj {
 }
 
 extern "C" fn session_region_high_water() -> Obj {
-    let block = || Obj::try_from(crate::ironwood_allocator::region_high_water());
+    let block = || {
+        // (per_session_peak, in_use_at_begin, boot_peak), all in bytes from the
+        // region base; every element is 0 on the emulator. The per-session peak
+        // is the figure the sweep reads (the boot-monotone peak can only grow).
+        Ok(Tuple::alloc(&[
+            Obj::try_from(crate::ironwood_allocator::region_session_high_water())?,
+            Obj::try_from(crate::ironwood_allocator::region_in_use_at_begin())?,
+            Obj::try_from(crate::ironwood_allocator::region_high_water())?,
+        ])?
+        .into())
+    };
     unsafe { util::try_or_raise(block) }
 }
 
@@ -310,16 +325,23 @@ pub static mp_module_trezorironwood: Module = obj_module! {
     /// def session_cancel() -> None:
     ///     """End the session, if any, and wipe its state."""
     Qstr::MP_QSTR_session_cancel => obj_fn_0!(session_cancel).as_obj(),
-    /// def session_region_high_water() -> int:
-    ///     """Bytes of the region used so far (device only; 0 on the emulator)."""
+    /// def session_region_high_water() -> tuple[int, int, int]:
+    ///     """Region measurement counters, in bytes from the region base
+    ///     (all 0 on the emulator): (per_session_peak, in_use_at_begin,
+    ///     boot_peak). per_session_peak resets at each session_begin, so on an
+    ///     ascending-N single-boot sweep it stays ~flat; in_use_at_begin is the
+    ///     persistent set already allocated when the session began (constant in
+    ///     steady state — any drift is a cross-session leak); boot_peak is the
+    ///     boot-monotone maximum."""
     Qstr::MP_QSTR_session_region_high_water => obj_fn_0!(session_region_high_water).as_obj(),
     /// def bench(selector: int, region: bytearray, iters: int) -> int:
     ///     """MEASUREMENT-ONLY. Run `iters` iterations of one crypto operation
     ///     (0 warmup, 1 note_commitment, 2 sinsemilla_hash, 3 scalar_mul,
     ///     4 commit_ivk) over the signing path's Sinsemilla/Pallas instances and
-    ///     return a folded accumulator so nothing is optimised away. `region`
-    ///     backs the allocations and must stay referenced, unresized, for the
-    ///     call. Time it with utime.ticks_ms on the Python side. Changes no
-    ///     signing behavior."""
+    ///     return a folded accumulator so nothing is optimised away. `region` is
+    ///     accepted for API compatibility but IGNORED: the bench allocates from
+    ///     the same boot-lifetime `.buf` region the signing path installs, so an
+    ///     empty bytearray() is fine. Time it with utime.ticks_ms on the Python
+    ///     side. Changes no signing behavior."""
     Qstr::MP_QSTR_bench => obj_fn_var!(3, 3, bench).as_obj(),
 };

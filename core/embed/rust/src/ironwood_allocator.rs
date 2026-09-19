@@ -75,7 +75,20 @@ static mut REGION: Region = Region(MaybeUninit::uninit());
 
 static mut REGION_BASE: *mut u8 = ptr::null_mut();
 static mut REGION_LEN: usize = 0;
+// Boot-monotone maximum payload end ever handed out (never reset after the
+// one-time format). Cheap to keep; reported alongside the per-session figure.
 static mut REGION_PEAK: usize = 0;
+// Peak payload end handed out during the CURRENT session, reset at each
+// `mark_session_begin`. This is the figure the measurement sweep reads: on an
+// ascending-N single-boot sweep it should stay ~flat because each session
+// reuses the same rooted table + caches, which the boot-monotone `REGION_PEAK`
+// (can only grow) cannot show.
+static mut REGION_SESSION_PEAK: usize = 0;
+// Bytes already in use in the region when the current session began (sampled by
+// `mark_session_begin` before `begin` allocates). After session 1 this is the
+// persistent set (Pasta table + the two orchard OnceBox caches) and must stay
+// constant across a sweep; any upward drift is a cross-session leak.
+static mut REGION_IN_USE_AT_BEGIN: usize = 0;
 // Set once the region is formatted this boot; `install_region` is then a no-op
 // so the Pasta table + orchard OnceBox caches carved into it survive every later
 // session (the whole point of the process-lifetime region).
@@ -167,17 +180,71 @@ pub fn install_region() {
         REGION_BASE = raw;
         REGION_LEN = REGION_BYTES;
         REGION_PEAK = 0;
+        REGION_SESSION_PEAK = 0;
+        REGION_IN_USE_AT_BEGIN = 0;
         REGION_ROOTED = true;
         set_block(raw, REGION_BYTES, true);
     }
 }
 
-/// Highest payload end handed out since the region was installed, in bytes from
-/// the region base. Reported to the handler so region sizing rests on
-/// measurement.
+/// Highest payload end handed out since the region was installed (boot-monotone,
+/// never reset), in bytes from the region base.
 pub fn region_high_water() -> usize {
     // SAFETY: single-threaded read of the bookkeeping.
     unsafe { REGION_PEAK }
+}
+
+/// Highest payload end handed out during the CURRENT session (reset at each
+/// `mark_session_begin`), in bytes from the region base. This is the per-session
+/// figure the measurement sweep reads.
+pub fn region_session_high_water() -> usize {
+    // SAFETY: single-threaded read of the bookkeeping.
+    unsafe { REGION_SESSION_PEAK }
+}
+
+/// Bytes already allocated in the region when the current session began, sampled
+/// by `mark_session_begin` before `begin` allocates. Constant across a sweep in
+/// steady state (the persistent Pasta table + orchard OnceBox caches); any
+/// upward drift is a cross-session leak.
+pub fn region_in_use_at_begin() -> usize {
+    // SAFETY: single-threaded read of the bookkeeping.
+    unsafe { REGION_IN_USE_AT_BEGIN }
+}
+
+/// Sum of every in-use block's total length (header included) by one O(n) walk.
+pub fn region_in_use_bytes() -> usize {
+    // SAFETY: single-threaded walk over the block chain inside the region.
+    unsafe {
+        let (base, len) = (REGION_BASE, REGION_LEN);
+        if base.is_null() {
+            return 0;
+        }
+        let end = base.add(len);
+        let mut block = base;
+        let mut total = 0;
+        while block < end {
+            let blen = block_len(block);
+            if !block_ok(block, blen, end) {
+                break;
+            }
+            if !block_free(block) {
+                total += blen;
+            }
+            block = block.add(blen);
+        }
+        total
+    }
+}
+
+/// Marks the start of a signing session for measurement: resets the per-session
+/// peak and samples the in-use bytes BEFORE the session allocates, so a
+/// cross-session leak is detectable. Call after `install_region`, before `begin`.
+pub fn mark_session_begin() {
+    // SAFETY: single-threaded write of the bookkeeping.
+    unsafe {
+        REGION_SESSION_PEAK = 0;
+        REGION_IN_USE_AT_BEGIN = region_in_use_bytes();
+    }
 }
 
 struct FreeListAllocator;
@@ -219,6 +286,9 @@ unsafe impl GlobalAlloc for FreeListAllocator {
                     if payload_end > REGION_PEAK {
                         REGION_PEAK = payload_end;
                     }
+                    if payload_end > REGION_SESSION_PEAK {
+                        REGION_SESSION_PEAK = payload_end;
+                    }
                     return block.add(HEADER);
                 }
                 block = block.add(blen);
@@ -233,7 +303,21 @@ unsafe impl GlobalAlloc for FreeListAllocator {
         // neighbours (predecessor and successor), so no freed scratch is stranded.
         unsafe {
             let block = pointer.sub(HEADER);
-            set_block(block, block_len(block), true);
+            let blen = block_len(block);
+            // MUST-FIX #1 (Fable review, 2026-09-19): the region now lives for the
+            // whole boot, so freed secret-class scratch (e.g. the sinsemilla
+            // `padded: Vec<bool>` holding ak||nk / nullifier-key bits) is no longer
+            // recycled — and overwritten — by GC churn; it would linger in `.buf`
+            // until the same offsets happen to be reused. Zero the payload span
+            // before marking the block free. The compiler fence keeps this store
+            // from being elided as dead ahead of the block returning to the free
+            // list. Cost is a memset of the freed size, negligible next to
+            // Sinsemilla. Header bookkeeping is untouched.
+            let payload = pointer;
+            let payload_len = blen - HEADER;
+            ptr::write_bytes(payload, 0, payload_len);
+            core::sync::atomic::compiler_fence(core::sync::atomic::Ordering::SeqCst);
+            set_block(block, blen, true);
             let (base, len) = (REGION_BASE, REGION_LEN);
             if !base.is_null() {
                 coalesce_all(base, len);
