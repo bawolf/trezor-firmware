@@ -20,6 +20,19 @@ pub fn region_high_water() -> usize {
     0
 }
 
+/// No rooted region on the emulator, so no per-session peak either.
+pub fn region_session_high_water() -> usize {
+    0
+}
+
+/// No rooted region on the emulator, so nothing is in use at session begin.
+pub fn region_in_use_at_begin() -> usize {
+    0
+}
+
+/// No rooted region on the emulator: nothing to sample or reset.
+pub fn mark_session_begin() {}
+
 struct SystemAllocator;
 
 // SAFETY: the emulator is single-threaded and the C allocator returns 16-byte

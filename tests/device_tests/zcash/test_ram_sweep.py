@@ -2,8 +2,11 @@
 
 TEMPORARY investigation harness (emulator-ram-sweep-20260918); not for commit.
 Reuses the ironwood_fixture host tool to build N-action PCZTs, signs each on the
-T3T1 emulator, and records the `high_water_bytes`/`region_bytes` carried in the
-returned `debug_timings` (via trezorlib.zcash.last_debug_timings).
+T3T1 emulator, and records the per-session region counters
+(`session_peak_bytes`/`in_use_at_begin_bytes`/`boot_peak_bytes`/`region_bytes`)
+carried in the returned `debug_timings` (via trezorlib.zcash.last_debug_timings).
+Run the sweep ASCENDING N on ONE boot: session_peak should stay ~flat and
+in_use_at_begin constant after the first session.
 
 Config via env:
   RAM_SWEEP_NS   comma list of action counts (default "1,2,4,6,8")
@@ -123,14 +126,21 @@ def test_ram_sweep(
     dt = zcash.last_debug_timings
     dt_s = dt.decode() if isinstance(dt, (bytes, bytearray)) else str(dt)
     fields = dict(kv.split("=", 1) for kv in dt_s.split(" ") if "=" in kv)
-    hw = fields.get("high_water_bytes")
+    # Per-session counters (Fable review #2): session_peak resets each
+    # session_begin so it is ~flat across an ascending-N single-boot sweep;
+    # in_use_at_begin is the persistent set and must stay constant (a leak
+    # otherwise); boot_peak is the boot-monotone max.
+    sp = fields.get("session_peak_bytes")
+    iub = fields.get("in_use_at_begin_bytes")
+    bp = fields.get("boot_peak_bytes")
     rb = fields.get("region_bytes")
     ac = fields.get("action_count")
 
     verified = _verify(fixture_tool, tmp_path, actions, signatures)
     line = (
         f"N_requested={actions} action_count={ac} payments={payments} "
-        f"pczt_len={len(pczt)} high_water_bytes={hw} region_bytes={rb} "
+        f"pczt_len={len(pczt)} session_peak_bytes={sp} in_use_at_begin_bytes={iub} "
+        f"boot_peak_bytes={bp} region_bytes={rb} "
         f"signatures={len(signatures)} verify={verified.strip()!r} "
         f"env_region={os.environ.get('IRONWOOD_REGION_BYTES', 'default')}"
     )

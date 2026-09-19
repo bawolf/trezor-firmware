@@ -343,22 +343,32 @@ async def _stream_and_sign(
         raise wire.ProcessError("Zcash signing failed")
 
     # MEASUREMENT-ONLY latency trailer. An ASCII key=value breakdown of the
-    # per-phase on-device wall-clock plus the region high-water mark, so a plain
-    # host (no DebugLink) reads where the ~35 s first-review and ~103 s sign time
-    # go. Remove with the proto field before any release. `high_water_bytes` is 0
+    # per-phase on-device wall-clock plus the region counters, so a plain host
+    # (no DebugLink) reads where the ~35 s first-review and ~103 s sign time go.
+    # Remove with the proto field before any release. All region counters are 0
     # on the emulator; region_bytes is the full 96 KiB region for the ratio.
-    high_water = session_region_high_water()
+    #
+    # SWEEP PROTOCOL: run ascending N (2, 4, 8, 16, 32) on ONE boot. session_peak
+    # is per-session (resets at session_begin), so it should stay ~flat (~45,760 B)
+    # across N — that is the O(1)-RAM claim. in_use_at_begin is the persistent
+    # set (Pasta table + orchard OnceBox caches) already allocated when each
+    # session began; after session 1 it must stay CONSTANT — any upward drift is
+    # a cross-session leak. boot_peak is the boot-monotone max (only grows).
+    session_peak, in_use_at_begin, boot_peak = session_region_high_water()
     action_count = payments
     debug_timings = (
         "derive_ms=%d feed_ms=%d sign_ms=%d action_count=%d "
-        "feed_seg_ms=%s high_water_bytes=%d region_bytes=%d"
+        "feed_seg_ms=%s session_peak_bytes=%d in_use_at_begin_bytes=%d "
+        "boot_peak_bytes=%d region_bytes=%d"
         % (
             derive_ms,
             feed_ms,
             sign_ms,
             action_count,
             ",".join(str(x) for x in feed_seg_ms),
-            high_water,
+            session_peak,
+            in_use_at_begin,
+            boot_peak,
             REGION_BYTES,
         )
     ).encode()

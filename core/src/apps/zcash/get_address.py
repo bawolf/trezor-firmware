@@ -45,9 +45,12 @@ def _op_timing_bench() -> str:
 
     from trezorironwood import bench, session_region_high_water
 
-    # Same 96 KiB region the signing path installs; the bench allocates
-    # (Sinsemilla pads into a Vec<bool>, Pasta builds its sqrt table).
-    region = bytearray(96 * 1024)
+    # `bench` ignores this argument (it allocates from the boot-lifetime `.buf`
+    # region the signing path installs), so pass an EMPTY bytearray. A 96 KiB GC
+    # bytearray here would be dead weight — a single contiguous allocation from
+    # the now-138.7 KiB heap that can raise MemoryError under fragmentation for a
+    # reason unrelated to the bench (Fable review SHOULD-FIX #4).
+    region = bytearray()
     slow_iters = 6  # Sinsemilla ops cost seconds each under computed generators
     fast_iters = 200  # scalar mult is milliseconds
 
@@ -65,13 +68,13 @@ def _op_timing_bench() -> str:
     sh_ms, sh_acc = _time(2, slow_iters)  # Sinsemilla hash only
     sm_ms, sm_acc = _time(3, fast_iters)  # Pallas variable-base scalar mult
     iv_ms, iv_acc = _time(4, slow_iters)  # commit_ivk (FVK derivation)
-    high_water = session_region_high_water()
+    session_peak, _in_use_at_begin, boot_peak = session_region_high_water()
 
     result = (
         "ironwood op timing slow_iters=%d fast_iters=%d "
         "note_commitment_ms=%.2f sinsemilla_hash_ms=%.2f blinding_mult_ms=%.2f "
         "scalar_mul_ms=%.4f commit_ivk_ms=%.2f "
-        "region_high_water=%d region_bytes=%d acc=%d,%d,%d,%d"
+        "session_peak=%d boot_peak=%d acc=%d,%d,%d,%d"
         % (
             slow_iters,
             fast_iters,
@@ -80,8 +83,8 @@ def _op_timing_bench() -> str:
             nc_ms - sh_ms,
             sm_ms,
             iv_ms,
-            high_water,
-            len(region),
+            session_peak,
+            boot_peak,
             nc_acc,
             sh_acc,
             sm_acc,
