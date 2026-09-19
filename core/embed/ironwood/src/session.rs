@@ -25,13 +25,14 @@
 // the allocator probe that drives it; the device wire handler is design §10
 // phase 4 and does not exist yet.
 
+use alloc::boxed::Box;
 use alloc::collections::BTreeMap;
 use alloc::vec::Vec;
 
 use blake2b_simd::{Params, State};
 use orchard::Anchor;
 use orchard::bundle::{BundleVersion, Flags};
-use orchard::keys::{FullViewingKey, Scope, SpendAuthorizingKey, SpendValidatingKey};
+use orchard::keys::{FullViewingKey, Scope, ScopeClassifier, SpendAuthorizingKey, SpendValidatingKey};
 use orchard::note::NoteVersion;
 use orchard::pczt::{Action, Output, Spend};
 use orchard::primitives::redpallas::{Signature, SpendAuth, VerificationKey};
@@ -151,7 +152,9 @@ struct Pending {
 /// own copy. The slot is only ever cleared in place, never moved out, so
 /// `Token` and `Records` zeroize on drop in the storage they occupied.
 struct Slot {
-    pending: Option<Pending>,
+    /// Boxed (MUST-FIX #1): the CAP-sized `Records` inside `Pending` stay in the
+    /// region so `review_stream` never builds `Pending` by value on the stack.
+    pending: Option<Box<Pending>>,
     token: Option<Token>,
 }
 
@@ -163,7 +166,7 @@ impl Slot {
         }
     }
 
-    fn set(&mut self, pending: Pending, token: &Token) {
+    fn set(&mut self, pending: Box<Pending>, token: &Token) {
         debug_assert!(self.pending.is_none());
         self.token = Some(Token {
             session: token.session,
@@ -183,6 +186,37 @@ impl Slot {
     }
 }
 
+/// MUST-FIX #3: secret-bearing wrapper around the session-cached
+/// [`ScopeClassifier`] (the device FVK's external+internal `ivk` scalars).
+/// `ScopeClassifier` implements no `Zeroize`, so without this its bytes would
+/// linger in the freed region block (and then in the GC heap) on every
+/// cancel/error/review/normal-end path. This newtype has a wiping `Drop` and an
+/// in-place [`IvkCache::wipe`] for the review path, mirroring
+/// [`Records::take_zeroizing`]. Both the ironwood crate and the orchard fork
+/// `#![forbid(unsafe_code)]`, so the actual overwrite lives in
+/// `ScopeClassifier::wipe` (a fixed-constant store rooted with `black_box` to
+/// defeat dead-store elimination); this newtype simply drives it on drop and
+/// before the `Body` is released.
+struct IvkCache(ScopeClassifier);
+
+impl IvkCache {
+    /// The wrapped classifier, for the read-only Sinsemilla-free scope checks.
+    fn classifier(&self) -> &ScopeClassifier {
+        &self.0
+    }
+
+    /// Overwrites the two cached `ivk` scalars where they live.
+    fn wipe(&mut self) {
+        self.0.wipe();
+    }
+}
+
+impl Drop for IvkCache {
+    fn drop(&mut self) {
+        self.wipe();
+    }
+}
+
 /// Per-stream state after the header (design §4 "Action `i`").
 struct Body {
     digest: Digest,
@@ -193,6 +227,15 @@ struct Body {
     seen: usize,
     nullifiers: [[u8; 32]; MAX_ACTIONS],
     records: Records,
+    /// DEDUP LEVER 3: the device FVK's external+internal ivk cache, built once
+    /// on the first action and reused for every later action, so the two
+    /// `Commit^ivk` Sinsemilla evaluations are paid once per bundle instead of
+    /// per action. Applied by `verify_nullifier_with_classifier` only to spends
+    /// validated under the device FVK (real spends); dummy spends fall back to
+    /// `fvk.scope_for_address` inside orchard (MUST-FIX #3). Derived from the
+    /// FVK, which the stream already retains as bytes. Wiped on every teardown
+    /// path via [`IvkCache`] (MUST-FIX #3).
+    scope_classifier: Option<IvkCache>,
 }
 
 struct Stream {
@@ -207,8 +250,10 @@ struct Stream {
     /// key object itself is only ever borrowed for one call.
     fvk: Zeroizing<[u8; 96]>,
     expected_ak: SpendValidatingKey,
-    /// Present once the header has been verified.
-    body: Option<Body>,
+    /// Present once the header has been verified. Boxed (MUST-FIX #1) so the
+    /// CAP-sized `Body` is never moved by value on the stack; it lives in the
+    /// region and is only ever reached through this pointer.
+    body: Option<Box<Body>>,
 }
 
 #[derive(Clone, Copy)]
@@ -225,7 +270,10 @@ pub struct Session<R> {
     policy: Policy,
     session: [u8; 32],
     counter: u64,
-    stream: Option<Stream>,
+    /// Boxed (MUST-FIX #1): the CAP-sized `Stream`/`Body` live in the region and
+    /// are reached through this pointer, so `session_begin`/`session_feed` never
+    /// stage them by value on the 32 KB device stack.
+    stream: Option<Box<Stream>>,
     slot: Slot,
 }
 
@@ -296,14 +344,14 @@ impl<R: RngCore + CryptoRng> Session<R> {
             .personal(STREAM_PERSONAL)
             .to_state();
         bytes.update(&(declared_len as u64).to_le_bytes());
-        self.stream = Some(Stream {
+        self.stream = Some(Box::new(Stream {
             scanner,
             bytes,
             declared_len,
             fvk: Zeroizing::new(fvk.to_bytes()),
             expected_ak: SpendValidatingKey::from(fvk.clone()),
             body: None,
-        });
+        }));
         Ok(())
     }
 
@@ -324,12 +372,12 @@ impl<R: RngCore + CryptoRng> Session<R> {
     }
 
     fn advance(&mut self, chunk: &[u8], fvk: &FullViewingKey) -> Result<(usize, Event)> {
-        let bound = self.stream.as_ref().ok_or(Error::state())?;
+        let bound = self.stream.as_deref().ok_or(Error::state())?;
         let offered = Zeroizing::new(fvk.to_bytes());
         ensure_state(same_bytes(&offered, &bound.fvk))?;
         let mut consumed = 0;
         while consumed < chunk.len() {
-            let stream = self.stream.as_mut().ok_or(Error::state())?;
+            let stream = self.stream.as_deref_mut().ok_or(Error::state())?;
             let (used, item) = stream.scanner.feed(&chunk[consumed..])?;
             stream.bytes.update(&chunk[consumed..consumed + used]);
             consumed += used;
@@ -339,11 +387,13 @@ impl<R: RngCore + CryptoRng> Session<R> {
                     if stream.body.is_some() {
                         return Err(Error::internal());
                     }
+                    // `Body::new` returns a `Box<Body>` built in the region, so the
+                    // CAP-sized `Body` never materialises on this frame (MUST-FIX #1).
                     stream.body = Some(Body::new(header, &self.policy)?);
                     continue;
                 }
                 Some(Item::Action(action)) => {
-                    let body = stream.body.as_mut().ok_or(Error::internal())?;
+                    let body = stream.body.as_deref_mut().ok_or(Error::internal())?;
                     match body.action(&action, fvk, &stream.fvk)? {
                         Some(output) => return Ok((consumed, Event::ConfirmOutput(output))),
                         None => continue,
@@ -372,20 +422,35 @@ impl<R: RngCore + CryptoRng> Session<R> {
         result
     }
 
+    // MUST-FIX #1: kept out of line so its (cold, once-per-stream) records /
+    // pending temporaries are NOT reserved in the always-live `session_feed`
+    // frame that the per-action verify runs under.
+    #[inline(never)]
     fn review_stream(&mut self, trailer: Trailer) -> Result<Review> {
-        let stream = self.stream.as_mut().ok_or(Error::internal())?;
+        let stream = self.stream.as_deref_mut().ok_or(Error::internal())?;
         if !stream.scanner.is_finished() {
             return Err(Error::internal());
         }
-        let body = stream.body.as_mut().ok_or(Error::internal())?;
+        let body = stream.body.as_deref_mut().ok_or(Error::internal())?;
         if body.seen != body.count {
             return Err(Error::internal());
         }
         // The records are the only secret-bearing part of `Body`; once they
-        // are out and their source zeroized, what the move below leaves
-        // behind is the digest states, the projection and the nullifiers,
-        // all host-known.
+        // are out and their source zeroized, what stays behind is the digest
+        // states, the projection and the nullifiers, all host-known.
         let records = body.records.take_zeroizing();
+        // MUST-FIX #3: volatile-zero the cached external+internal `ivk` scalars
+        // in place BEFORE the `Body` is released, mirroring
+        // `Records::take_zeroizing`. Dropping the box below re-wipes via
+        // `IvkCache::drop`; wiping here covers the classifier on the review
+        // path even if the drop-in-place path is ever refactored away.
+        if let Some(cache) = body.scope_classifier.as_mut() {
+            cache.wipe();
+        }
+        // Move only the small, host-known projection state out of the boxed
+        // `Body`. The CAP-sized fields (`nullifiers`, the emptied `records`,
+        // the wiped classifier) stay in the region and drop in place when the
+        // box is freed, so nothing CAP-sized lands on the stack (MUST-FIX #1).
         let Body {
             digest,
             mut projection,
@@ -394,7 +459,8 @@ impl<R: RngCore + CryptoRng> Session<R> {
             seen: _,
             nullifiers: _,
             records: _,
-        } = stream.body.take().ok_or(Error::internal())?;
+            scope_classifier: _,
+        } = *stream.body.take().ok_or(Error::internal())?;
 
         // Flags: `Flags::from_byte` is what `Bundle::parse` runs (parse.rs:41-42)
         // and `Pczt::parse` turns into `Malformed` (lib.rs:589); the exact
@@ -485,12 +551,12 @@ impl<R: RngCore + CryptoRng> Session<R> {
                 .expect("configured 32-byte hash"),
         };
         self.slot.set(
-            Pending {
+            Box::new(Pending {
                 approved: false,
                 sighash,
                 expected_ak: stream.expected_ak.clone(),
                 records,
-            },
+            }),
             &token,
         );
         Ok(Review {
@@ -590,8 +656,12 @@ impl<R: RngCore + CryptoRng> Session<R> {
 }
 
 impl Body {
-    /// Header checks of `validate` (lib.rs:570-587), then the digest.
-    fn new(header: stream::Header, policy: &Policy) -> Result<Self> {
+    /// Header checks of `validate` (lib.rs:570-587), then the digest. Returns a
+    /// `Box<Body>` built in the region and stays out of line (MUST-FIX #1) so
+    /// the CAP-sized `Body` value never materialises in the caller's
+    /// `session_feed` frame.
+    #[inline(never)]
+    fn new(header: stream::Header, policy: &Policy) -> Result<Box<Self>> {
         ensure_policy(header.version == V6_TX_VERSION && header.group == V6_VERSION_GROUP_ID)?;
         let request = policy.request;
         let expected_branch = request
@@ -634,7 +704,7 @@ impl Body {
             padding_outputs: 0,
             outputs: Vec::with_capacity(MAX_ACTIONS),
         };
-        Ok(Self {
+        Ok(Box::new(Self {
             digest,
             projection,
             output_total: 0,
@@ -642,7 +712,8 @@ impl Body {
             seen: 0,
             nullifiers: [[0; 32]; MAX_ACTIONS],
             records: Records::default(),
-        })
+            scope_classifier: None,
+        }))
     }
 
     /// Design §4 steps 1-9: the per-action checks of `verify_bundle`
@@ -707,15 +778,26 @@ impl Body {
         self.nullifiers[index] = *spend.nullifier;
         // lib.rs:674-681.
         parsed.verify_cv_net().map_err(|_| Error::malformed())?;
+        // DEDUP LEVER 3: build the ivk cache once (first action), reuse for the
+        // rest of the bundle. Narrow borrows so the `&mut self.scope_classifier`
+        // never spans the later `self` mutations.
         parsed
             .spend()
-            .verify_nullifier(Some(fvk))
+            .verify_nullifier_with_classifier(
+                Some(fvk),
+                Some(
+                    self.scope_classifier
+                        .get_or_insert_with(|| IvkCache(fvk.scope_classifier()))
+                        .classifier(),
+                ),
+            )
             .map_err(|_| Error::malformed())?;
         parsed
             .spend()
             .verify_rk(Some(fvk))
             .map_err(|_| Error::malformed())?;
-        parsed
+        // MUST-FIX #4/#2: reuse the cmx-validated note for output recovery.
+        let note = parsed
             .output()
             .verify_note_commitment(parsed.spend())
             .map_err(|_| Error::malformed())?;
@@ -744,13 +826,17 @@ impl Body {
         });
         // lib.rs:692-699.
         let recipient = parsed.output().recipient().ok_or(Error::malformed())?;
-        let recipient_scope = fvk.scope_for_address(&recipient);
+        let recipient_scope = self
+            .scope_classifier
+            .get_or_insert_with(|| IvkCache(fvk.scope_classifier()))
+            .classifier()
+            .scope_for_address(&recipient);
         let outgoing_scope = if recipient_scope == Some(Scope::Internal) {
             Scope::Internal
         } else {
             Scope::External
         };
-        verify_encryption(&parsed, fvk, outgoing_scope)?;
+        verify_encryption(&parsed, fvk, outgoing_scope, &note)?;
         self.records.0[index] = Some(record);
         self.seen += 1;
         // lib.rs:700-716.

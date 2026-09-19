@@ -107,7 +107,7 @@ fn parse_network(value: Obj) -> Result<trezor_ironwood::Network, Error> {
 
 extern "C" fn session_begin(n_args: usize, args: *const Obj) -> Obj {
     let block = |args: &[Obj], _kwargs: &Map| {
-        if args.len() != 8 {
+        if args.len() != 7 {
             return Err(Error::TypeError);
         }
         let network = parse_network(args[1])?;
@@ -116,21 +116,19 @@ extern "C" fn session_begin(n_args: usize, args: *const Obj) -> Obj {
         let maximum_fee = u64::try_from(args[4])?;
         let expiry_window = parse_u32(args[5], c"Invalid expiry window")?;
         let declared_len = usize::try_from(args[6])?;
-        // The seed must be immutable bytes and the region a bytearray, so the two
-        // borrows below cannot alias and the region cannot be a view of something
-        // Python could resize or free under the allocator.
-        if !unsafe { ffi::mp_type_bytes.is_type_of(args[0]) }
-            || !unsafe { ffi::mp_type_bytearray.is_type_of(args[7]) }
-        {
+        // The seed must be immutable bytes.
+        if !unsafe { ffi::mp_type_bytes.is_type_of(args[0]) } {
             return Err(Error::TypeError);
         }
-        // Any earlier request must release its blocks before the region changes.
+        // Any earlier request must release its blocks before the new one begins.
         ironwood_signing::cancel();
-        // SAFETY: no MicroPython code or GC-visible allocation runs while the
-        // buffers are borrowed; the region pointer outlives the borrow by design
-        // (the handler keeps the bytearray referenced until `session_cancel`).
-        let region = unsafe { get_buffer_mut(args[7])? };
-        crate::ironwood_allocator::install_region(region);
+        // Root (or reuse) the boot-lifetime signing region. It is a native
+        // `.buf` static, not a Python object, so nothing needs to be kept
+        // referenced across the session and it survives every session for the
+        // whole boot (fixes cross-session staleness of the Pasta table / orchard
+        // OnceBox caches; docs/decisions/2026-09-18-cross-session-region-lifetime.md).
+        crate::ironwood_allocator::install_region();
+        // SAFETY: the seed is borrowed for this call only and not mutated.
         let seed = unsafe { get_buffer(args[0])? };
         ironwood_signing::begin(
             seed,
@@ -223,6 +221,45 @@ extern "C" fn session_region_high_water() -> Obj {
     unsafe { util::try_or_raise(block) }
 }
 
+/// MEASUREMENT-ONLY per-operation micro-benchmark. Runs `iters` iterations of a
+/// single selected crypto operation over the same `ironwood-sinsemilla`
+/// (computed generators) and `ironwood-pasta-curves` instances the signing path
+/// links, and returns a folded accumulator of every result so nothing is
+/// optimised away. The caller installs the region (Pasta/Sinsemilla allocate)
+/// by passing a bytearray and times the call with `utime.ticks_ms`.
+/// Selector: 0 warmup, 1 note_commitment, 2 sinsemilla_hash, 3 scalar_mul,
+/// 4 commit_ivk. Changes no signing behavior; reached only through the reserved
+/// all-`0xff` diversifier-index bench path in `get_address`.
+extern "C" fn bench(n_args: usize, args: *const Obj) -> Obj {
+    let block = |args: &[Obj], _kwargs: &Map| {
+        if args.len() != 3 {
+            return Err(Error::TypeError);
+        }
+        let selector = parse_u32(args[0], c"Invalid bench selector")?;
+        if !unsafe { ffi::mp_type_bytearray.is_type_of(args[1]) } {
+            return Err(Error::TypeError);
+        }
+        let iters = parse_u32(args[2], c"Invalid bench iterations")?;
+        // The signing region is now a boot-lifetime `.buf` static, so the
+        // caller's bytearray (arg 1) is accepted for API compatibility but
+        // ignored; the bench allocates from the same rooted region signing uses.
+        crate::ironwood_allocator::install_region();
+        let accumulator: u64 = match selector {
+            0 => {
+                trezor_ironwood::bench::warmup();
+                0
+            }
+            1 => trezor_ironwood::bench::note_commitment(iters),
+            2 => trezor_ironwood::bench::sinsemilla_hash(iters),
+            3 => trezor_ironwood::bench::scalar_mul(iters),
+            4 => trezor_ironwood::bench::commit_ivk(iters),
+            _ => return Err(Error::ValueError(c"Invalid bench selector")),
+        };
+        Obj::try_from(accumulator)
+    };
+    unsafe { util::try_with_args_and_kwargs(n_args, args, &Map::EMPTY, block) }
+}
+
 #[no_mangle]
 #[rustfmt::skip]
 pub static mp_module_trezorironwood: Module = obj_module! {
@@ -250,12 +287,11 @@ pub static mp_module_trezorironwood: Module = obj_module! {
     ///     maximum_fee: int,
     ///     expiry_window: int,
     ///     pczt_length: int,
-    ///     region: bytearray,
     /// ) -> None:
     ///     """Start streaming one PCZT for the account derived from the wallet seed.
-    ///     `region` backs every allocation of the signing core on the device and must
-    ///     stay referenced, unresized, until `session_cancel`."""
-    Qstr::MP_QSTR_session_begin => obj_fn_var!(8, 8, session_begin).as_obj(),
+    ///     Allocations of the signing core are carved from a boot-lifetime native
+    ///     region (no caller-provided buffer)."""
+    Qstr::MP_QSTR_session_begin => obj_fn_var!(7, 7, session_begin).as_obj(),
     /// def session_feed(chunk: AnyBytes) -> tuple[int, int, tuple | None]:
     ///     """Consume PCZT bytes. Returns (consumed, kind, payload): kind 0 needs more
     ///     bytes; kind 1 is a payment output to confirm, payload
@@ -277,4 +313,13 @@ pub static mp_module_trezorironwood: Module = obj_module! {
     /// def session_region_high_water() -> int:
     ///     """Bytes of the region used so far (device only; 0 on the emulator)."""
     Qstr::MP_QSTR_session_region_high_water => obj_fn_0!(session_region_high_water).as_obj(),
+    /// def bench(selector: int, region: bytearray, iters: int) -> int:
+    ///     """MEASUREMENT-ONLY. Run `iters` iterations of one crypto operation
+    ///     (0 warmup, 1 note_commitment, 2 sinsemilla_hash, 3 scalar_mul,
+    ///     4 commit_ivk) over the signing path's Sinsemilla/Pallas instances and
+    ///     return a folded accumulator so nothing is optimised away. `region`
+    ///     backs the allocations and must stay referenced, unresized, for the
+    ///     call. Time it with utime.ticks_ms on the Python side. Changes no
+    ///     signing behavior."""
+    Qstr::MP_QSTR_bench => obj_fn_var!(3, 3, bench).as_obj(),
 };

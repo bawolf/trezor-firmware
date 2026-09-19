@@ -11,9 +11,9 @@ unsafe extern "C" {
 }
 
 /// Same entry point as the device allocator so the binding is target-agnostic.
-/// The emulator's Rust statics live in the process heap, which nothing
-/// collects.
-pub fn install_region(_region: &mut [u8]) {}
+/// The emulator delegates to C `malloc`, and its Rust statics live in the
+/// never-collected process heap, so there is no region to install.
+pub fn install_region() {}
 
 /// The C allocator does not report a high-water mark; the emulator has none.
 pub fn region_high_water() -> usize {

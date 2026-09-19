@@ -333,9 +333,18 @@ pub fn flip(value: &mut Value) {
     value[0] = (n ^ 1).into();
 }
 
+/// Largest bundle the synthetic equivalence fixtures construct. Deliberately
+/// fixed and INDEPENDENT of `MAX_ACTIONS`: the Session↔Engine equivalence it
+/// proves is per-action logic that does not vary with the action count, so a
+/// 1..=CORPUS_MAX_ACTIONS sweep is representative. When `MAX_ACTIONS` was raised
+/// 8→32 for 16/32-action signing, this stayed 8 so the equivalence corpus keeps
+/// its 135-case size; 16/32-action parse+sign+verify is proven on the emulator
+/// (host-side pczt verify), not by this host corpus.
+pub const CORPUS_MAX_ACTIONS: usize = 8;
+
 /// Synthetic local-consensus fixture covering every admitted action count.
 pub fn build_actions(outputs: usize) -> Vec<u8> {
-    assert!((1..=8).contains(&outputs));
+    assert!((1..=CORPUS_MAX_ACTIONS).contains(&outputs));
     let mut rng = ChaCha20Rng::from_seed([outputs as u8; 32]);
     let (fvk, _) = keys();
     let other = FullViewingKey::from(&SpendingKey::from_bytes([1; 32]).unwrap());

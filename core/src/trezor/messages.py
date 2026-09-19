@@ -8275,12 +8275,14 @@ if TYPE_CHECKING:
     class ZcashSpendAuthSignatures(protobuf.MessageType):
         transfer_id: "AnyBytes"
         records: "AnyBytes"
+        debug_timings: "AnyBytes | None"
 
         def __init__(
             self,
             *,
             transfer_id: "AnyBytes",
             records: "AnyBytes",
+            debug_timings: "AnyBytes | None" = None,
         ) -> None:
             pass
 

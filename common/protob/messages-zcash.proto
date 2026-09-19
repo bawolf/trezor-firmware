@@ -167,4 +167,10 @@ message ZcashSignedPcztAck {
 message ZcashSpendAuthSignatures {
     required bytes transfer_id = 1;  // the transfer the records belong to
     required bytes records = 2;      // n * 66 bytes, 1 <= n <= 8
+    // MEASUREMENT-ONLY, present in the signing-latency instrumentation build.
+    // An ASCII key=value breakdown of the on-device wall-clock spent per signing
+    // phase (derive/feed/sign), the per-action feed segments, and the region
+    // high-water mark, so a plain host (no DebugLink) can read where the latency
+    // goes. It never carries signing material and is absent from release builds.
+    optional bytes debug_timings = 3;
 }

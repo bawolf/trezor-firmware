@@ -393,10 +393,10 @@ fn corpus() -> Vec<Case> {
             mutate(|v| v["ironwood"]["bsk"] = json!(vec![0u8; 32])),
         ),
     ];
-    for outputs in 1..=MAX_ACTIONS {
+    for outputs in 1..=CORPUS_MAX_ACTIONS {
         corpus.push(case(format!("{outputs} actions"), build_actions(outputs)));
     }
-    for inputs in 1..=MAX_ACTIONS {
+    for inputs in 1..=CORPUS_MAX_ACTIONS {
         let values: Vec<u64> = (0..inputs as u64).map(|i| 100_000 + i * 10_000).collect();
         corpus.push(case(format!("{inputs} inputs"), build_inputs(&values)));
     }

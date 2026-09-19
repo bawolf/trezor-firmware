@@ -31,11 +31,10 @@ def session_begin(
     maximum_fee: int,
     expiry_window: int,
     pczt_length: int,
-    region: bytearray,
 ) -> None:
     """Start streaming one PCZT for the account derived from the wallet seed.
-    `region` backs every allocation of the signing core on the device and must
-    stay referenced, unresized, until `session_cancel`."""
+    Allocations of the signing core are carved from a boot-lifetime native
+    region (no caller-provided buffer)."""
 
 
 # rust/src/micropython/ironwood.rs
@@ -67,3 +66,14 @@ def session_cancel() -> None:
 # rust/src/micropython/ironwood.rs
 def session_region_high_water() -> int:
     """Bytes of the region used so far (device only; 0 on the emulator)."""
+
+
+# rust/src/micropython/ironwood.rs
+def bench(selector: int, region: bytearray, iters: int) -> int:
+    """MEASUREMENT-ONLY. Run `iters` iterations of one crypto operation
+    (0 warmup, 1 note_commitment, 2 sinsemilla_hash, 3 scalar_mul,
+    4 commit_ivk) over the signing path's Sinsemilla/Pallas instances and
+    return a folded accumulator so nothing is optimised away. `region`
+    backs the allocations and must stay referenced, unresized, for the
+    call. Time it with utime.ticks_ms on the Python side. Changes no
+    signing behavior."""

@@ -33,9 +33,13 @@ MAXIMUM_FEE = const(1_000_000)
 EXPIRY_WINDOW = const(100)
 
 # The signing core allocates on the device (Pasta's square-root table plus
-# per-hash temporaries, measured peak 41 KB); the region backing it must be a
-# Python object that stays referenced for the whole session so the collector
-# never frees it under Rust. Sizing is not final (phase-3 report).
+# per-hash temporaries, measured peak 41 KB). The region backing it is a native
+# boot-lifetime `.buf` static owned by the Rust allocator (NOT a Python object),
+# rooted once and reused by every session so Pasta's sqrt table and orchard's
+# OnceBox caches — built once per boot behind Rust statics that point into it —
+# stay valid across sessions (docs/decisions/2026-09-18-cross-session-region-
+# lifetime.md). This value is kept only for the measurement trailer's
+# `region_bytes`; the real size lives in `ironwood_allocator.rs`. Not final.
 REGION_BYTES = const(96 * 1024)
 
 # The historical handler's limits: a host that stalls a chunk is dropped, and
@@ -196,12 +200,9 @@ async def sign_pczt(msg: ZcashSignPczt) -> ZcashSpendAuthSignatures:
         raise wire.ProcessError("Registered workflow required")
     deadline = _cancel_after_deadline(owner)
     loop.schedule(deadline)
-    # Referenced until the native session is cancelled in `finally`.
-    region = bytearray(REGION_BYTES)
     try:
         return await _stream_and_sign(
             wallet_seed,
-            region,
             network,
             account,
             host_reference_height,
@@ -224,7 +225,6 @@ async def sign_pczt(msg: ZcashSignPczt) -> ZcashSpendAuthSignatures:
         finally:
             _cancel_native()
             del wallet_seed
-            del region
 
 
 def _cancel_native() -> None:
@@ -240,7 +240,6 @@ def _cancel_native() -> None:
 
 async def _stream_and_sign(
     wallet_seed: bytes,
-    region: bytearray,
     network: int,
     account: int,
     host_reference_height: int,
@@ -251,6 +250,8 @@ async def _stream_and_sign(
     account_label: str,
     path: str,
 ) -> ZcashSpendAuthSignatures:
+    import utime
+
     from trezor import utils, wire
     from trezor.crypto import random
     from trezor.messages import ZcashPcztAck, ZcashPcztRequest, ZcashSpendAuthSignatures
@@ -258,11 +259,18 @@ async def _stream_and_sign(
         session_approve,
         session_begin,
         session_feed,
+        session_region_high_water,
         session_sign,
     )
 
     from . import ironwood_account
 
+    # MEASUREMENT-ONLY latency instrumentation (signing-latency-instrumentation
+    # build). All phases are Python-driven, so utime.ticks_ms around the native
+    # calls captures the on-device wall-clock spent in each. This times compute
+    # only (the native calls), never the UI/button waits, and does not change
+    # any signing behavior. See docs/decisions/2026-09-18-signing-latency-*.
+    _t0 = utime.ticks_ms()
     session_begin(
         wallet_seed,
         network,
@@ -271,8 +279,10 @@ async def _stream_and_sign(
         MAXIMUM_FEE,
         EXPIRY_WINDOW,
         pczt_length,
-        region,
     )
+    derive_ms = utime.ticks_diff(utime.ticks_ms(), _t0)
+    feed_ms = 0  # cumulative wall-clock inside session_feed (compute only)
+    feed_seg_ms = []  # per-step feed compute, split at each output / the review
     transfer_id = random.bytes(TRANSFER_ID_BYTES)
     offset = 0
     payments = 0
@@ -295,19 +305,23 @@ async def _stream_and_sign(
         while fed < length:
             # One chunk may complete several outputs; each returns separately
             # and the remainder is fed again after its confirmation.
+            _tf = utime.ticks_ms()  # MEASUREMENT-ONLY
             consumed, kind, payload = session_feed(data[fed:])
+            feed_ms += utime.ticks_diff(utime.ticks_ms(), _tf)  # MEASUREMENT-ONLY
             utils.zero_unused_stack()
             fed += consumed
             if kind == _STEP_OUTPUT:
                 _action_index, receiver, value, is_change = payload
                 if is_change:
                     raise wire.ProcessError("Zcash PCZT rejected")
+                feed_seg_ms.append(feed_ms - sum(feed_seg_ms))  # MEASUREMENT-ONLY
                 await _confirm_output(
                     receiver, value, payments, coin_name, account_label, path
                 )
                 payments += 1
                 ironwood_account.require_session(session)
             elif kind == _STEP_REVIEW:
+                feed_seg_ms.append(feed_ms - sum(feed_seg_ms))  # MEASUREMENT-ONLY
                 totals = payload
             elif consumed == 0:
                 raise wire.ProcessError("Zcash PCZT rejected")
@@ -319,10 +333,40 @@ async def _stream_and_sign(
     await _confirm_totals(totals, coin_name, network_label, account_label, path)
     ironwood_account.require_session(session)
     session_approve()
+    _ts = utime.ticks_ms()  # MEASUREMENT-ONLY
     try:
         records = session_sign(wallet_seed)
     finally:
         utils.zero_unused_stack()
+    sign_ms = utime.ticks_diff(utime.ticks_ms(), _ts)  # MEASUREMENT-ONLY
     if type(records) is not bytes or len(records) == 0 or len(records) % RECORD_LEN:
         raise wire.ProcessError("Zcash signing failed")
-    return ZcashSpendAuthSignatures(transfer_id=transfer_id, records=records)
+
+    # MEASUREMENT-ONLY latency trailer. An ASCII key=value breakdown of the
+    # per-phase on-device wall-clock plus the region high-water mark, so a plain
+    # host (no DebugLink) reads where the ~35 s first-review and ~103 s sign time
+    # go. Remove with the proto field before any release. `high_water_bytes` is 0
+    # on the emulator; region_bytes is the full 96 KiB region for the ratio.
+    high_water = session_region_high_water()
+    action_count = payments
+    debug_timings = (
+        "derive_ms=%d feed_ms=%d sign_ms=%d action_count=%d "
+        "feed_seg_ms=%s high_water_bytes=%d region_bytes=%d"
+        % (
+            derive_ms,
+            feed_ms,
+            sign_ms,
+            action_count,
+            ",".join(str(x) for x in feed_seg_ms),
+            high_water,
+            REGION_BYTES,
+        )
+    ).encode()
+    if __debug__:
+        from trezor import log
+
+        log.debug(__name__, "ironwood latency: %s", debug_timings)
+    print("ironwood latency:", debug_timings)  # JTAG/emulator log readout
+    return ZcashSpendAuthSignatures(
+        transfer_id=transfer_id, records=records, debug_timings=debug_timings
+    )

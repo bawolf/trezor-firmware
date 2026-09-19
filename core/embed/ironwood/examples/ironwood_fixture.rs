@@ -76,8 +76,11 @@ fn build(args: &[String]) -> Result<(), String> {
     let account: u32 = args[2].parse().map_err(|_| "bad account")?;
     let height: u32 = args[3].parse().map_err(|_| "bad height")?;
     let outputs: usize = args[4].parse().map_err(|_| "bad outputs")?;
-    if !(1..=8).contains(&outputs) {
-        return Err("outputs must be 1..=8".into());
+    if !(1..=trezor_ironwood::MAX_ACTIONS).contains(&outputs) {
+        return Err(format!(
+            "outputs must be 1..={}",
+            trezor_ironwood::MAX_ACTIONS
+        ));
     }
     let (bytes, summary) = match args[1].as_str() {
         "mainnet" => build_with(MAIN_NETWORK, 133, &seed, account, height, outputs)?,

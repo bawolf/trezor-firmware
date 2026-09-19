@@ -181,6 +181,7 @@ static void _librust_qstrs(void) {
   MP_QSTR_backup_check_allowed;
   MP_QSTR_backup_failed;
   MP_QSTR_backup_needed;
+  MP_QSTR_bench;
   MP_QSTR_bitcoin__commitment_data;
   MP_QSTR_bitcoin__confirm_locktime;
   MP_QSTR_bitcoin__create_proof_of_ownership;

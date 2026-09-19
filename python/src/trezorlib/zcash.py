@@ -66,7 +66,9 @@ TRANSFER_ID_BYTES = 16
 # order, one per real spend, at most one per admitted action.
 POOL_IRONWOOD = 0x03
 RECORD_BYTES = 66
-MAX_ACTIONS = 8
+# Must track the firmware cap (core/embed/ironwood/src/wire.rs MAX_ACTIONS),
+# raised 8 -> 32 for 16/32-action signing.
+MAX_ACTIONS = 32
 
 
 class SpendAuthSignature(t.NamedTuple):
@@ -88,6 +90,10 @@ class SpendAuthSignature(t.NamedTuple):
 MAX_ACCOUNT = 2**31 - 1
 
 _UINT32_MAX = 2**32 - 1
+
+# MEASUREMENT-ONLY: last per-phase timing trailer read from a signing-latency
+# instrumentation firmware (bytes), or None against a release build.
+last_debug_timings: bytes | None = None
 
 _BECH32_CHARSET = "qpzry9x8gf2tvdw0s3jn54khce6mua7l"
 _BECH32_CHARSET_INDEX = {char: index for index, char in enumerate(_BECH32_CHARSET)}
@@ -220,6 +226,12 @@ def sign_pczt(
     )
     request = _expect(session, response, messages.ZcashPcztRequest)
     transfer_id, signatures = _upload(session, request, pczt)
+    # MEASUREMENT-ONLY: the signing-latency instrumentation firmware appends an
+    # ASCII per-phase timing trailer to the response. Stash it so a plain host
+    # runner (no DebugLink) can read the derive/feed/sign/high-water breakdown.
+    # This field is absent from release builds, so this is always a no-op there.
+    global last_debug_timings
+    last_debug_timings = getattr(signatures, "debug_timings", None)
     return _parse_records(session, transfer_id, signatures)
 
 

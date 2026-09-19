@@ -18,12 +18,22 @@ extern crate alloc;
 
 use alloc::vec::Vec;
 
+/// Measurement-only per-operation micro-benchmarks (Sinsemilla vs Pallas
+/// scalar mult). Reached only through the reserved diversifier-index bench path
+/// in `get_address`; changes no signing behavior.
+pub mod bench;
 mod digest;
 mod effects;
 mod error;
+mod prewarm;
 mod session;
 mod stream;
 mod wire;
+
+/// Session-start Pasta square-root table pre-warm (SHOULD-FIX #4); the device
+/// signing handler calls it once after installing the region and before the
+/// per-action loop.
+pub use prewarm::prewarm;
 
 /// Test-only access to bounded wire admission; not a production signing API.
 #[cfg(feature = "test")]
@@ -35,7 +45,6 @@ pub use error::{Error, ErrorCode, Result};
 use orchard::Note;
 use orchard::bundle::BundleVersion;
 use orchard::keys::{FullViewingKey, Scope, SpendAuthorizingKey, SpendValidatingKey};
-use orchard::note::{NoteVersion, Rho};
 use orchard::note_encryption::IronwoodDomain;
 use pczt::Pczt;
 use pczt::roles::low_level_signer::{OrchardParseError, Signer as LowLevelSigner};
@@ -47,10 +56,7 @@ pub use wire::MAX_ACTIONS;
 /// Maximum uploaded or returned PCZT size. A transport enforces this before
 /// allocation; [`Engine::begin`] rechecks the exact assembled bytes.
 pub use wire::MAX_PCZT_BYTES;
-use zcash_note_encryption::{
-    Domain, try_output_recovery_with_ock, try_output_recovery_with_ovk,
-    try_output_recovery_with_pkd_esk,
-};
+use zcash_note_encryption::Domain;
 use zcash_protocol::consensus::{
     BlockHeight, BranchId, MAIN_NETWORK, NetworkConstants, Parameters, TEST_NETWORK,
 };
@@ -663,6 +669,11 @@ fn verify_bundle(
         .map_err(|_| Error::malformed())?;
     let mut output_total = 0;
     let mut nullifiers = Vec::new();
+    // DEDUP LEVER 3: derive external+internal ivk (Commit^ivk) once per bundle.
+    // Keyed on the DEVICE fvk; `verify_nullifier_with_classifier` only applies it
+    // to spends validated under this same fvk (real spends), and falls back to
+    // `fvk.scope_for_address` for dummy spends (MUST-FIX #3).
+    let scope_classifier = fvk.scope_classifier();
     for (index, action) in bundle.actions().iter().enumerate() {
         let spend = action.spend();
         let output = action.output();
@@ -675,10 +686,14 @@ fn verify_bundle(
         nullifiers.push(nullifier);
         action.verify_cv_net().map_err(|_| Error::malformed())?;
         spend
-            .verify_nullifier(Some(fvk))
+            .verify_nullifier_with_classifier(Some(fvk), Some(&scope_classifier))
             .map_err(|_| Error::malformed())?;
         spend.verify_rk(Some(fvk)).map_err(|_| Error::malformed())?;
-        output
+        // MUST-FIX #4/#2: capture the validated output note (cmx already checked
+        // equal to `output.cmx()` inside `verify_note_commitment`) and thread it
+        // into `verify_encryption`, so recovery reuses this exact object instead
+        // of recomputing a second `cmx`.
+        let note = output
             .verify_note_commitment(spend)
             .map_err(|_| Error::malformed())?;
         if input_value == 0 {
@@ -692,13 +707,13 @@ fn verify_bundle(
             signing_indices.push(index);
         }
         let recipient = output.recipient().ok_or(Error::malformed())?;
-        let recipient_scope = fvk.scope_for_address(&recipient);
+        let recipient_scope = scope_classifier.scope_for_address(&recipient);
         let outgoing_scope = if recipient_scope == Some(Scope::Internal) {
             Scope::Internal
         } else {
             Scope::External
         };
-        verify_encryption(action, fvk, outgoing_scope)?;
+        verify_encryption(action, fvk, outgoing_scope, &note)?;
         if output_value == 0 {
             projection.padding_outputs += 1;
             continue;
@@ -736,35 +751,36 @@ fn verify_encryption(
     action: &orchard::pczt::Action,
     fvk: &FullViewingKey,
     outgoing_scope: Scope,
+    // MUST-FIX #4/#2: the already-validated output note, whose commitment
+    // `verify_note_commitment` checked equal to `action.output().cmx()`. Binding
+    // is therefore self-contained: recovery is bound to the cmx-validated note,
+    // not to a separately rebuilt one.
+    note: &Note,
 ) -> Result<()> {
     let output = action.output();
-    let note = Note::from_parts(
-        output.recipient().ok_or(Error::malformed())?,
-        output.value().ok_or(Error::malformed())?,
-        Rho::from_bytes(&action.spend().nullifier().to_bytes())
-            .into_option()
-            .ok_or(Error::malformed())?,
-        output.rseed().ok_or(Error::malformed())?,
-        NoteVersion::V3,
-    )
-    .into_option()
-    .ok_or(Error::malformed())?;
     let domain = IronwoodDomain::for_pczt_action(action);
-    let recovered = try_output_recovery_with_pkd_esk(
+    // MUST-FIX #1: device-local recovery bound to `note` by field comparison.
+    // `recover_output_bound_with_*` take the concrete `IronwoodDomain` and check
+    // `domain.rho == note.rho()` and the domain version policy internally, so the
+    // binding no longer relies on the caller having built `note` from this action.
+    // Zero Sinsemilla.
+    let memo = orchard::note_encryption::recover_output_bound_with_pkd_esk(
         &domain,
-        IronwoodDomain::get_pk_d(&note),
-        IronwoodDomain::derive_esk(&note).ok_or(Error::malformed())?,
+        IronwoodDomain::get_pk_d(note),
+        IronwoodDomain::derive_esk(note).ok_or(Error::malformed())?,
         action,
+        note,
     )
     .ok_or(Error::malformed())?;
-    ensure_malformed(recovered.0 == note && recovered.1 == note.recipient())?;
-    let empty_padding_memo = note.value().inner() == 0 && recovered.2 == PADDING_MEMO;
-    ensure_policy(recovered.2 == EMPTY_MEMO || empty_padding_memo)?;
+    let empty_padding_memo = note.value().inner() == 0 && memo == PADDING_MEMO;
+    ensure_policy(memo == EMPTY_MEMO || empty_padding_memo)?;
     let out_ciphertext = &output.encrypted_note().out_ciphertext;
     if let Some(ock) = output.ock() {
         ensure_malformed(
-            try_output_recovery_with_ock(&domain, ock, action, out_ciphertext)
-                .is_some_and(|result| result == recovered),
+            orchard::note_encryption::recover_output_bound_with_ock(
+                &domain, ock, action, out_ciphertext, note,
+            )
+            .is_some_and(|m| m == memo),
         )?;
     }
     if note.value().inner() > 0 {
@@ -772,14 +788,15 @@ fn verify_encryption(
         // receiver-appropriate device OVK. A host that constructed it with
         // `OvkPolicy::Discard` (`ovk=None`) is intentionally rejected.
         ensure_malformed(
-            try_output_recovery_with_ovk(
+            orchard::note_encryption::recover_output_bound_with_ovk(
                 &domain,
                 &fvk.to_ovk(outgoing_scope),
                 action,
                 action.cv_net(),
                 out_ciphertext,
+                note,
             )
-            .is_some_and(|result| result == recovered),
+            .is_some_and(|m| m == memo),
         )?;
     }
     // The standard Orchard builder creates zero-value padding with `ovk=None`,
