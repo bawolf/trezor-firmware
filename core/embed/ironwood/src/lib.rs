@@ -20,7 +20,10 @@ use alloc::vec::Vec;
 
 /// Measurement-only per-operation micro-benchmarks (Sinsemilla vs Pallas
 /// scalar mult). Reached only through the reserved diversifier-index bench path
-/// in `get_address`; changes no signing behavior.
+/// in `get_address`; changes no signing behavior. Gated behind the
+/// `ironwood-measurement` feature (default-OFF): production builds exclude it
+/// entirely (Fable review R1).
+#[cfg(feature = "ironwood-measurement")]
 pub mod bench;
 mod digest;
 mod effects;

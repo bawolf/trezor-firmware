@@ -221,6 +221,10 @@ extern "C" fn session_cancel() -> Obj {
     Obj::const_none()
 }
 
+/// MEASUREMENT-ONLY region telemetry. Gated behind `ironwood-measurement`
+/// (default-OFF): the returned high-water marks are internal region layout
+/// information and are excluded from production builds (Fable review R1/#2).
+#[cfg(feature = "ironwood-measurement")]
 extern "C" fn session_region_high_water() -> Obj {
     let block = || {
         // (per_session_peak, in_use_at_begin, boot_peak), all in bytes from the
@@ -244,7 +248,10 @@ extern "C" fn session_region_high_water() -> Obj {
 /// by passing a bytearray and times the call with `utime.ticks_ms`.
 /// Selector: 0 warmup, 1 note_commitment, 2 sinsemilla_hash, 3 scalar_mul,
 /// 4 commit_ivk. Changes no signing behavior; reached only through the reserved
-/// all-`0xff` diversifier-index bench path in `get_address`.
+/// all-`0xff` diversifier-index bench path in `get_address`. Gated behind
+/// `ironwood-measurement` (default-OFF): production builds link no bench symbol
+/// and expose no bench binding (Fable review R1).
+#[cfg(feature = "ironwood-measurement")]
 extern "C" fn bench(n_args: usize, args: *const Obj) -> Obj {
     let block = |args: &[Obj], _kwargs: &Map| {
         if args.len() != 3 {
@@ -275,6 +282,71 @@ extern "C" fn bench(n_args: usize, args: *const Obj) -> Obj {
     unsafe { util::try_with_args_and_kwargs(n_args, args, &Map::EMPTY, block) }
 }
 
+// The module is defined twice under mutually-exclusive cfgs. The PRODUCTION
+// variant (default) omits the MEASUREMENT-ONLY `session_region_high_water` and
+// `bench` bindings so no bench symbol links and no region telemetry is reachable
+// (Fable review R1). The MEASUREMENT variant (`ironwood-measurement`) adds those
+// two bindings for on-device op-timing sweeps. The `obj_module!` macro cannot
+// cfg individual entries, so the two shared-plus-extra variants are spelled out;
+// keep the shared entries below in sync between the two.
+
+/// PRODUCTION module (default): no MEASUREMENT-ONLY bindings.
+#[cfg(not(feature = "ironwood-measurement"))]
+#[no_mangle]
+#[rustfmt::skip]
+pub static mp_module_trezorironwood: Module = obj_module! {
+    /// def derive_receiver(
+    ///     seed: AnyBytes,
+    ///     network: int,
+    ///     account: int,
+    ///     diversifier_index: AnyBytes,
+    /// ) -> bytes:
+    ///     """Internal synchronous adapter; seed must come from device wallet state."""
+    Qstr::MP_QSTR_derive_receiver => obj_fn_var!(4, 4, derive_receiver).as_obj(),
+    /// def derive_viewing_key(
+    ///     seed: bytes,
+    ///     network: int,
+    ///     account: int,
+    ///     output: AnyBuffer,
+    /// ) -> None:
+    ///     """Fill a 96-byte Orchard FVK buffer from device wallet state."""
+    Qstr::MP_QSTR_derive_viewing_key => obj_fn_var!(4, 4, derive_viewing_key).as_obj(),
+    /// def session_begin(
+    ///     seed: bytes,
+    ///     network: int,
+    ///     account: int,
+    ///     host_reference_height: int,
+    ///     maximum_fee: int,
+    ///     expiry_window: int,
+    ///     pczt_length: int,
+    /// ) -> None:
+    ///     """Start streaming one PCZT for the account derived from the wallet seed.
+    ///     Allocations of the signing core are carved from a boot-lifetime native
+    ///     region (no caller-provided buffer)."""
+    Qstr::MP_QSTR_session_begin => obj_fn_var!(7, 7, session_begin).as_obj(),
+    /// def session_feed(chunk: AnyBytes) -> tuple[int, int, tuple | None]:
+    ///     """Consume PCZT bytes. Returns (consumed, kind, payload): kind 0 needs more
+    ///     bytes; kind 1 is a payment output to confirm, payload
+    ///     (action_index, receiver, value, is_change); kind 2 is the review, payload
+    ///     (expiry_height, blocks_until_expiry, input_total, payment_total,
+    ///     change_total, fee, padding_outputs, payment_outputs). Unconsumed bytes
+    ///     must be fed again. ValueError: malformed; RuntimeError: rejected."""
+    Qstr::MP_QSTR_session_feed => obj_fn_var!(1, 1, session_feed).as_obj(),
+    /// def session_approve() -> None:
+    ///     """Record consent for the reviewed PCZT; call only after the trusted totals screen."""
+    Qstr::MP_QSTR_session_approve => obj_fn_0!(session_approve).as_obj(),
+    /// def session_sign(seed: bytes) -> bytes:
+    ///     """Sign every real spend and end the session. Returns concatenated
+    ///     66-byte records: pool (0x03) | action_index | signature[64]."""
+    Qstr::MP_QSTR_session_sign => obj_fn_1!(session_sign).as_obj(),
+    /// def session_cancel() -> None:
+    ///     """End the session, if any, and wipe its state."""
+    Qstr::MP_QSTR_session_cancel => obj_fn_0!(session_cancel).as_obj(),
+};
+
+/// MEASUREMENT module (`ironwood-measurement`): adds op-timing + region
+/// telemetry bindings for on-device sweeps. NOT for production.
+#[cfg(feature = "ironwood-measurement")]
 #[no_mangle]
 #[rustfmt::skip]
 pub static mp_module_trezorironwood: Module = obj_module! {
@@ -326,22 +398,22 @@ pub static mp_module_trezorironwood: Module = obj_module! {
     ///     """End the session, if any, and wipe its state."""
     Qstr::MP_QSTR_session_cancel => obj_fn_0!(session_cancel).as_obj(),
     /// def session_region_high_water() -> tuple[int, int, int]:
-    ///     """Region measurement counters, in bytes from the region base
-    ///     (all 0 on the emulator): (per_session_peak, in_use_at_begin,
-    ///     boot_peak). per_session_peak resets at each session_begin, so on an
-    ///     ascending-N single-boot sweep it stays ~flat; in_use_at_begin is the
-    ///     persistent set already allocated when the session began (constant in
-    ///     steady state — any drift is a cross-session leak); boot_peak is the
-    ///     boot-monotone maximum."""
+    ///     """MEASUREMENT-ONLY (ironwood-measurement). Region measurement counters,
+    ///     in bytes from the region base (all 0 on the emulator):
+    ///     (per_session_peak, in_use_at_begin, boot_peak). per_session_peak resets
+    ///     at each session_begin, so on an ascending-N single-boot sweep it stays
+    ///     ~flat; in_use_at_begin is the persistent set already allocated when the
+    ///     session began (constant in steady state — any drift is a cross-session
+    ///     leak); boot_peak is the boot-monotone maximum."""
     Qstr::MP_QSTR_session_region_high_water => obj_fn_0!(session_region_high_water).as_obj(),
     /// def bench(selector: int, region: bytearray, iters: int) -> int:
-    ///     """MEASUREMENT-ONLY. Run `iters` iterations of one crypto operation
-    ///     (0 warmup, 1 note_commitment, 2 sinsemilla_hash, 3 scalar_mul,
-    ///     4 commit_ivk) over the signing path's Sinsemilla/Pallas instances and
-    ///     return a folded accumulator so nothing is optimised away. `region` is
-    ///     accepted for API compatibility but IGNORED: the bench allocates from
-    ///     the same boot-lifetime `.buf` region the signing path installs, so an
-    ///     empty bytearray() is fine. Time it with utime.ticks_ms on the Python
-    ///     side. Changes no signing behavior."""
+    ///     """MEASUREMENT-ONLY (ironwood-measurement). Run `iters` iterations of one
+    ///     crypto operation (0 warmup, 1 note_commitment, 2 sinsemilla_hash,
+    ///     3 scalar_mul, 4 commit_ivk) over the signing path's Sinsemilla/Pallas
+    ///     instances and return a folded accumulator so nothing is optimised away.
+    ///     `region` is accepted for API compatibility but IGNORED: the bench
+    ///     allocates from the same boot-lifetime `.buf` region the signing path
+    ///     installs, so an empty bytearray() is fine. Time it with utime.ticks_ms
+    ///     on the Python side. Changes no signing behavior."""
     Qstr::MP_QSTR_bench => obj_fn_var!(3, 3, bench).as_obj(),
 };
