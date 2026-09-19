@@ -32,6 +32,70 @@ def _derive_receiver(
         utils.zero_unused_stack()
 
 
+def _op_timing_bench() -> str:
+    # MEASUREMENT-ONLY per-operation latency bench (signing-op-timing build).
+    # Times the two candidate per-action verification costs in isolation, so a
+    # hardware run can attribute the ~23 s per real spend to Sinsemilla hashing
+    # versus Pallas scalar multiplication. Each op is one native call timed with
+    # utime.ticks_ms here on the Python side; the native side returns a folded
+    # accumulator so nothing is optimised away. Uses the same computed-generator
+    # Sinsemilla and pinned Pasta the signing path links. Changes no signing
+    # behavior.
+    import utime
+
+    from trezorironwood import bench, session_region_high_water
+
+    # Same 96 KiB region the signing path installs; the bench allocates
+    # (Sinsemilla pads into a Vec<bool>, Pasta builds its sqrt table).
+    region = bytearray(96 * 1024)
+    slow_iters = 6  # Sinsemilla ops cost seconds each under computed generators
+    fast_iters = 200  # scalar mult is milliseconds
+
+    # Warm one-time init (Pasta sqrt table, domain generator derivation) off the
+    # clock so it is not billed to the first timed op.
+    bench(0, region, 1)
+
+    def _time(selector, iters):
+        start = utime.ticks_ms()
+        acc = bench(selector, region, iters)
+        elapsed = utime.ticks_diff(utime.ticks_ms(), start)
+        return elapsed / iters, acc
+
+    nc_ms, nc_acc = _time(1, slow_iters)  # note commitment (hash + blinding)
+    sh_ms, sh_acc = _time(2, slow_iters)  # Sinsemilla hash only
+    sm_ms, sm_acc = _time(3, fast_iters)  # Pallas variable-base scalar mult
+    iv_ms, iv_acc = _time(4, slow_iters)  # commit_ivk (FVK derivation)
+    high_water = session_region_high_water()
+
+    result = (
+        "ironwood op timing slow_iters=%d fast_iters=%d "
+        "note_commitment_ms=%.2f sinsemilla_hash_ms=%.2f blinding_mult_ms=%.2f "
+        "scalar_mul_ms=%.4f commit_ivk_ms=%.2f "
+        "region_high_water=%d region_bytes=%d acc=%d,%d,%d,%d"
+        % (
+            slow_iters,
+            fast_iters,
+            nc_ms,
+            sh_ms,
+            nc_ms - sh_ms,
+            sm_ms,
+            iv_ms,
+            high_water,
+            len(region),
+            nc_acc,
+            sh_acc,
+            sm_acc,
+            iv_acc,
+        )
+    )
+    if __debug__:
+        from trezor import log
+
+        log.debug(__name__, "%s", result)
+    print("ironwood op timing:", result)
+    return result
+
+
 async def get_address(msg: ZcashGetAddress) -> ZcashAddress:
     from trezor import TR, utils, wire
     from trezor.enums import ButtonRequestType
@@ -53,6 +117,13 @@ async def get_address(msg: ZcashGetAddress) -> ZcashAddress:
         network, account
     )
     ironwood_account.validate_diversifier_index(diversifier_index)
+
+    # MEASUREMENT-ONLY: the reserved all-0xff diversifier index never addresses a
+    # real note; it triggers the per-operation latency bench and returns the
+    # timings in a ProcessError instead of deriving an address. Absent from real
+    # address flows and changes no signing behavior.
+    if bytes(diversifier_index) == b"\xff" * 11:
+        raise wire.ProcessError(_op_timing_bench())
 
     seed.raise_if_not_initialized()
     session = ironwood_account.snapshot_session()

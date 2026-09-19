@@ -213,6 +213,18 @@ pub fn begin(
     // Drop the old request first so its blocks return to the region before
     // the new one is carved.
     *active() = None;
+    // SHOULD-FIX #4: pre-warm the persistent Pasta square-root table into the
+    // freshly installed region BEFORE any per-action scratch is allocated. Pasta
+    // builds this ~29.8 KB table lazily behind a Rust `static` the GC never
+    // scans; if it is first built mid-stream (interleaved with transient verify
+    // scratch), the table is left at a high offset when that scratch frees and
+    // splits the region — the fragmentation that faulted the 8-action run (see
+    // RAM-RETENTION-ANALYSIS.md §2, lever R2). `prewarm` roots it at a low,
+    // stable address for the whole session by decompressing one fixed public
+    // point (one `Fp` square root), without the ~2-3 s of Sinsemilla hashing the
+    // old `bench::warmup` wasted here and without rooting the region for process
+    // lifetime. It touches no signing material and changes no signing behavior.
+    trezor_ironwood::prewarm();
     let policy = Policy::new(
         RequestContext::new(network, Account::new(account)?, host_reference_height),
         Limits::new(maximum_fee, expiry_window)?,

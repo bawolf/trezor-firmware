@@ -137,5 +137,5 @@ xbuild = { path = "xbuild" }
 [patch.crates-io]
 # Signing flash probe only: exact-base Sinsemilla computed-generators commit on the user fork, pinned by full SHA.
 sinsemilla = { git = "https://github.com/bawolf/sinsemilla", rev = "6ca88ff52835899c87ff83489b95c5cda887e8a4" }
-# Signing flash probe only: exact-base Orchard direct-scope classifier commit on the user fork, pinned by full SHA.
-orchard = { git = "https://github.com/bawolf/orchard", rev = "19f6100607e9dfacc10f0fe0d4ac84fb79f610c5" }
+# Signing flash probe only: Orchard Sinsemilla-dedup commit on the user fork, pinned by full SHA.
+orchard = { git = "https://github.com/bawolf/orchard", rev = "d4792911986deda16cc3d689a97f316655f08e84" }

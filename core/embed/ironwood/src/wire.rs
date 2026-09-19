@@ -7,7 +7,12 @@ use zcash_protocol::value::MAX_MONEY;
 use crate::{Error, Result};
 
 pub const MAX_PCZT_BYTES: usize = 65_536;
-pub const MAX_ACTIONS: usize = 8;
+// Raised 8 -> 32 to admit 16- and 32-action bundles. The cross-action state is
+// all fixed-capacity `[T; MAX_ACTIONS]` (records ~98 B, nullifiers 32 B, outputs
+// 64 B, signature records 66 B per action), so the retained base grows by only
+// ~+5 KB at CAP=32 and stays O(1) in N; peak RAM is dominated by the single live
+// action's transient working set, not this cap. NEW change pending Fable review.
+pub const MAX_ACTIONS: usize = 32;
 
 #[derive(Clone, Copy)]
 pub(crate) struct Header {

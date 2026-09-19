@@ -124,7 +124,7 @@ def _accept_flow(session: Session, payments: int):
     session.debug.press_yes()
 
 
-@pytest.mark.parametrize("actions", [2, 8])
+@pytest.mark.parametrize("actions", [2, 8, 16, 32])
 def test_streamed_sign_verifies(
     session: Session, fixture_tool: Path, tmp_path: Path, actions: int
 ) -> None:

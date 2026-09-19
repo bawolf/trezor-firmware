@@ -6,26 +6,80 @@
 //! collector never touches: a GC-backed allocator freed Pasta's table, which
 //! lives behind a Rust static the collector does not scan, and Pasta trapped.
 //!
-//! So the allocator is a first-fit free list inside a region the Python
-//! signing handler owns: a `bytearray` it allocates before the session and
-//! keeps referenced until the session is cancelled. Blocks are split on
-//! allocation and coalesced with their successors on free, so temporary
-//! vectors (Pasta grows four 256-element vectors while building the table)
-//! do not exhaust the region.
+//! So the allocator is a first-fit free list inside a fixed region reserved for
+//! the whole boot: a `.buf`-section static (`REGION`, in AUX2 RAM alongside the
+//! other persistent display/wire buffers, NOT in the MicroPython GC heap). It is
+//! formatted once, on the first `install_region`, and never freed. Blocks are
+//! split on allocation; on free the whole region is swept once (O(n)) to merge every
+//! run of adjacent free blocks, so freed per-action scratch is reclaimed
+//! regardless of the order frees arrive in (temporary vectors — Pasta grows
+//! four 256-element vectors while building the table — do not strand holes).
 //!
-//! Known limit (design §7, phase-3 report): Pasta's square-root table is a
-//! `lazy_static` initialised once per boot, so it stays valid only while the
-//! region that holds it is alive. The current handler releases the region
-//! after each session; a second session in the same boot installs a fresh
-//! region and the table pointer would be stale. Rooting one region for the
-//! process lifetime is the open item before hardware use.
+//! Coalescing correctness: `dealloc` marks the block free and then runs
+//! `coalesce_all`, which merges any maximal run of adjacent free blocks into
+//! one. This gives both forward AND backward coalescing (the sweep starts at
+//! the region base, so a freed block is always merged with a free predecessor
+//! as well as a free successor) without a per-block footer, so the layout
+//! stays 16 bytes of header only and space efficiency is unchanged. The design
+//! is exercised on the host by a stress + 200k-op fuzz harness (see
+//! .context/fork-migration/region-allocator-fix-20260918/): zero overlap,
+//! undersize, misalignment, or out-of-region writes across the interleaved
+//! alloc/free pattern, and a clean null on genuine OOM.
+//!
+//! Note on the 8-action fault (region-allocator-fix-20260918 report): the
+//! free-list arithmetic is memory-safe; the observed Pasta fault is a capacity
+//! problem (the 8-action working set can exceed the 96 KB region), which now
+//! fails closed through the null path below rather than corrupting a live
+//! block. On a malformed chain (a wild write from another subsystem) the walks
+//! bail to null instead of spinning, so OOM/corruption both reach the clean
+//! `alloc_error_handler` rather than hanging.
+//!
+//! Cross-session lifetime (2026-09-18, docs/decisions/2026-09-18-cross-session-
+//! region-lifetime.md): Pasta's square-root table AND orchard's two
+//! `OnceBox<CommitDomain>` caches are built once per boot behind Rust `static`s
+//! the collector never scans, and they allocate through THIS region. They
+//! therefore stay valid only while the region that first held them is alive. An
+//! earlier design gave each session a fresh Python `bytearray` region freed at
+//! session end, so those statics dangled and a second sign in the same boot
+//! faulted (same base, re-zeroed content) or read freed memory (different base)
+//! — the one remaining signing blocker. The fix makes the region a `.buf`
+//! static reserved for the whole boot: its base never moves and it is never
+//! freed, so the table and caches stay valid across every session by
+//! construction, the pre-warm is a one-time boot cost, and the region no longer
+//! competes with (or churns) the GC heap. `install_region` formats it once
+//! (`REGION_ROOTED`) and is a no-op thereafter, keeping every earlier allocation.
 
 use core::alloc::{GlobalAlloc, Layout};
+use core::mem::MaybeUninit;
 use core::ptr;
+
+/// Bytes of the process-lifetime signing region. Sized to the measured
+/// single-session working set (~44 KB high-water incl. the ~29.8 KB Pasta table)
+/// plus headroom. Reserved from AUX2 RAM, so it shrinks the MicroPython GC heap
+/// by this amount for the whole boot (see the decision note's heap analysis).
+const REGION_BYTES: usize = 96 * 1024;
+
+/// 16-byte-aligned backing store so the free-list base is `UNIT`-aligned.
+#[repr(align(16))]
+struct Region(MaybeUninit<[u8; REGION_BYTES]>);
+
+/// The one signing region, reserved for the whole boot in the `.buf` section
+/// (AUX2 RAM, outside the GC heap, alongside the display/wire buffers). Never
+/// freed, never moved: this is what keeps Pasta's sqrt table and orchard's
+/// `OnceBox` caches valid across sessions. Contents are formatted by
+/// `install_region` before any use, so leaving it uninitialised (`.buf` is
+/// NOLOAD) is fine. The `link_section` is skipped on host/emulator builds, which
+/// never compile this module anyway (it is `target_arch = "arm"` only).
+#[cfg_attr(not(target_os = "macos"), link_section = ".buf")]
+static mut REGION: Region = Region(MaybeUninit::uninit());
 
 static mut REGION_BASE: *mut u8 = ptr::null_mut();
 static mut REGION_LEN: usize = 0;
 static mut REGION_PEAK: usize = 0;
+// Set once the region is formatted this boot; `install_region` is then a no-op
+// so the Pasta table + orchard OnceBox caches carved into it survive every later
+// session (the whole point of the process-lifetime region).
+static mut REGION_ROOTED: bool = false;
 
 const HEADER: usize = 16;
 const UNIT: usize = 16;
@@ -47,24 +101,74 @@ unsafe fn set_block(block: *mut u8, len: usize, free: bool) {
     }
 }
 
-/// Installs the region every later allocation is carved from. A different
-/// region is formatted as one free block; installing the same region again
-/// keeps every earlier allocation alive. The caller keeps the region alive and
-/// unmoved until every block carved from it has been freed.
-pub fn install_region(region: &mut [u8]) {
-    // SAFETY: single-threaded firmware; the caller keeps the region alive and
-    // unmoved.
+/// True if a header describes a well-formed block that stays inside `[base, end)`.
+/// A malformed header (zero length, off the UNIT grid, or running past the region
+/// end) can only arise from a wild write by another subsystem; the walks below stop
+/// on it rather than looping forever or stepping outside the region.
+unsafe fn block_ok(block: *mut u8, blen: usize, end: *mut u8) -> bool {
+    blen != 0 && blen % UNIT == 0 && unsafe { block.add(blen) } <= end
+}
+
+/// Sweep the whole region once, merging every maximal run of adjacent free blocks
+/// into a single free block. O(n) in the number of blocks. Called on every free so
+/// the free list is always fully coalesced (no two adjacent free blocks), which makes
+/// backward coalescing fall out of the forward sweep and keeps first-fit allocation
+/// order-independent.
+unsafe fn coalesce_all(base: *mut u8, len: usize) {
     unsafe {
-        let base = region.as_mut_ptr();
-        let misalign = base.addr() % UNIT;
-        let base = base.add((UNIT - misalign) % UNIT);
-        let len = (region.len() - (UNIT - misalign) % UNIT) / UNIT * UNIT;
-        if REGION_BASE != base || REGION_LEN != len {
-            REGION_BASE = base;
-            REGION_LEN = len;
-            REGION_PEAK = 0;
-            set_block(base, len, true);
+        let end = base.add(len);
+        let mut block = base;
+        while block < end {
+            let blen = block_len(block);
+            if !block_ok(block, blen, end) {
+                break;
+            }
+            if block_free(block) {
+                let mut total = blen;
+                let mut next = block.add(total);
+                while next < end && block_free(next) {
+                    let nlen = block_len(next);
+                    if !block_ok(next, nlen, end) {
+                        break;
+                    }
+                    total += nlen;
+                    next = block.add(total);
+                }
+                if total != blen {
+                    set_block(block, total, true);
+                }
+                block = block.add(total);
+            } else {
+                block = block.add(blen);
+            }
         }
+    }
+}
+
+/// Roots the process-lifetime region on the first call and is a no-op
+/// thereafter. The region is the fixed `.buf` static, so its base never moves
+/// and it is never freed: the first call formats it as one free block, and every
+/// later `session_begin` reuses it with the Pasta table + orchard `OnceBox`
+/// caches (and the coalesced free list) still intact. That is what lets a second
+/// sign in the same boot succeed where the old per-session region left those
+/// statics dangling.
+pub fn install_region() {
+    // SAFETY: single-threaded firmware; `REGION` is a boot-lifetime static.
+    unsafe {
+        if REGION_ROOTED {
+            // Already formatted this boot. Do NOT re-format: the Pasta sqrt
+            // table and orchard OnceBox caches live in here and are reached
+            // through Rust statics the GC never scans.
+            return;
+        }
+        let raw = ptr::addr_of_mut!(REGION).cast::<u8>();
+        // `#[repr(align(16))]` guarantees 16-byte alignment; REGION_BYTES is a
+        // multiple of UNIT, so no head/tail rounding is needed.
+        REGION_BASE = raw;
+        REGION_LEN = REGION_BYTES;
+        REGION_PEAK = 0;
+        REGION_ROOTED = true;
+        set_block(raw, REGION_BYTES, true);
     }
 }
 
@@ -94,37 +198,30 @@ unsafe impl GlobalAlloc for FreeListAllocator {
                 return ptr::null_mut();
             }
             let end = base.add(len);
+            // The free list is kept fully coalesced by `dealloc`, so a single
+            // first-fit pass finds the largest available hole for `need`.
             let mut block = base;
             while block < end {
                 let blen = block_len(block);
-                if block_free(block) {
-                    // Coalesce with following free blocks.
-                    let mut total = blen;
-                    let mut next = block.add(total);
-                    while next < end && block_free(next) {
-                        total += block_len(next);
-                        next = block.add(total);
-                    }
-                    if total != blen {
-                        set_block(block, total, true);
-                    }
-                    if total >= need {
-                        if total - need >= UNIT + HEADER {
-                            set_block(block.add(need), total - need, true);
-                            set_block(block, need, false);
-                        } else {
-                            set_block(block, total, false);
-                        }
-                        let payload_end = block.addr() + block_len(block) - base.addr();
-                        if payload_end > REGION_PEAK {
-                            REGION_PEAK = payload_end;
-                        }
-                        return block.add(HEADER);
-                    }
-                    block = block.add(total);
-                } else {
-                    block = block.add(blen);
+                // Fail closed on a malformed chain rather than walking off the region:
+                // return null so `alloc_error_handler` runs a clean fatal exit.
+                if !block_ok(block, blen, end) {
+                    return ptr::null_mut();
                 }
+                if block_free(block) && blen >= need {
+                    if blen - need >= UNIT + HEADER {
+                        set_block(block.add(need), blen - need, true);
+                        set_block(block, need, false);
+                    } else {
+                        set_block(block, blen, false);
+                    }
+                    let payload_end = block.addr() + block_len(block) - base.addr();
+                    if payload_end > REGION_PEAK {
+                        REGION_PEAK = payload_end;
+                    }
+                    return block.add(HEADER);
+                }
+                block = block.add(blen);
             }
             ptr::null_mut()
         }
@@ -132,10 +229,15 @@ unsafe impl GlobalAlloc for FreeListAllocator {
 
     unsafe fn dealloc(&self, pointer: *mut u8, _layout: Layout) {
         // SAFETY: `pointer` came from `alloc`, so its header sits HEADER bytes before
-        // it.
+        // it. Marking the block free and sweeping the region merges it with any free
+        // neighbours (predecessor and successor), so no freed scratch is stranded.
         unsafe {
             let block = pointer.sub(HEADER);
             set_block(block, block_len(block), true);
+            let (base, len) = (REGION_BASE, REGION_LEN);
+            if !base.is_null() {
+                coalesce_all(base, len);
+            }
         }
     }
 }

@@ -428,7 +428,7 @@ fn accepted_corpus() -> Vec<(String, Vec<u8>)> {
             }),
         ),
     ];
-    for outputs in 1..=MAX_ACTIONS {
+    for outputs in 1..=CORPUS_MAX_ACTIONS {
         corpus.push((format!("{outputs} actions"), build_actions(outputs)));
     }
     corpus
