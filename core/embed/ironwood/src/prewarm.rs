@@ -27,6 +27,7 @@
 //! wallet material: the fixed throwaway key below is a constant, not a secret.
 
 use core::hint::black_box;
+use core::sync::atomic::{AtomicBool, Ordering};
 
 use ironwood_pasta_curves::group::{Group, GroupEncoding};
 use ironwood_pasta_curves::pallas;
@@ -34,11 +35,25 @@ use orchard::keys::{FullViewingKey, Scope, SpendingKey};
 use orchard::note::{Note, NoteVersion, RandomSeed, Rho};
 use orchard::value::NoteValue;
 
+/// Set once `prewarm` has rooted the caches this boot. The signing region is
+/// boot-rooted (`install_region` formats it exactly once per boot and is a
+/// no-op thereafter), so the Pasta sqrt table and orchard `OnceBox` caches this
+/// builds survive every later session. Re-running the ~1.4 s of constant-input
+/// Sinsemilla / `commit_ivk` work on every `session_begin` is therefore pure
+/// waste; run it once per boot (Fable review #S1).
+static WARMED: AtomicBool = AtomicBool::new(false);
+
 /// Roots the persistent Pasta square-root table AND orchard's two
 /// `OnceBox<CommitDomain>` caches in the freshly installed region before the
-/// per-action loop. Touches no signing material and changes no signing
-/// behaviour.
+/// per-action loop, once per boot. Touches no signing material and changes no
+/// signing behaviour.
 pub fn prewarm() {
+    // Once per boot: the caches built below live in the boot-lifetime region and
+    // persist across sessions, so a second run only costs device time. Single-
+    // threaded firmware, so a relaxed test-and-set is sufficient.
+    if WARMED.swap(true, Ordering::Relaxed) {
+        return;
+    }
     // `to_bytes` on the generator needs no square root; `from_bytes` recovers
     // `y` via `Fp::sqrt`, which builds the lazy `SqrtTables<Fp>` in the region.
     let encoded = pallas::Point::generator().to_bytes();
