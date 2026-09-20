@@ -62,6 +62,8 @@ class TestIronwoodAccount(unittest.TestCase):
         ironwood_account.validate_diversifier_index(memoryview(bytes(11)))
 
     def test_backup_strength_policy(self):
+        from storage import cache as storage_cache
+
         cases = (
             (BackupType.Bip39, b"word " * 11 + b"word", True),
             (BackupType.Bip39, b"word " * 17 + b"word", True),
@@ -70,10 +72,14 @@ class TestIronwoodAccount(unittest.TestCase):
             (BackupType.Slip39_Advanced_Extendable, bytes(32), False),
         )
         for backup_type, secret, expected in cases:
+            # The predicate is memoized in the sessionless cache; on a real
+            # device that cache is cleared whenever the mnemonic can change.
+            storage_cache.get_sessionless_cache().clear()
             with patch(mnemonic, "get_type", lambda: backup_type):
                 with patch(mnemonic, "get_secret", lambda: secret):
                     self.assertEqual(ironwood_account.has_weak_backup(), expected)
 
+        storage_cache.get_sessionless_cache().clear()
         with patch(mnemonic, "get_type", lambda: BackupType.Bip39):
             with patch(mnemonic, "get_secret", lambda: b"invalid"):
                 with self.assertRaises(wire.ProcessError) as raised:
@@ -81,6 +87,34 @@ class TestIronwoodAccount(unittest.TestCase):
                 self.assertEqual(
                     raised.value.message, "Zcash wallet backup is unsupported"
                 )
+
+    def test_weak_backup_predicate_is_memoized(self):
+        # Fable R2/V1: the mnemonic secret must not be re-copied onto the GC heap
+        # on every receive/export/sign. The predicate is computed once and cached
+        # in the sessionless cache; only clearing that cache re-reads the secret.
+        from storage import cache as storage_cache
+
+        storage_cache.get_sessionless_cache().clear()
+        reads = []
+
+        def counting_secret():
+            reads.append(1)
+            return b"word " * 11 + b"word"
+
+        with patch(mnemonic, "get_type", lambda: BackupType.Bip39):
+            with patch(mnemonic, "get_secret", counting_secret):
+                self.assertTrue(ironwood_account.has_weak_backup())
+                self.assertTrue(ironwood_account.has_weak_backup())
+                self.assertTrue(ironwood_account.has_weak_backup())
+        # Secret read exactly once despite three queries.
+        self.assertEqual(len(reads), 1)
+
+        # Clearing the cache (as wipe/recovery does) forces a fresh computation.
+        storage_cache.get_sessionless_cache().clear()
+        with patch(mnemonic, "get_type", lambda: BackupType.Bip39):
+            with patch(mnemonic, "get_secret", counting_secret):
+                self.assertTrue(ironwood_account.has_weak_backup())
+        self.assertEqual(len(reads), 2)
 
     def test_legacy_session_identity(self):
         ctx = _Context(b"session-a")

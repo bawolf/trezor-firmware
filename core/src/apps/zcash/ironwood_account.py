@@ -68,7 +68,25 @@ def require_session(identity: SessionIdentity) -> None:
 
 
 def has_weak_backup() -> bool:
-    """Recognize existing backups that ZIP-315 says wallets should warn about."""
+    """Recognize existing backups that ZIP-315 says wallets should warn about.
+
+    The result is device-wide and constant until the mnemonic changes, so it is
+    memoized in the sessionless cache (cleared on wipe/recovery). This keeps the
+    mnemonic secret from being copied onto the GC heap on every receive, export
+    and sign; only the first call per unlock touches it (Fable review R2/V1).
+    """
+    from storage.cache_common import APP_ZCASH_WEAK_BACKUP
+
+    cached = context.cache_get_int(APP_ZCASH_WEAK_BACKUP)
+    if cached is not None:
+        return cached == 1
+
+    weak = _compute_weak_backup()
+    context.cache_set_int(APP_ZCASH_WEAK_BACKUP, 1 if weak else 0)
+    return weak
+
+
+def _compute_weak_backup() -> bool:
     from trezor.enums import BackupType
 
     secret = mnemonic.get_secret()
