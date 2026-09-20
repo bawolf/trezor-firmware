@@ -71,9 +71,14 @@ def has_weak_backup() -> bool:
     """Recognize existing backups that ZIP-315 says wallets should warn about.
 
     The result is device-wide and constant until the mnemonic changes, so it is
-    memoized in the sessionless cache (cleared on wipe/recovery). This keeps the
-    mnemonic secret from being copied onto the GC heap on every receive, export
-    and sign; only the first call per unlock touches it (Fable review R2/V1).
+    memoized in the sessionless cache (cleared on wipe/recovery, NOT on lock, so
+    the cache — and thus the single secret read — is per boot, not per unlock).
+    This keeps the mnemonic secret from being copied onto the GC heap on every
+    receive, export and sign; only the first call per boot touches it (Fable
+    review R2/V1). Residual (deferred, #S2): that one read still allocates an
+    unzeroized GC `bytes` of the whole secret; eliminating it means persisting a
+    public backup-strength flag at `store_mnemonic_secret` time, a cross-app
+    change out of scope here.
     """
     from storage.cache_common import APP_ZCASH_WEAK_BACKUP
 
