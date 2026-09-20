@@ -32,15 +32,16 @@ TRANSFER_ID_BYTES = const(16)
 MAXIMUM_FEE = const(1_000_000)
 EXPIRY_WINDOW = const(100)
 
-# The handler's timeouts. CHUNK_TIMEOUT_MS drops a host that stalls a single
-# chunk. ATTENDED_DEADLINE_MS is an IDLE timeout, not a whole-session cap: it is
-# pushed forward on every activity (each chunk received, each ButtonRequest
-# shown; see `_rearm_deadline`), so it only fires after this much genuine
-# INACTIVITY — a walk-away / unattended device — and never cancels a legitimate
-# long 32-action sign that is actively streaming or being confirmed (Fable
-# review #M2).
+# CHUNK_TIMEOUT_MS drops a host that stalls a single chunk read. There is no
+# bespoke walk-away/idle timeout: like Bitcoin's signer, an unattended or
+# abandoned sign is torn down by Trezor's standard autolock. When the idle timer
+# fires, `lock_manager.lock_device` calls `workflow.close_others()`, which closes
+# this paused workflow; the resulting GeneratorExit runs the `finally` teardown
+# in `sign_pczt` (`session_cancel` drops the native request, wiping its session
+# secrets). ZcashSignPczt is not in `workflow.ALLOW_WHILE_LOCKED`, so
+# `autolock_interrupts_workflow` stays True and the interrupt applies. See
+# .context/product-scaffold/autolock-timeout/REPORT.md for the full trace.
 CHUNK_TIMEOUT_MS = const(5_000)
-ATTENDED_DEADLINE_MS = const(180_000)
 
 # Curated, non-secret native ValueError messages allowed to reach the host
 # verbatim. Any other ValueError (MicroPython unpack, parse_u32, format_amount,
@@ -55,33 +56,6 @@ _STEP_REVIEW = const(2)
 
 RECORD_LEN = const(66)
 ZEC_DECIMALS = const(8)
-
-
-async def _cancel_after_deadline(owner) -> None:
-    # Idle watchdog: sleeps for ATTENDED_DEADLINE_MS, but every activity re-arms
-    # it (`_rearm_deadline` reschedules this task further into the future), so it
-    # only reaches `loop.close(owner)` after that much INACTIVITY. It is not a
-    # whole-session cap (Fable review #M2).
-    from trezor import loop
-
-    await loop.sleep(ATTENDED_DEADLINE_MS)
-    loop.close(owner)
-
-
-def _rearm_deadline(deadline) -> None:
-    import utime
-
-    from trezor import loop
-
-    # Push the idle deadline forward from now. Called on each chunk received and
-    # before each ButtonRequest, so the deadline bounds inactivity at any single
-    # await rather than the whole signing session (Fable review #M2).
-    loop.schedule(
-        deadline,
-        None,
-        utime.ticks_add(utime.ticks_ms(), ATTENDED_DEADLINE_MS),
-        reschedule=True,
-    )
 
 
 async def _call(
@@ -180,7 +154,7 @@ async def _confirm_totals(
 
 
 async def sign_pczt(msg: ZcashSignPczt) -> ZcashSpendAuthSignatures:
-    from trezor import TR, loop, utils, wire
+    from trezor import TR, utils, wire
     from trezor.enums import ButtonRequestType
     from trezor.ui.layouts import show_warning
 
@@ -222,11 +196,6 @@ async def sign_pczt(msg: ZcashSignPczt) -> ZcashSpendAuthSignatures:
     wallet_seed = await seed.get_seed()
     ironwood_account.require_session(session)
 
-    owner = loop.this_task
-    if owner is None:
-        raise wire.ProcessError("Registered workflow required")
-    deadline = _cancel_after_deadline(owner)
-    loop.schedule(deadline)
     try:
         return await _stream_and_sign(
             wallet_seed,
@@ -239,7 +208,6 @@ async def sign_pczt(msg: ZcashSignPczt) -> ZcashSpendAuthSignatures:
             network_label,
             account_label,
             path,
-            deadline,
         )
     except ValueError as exc:
         # Only the two curated native messages reach the host verbatim; any other
@@ -250,13 +218,11 @@ async def sign_pczt(msg: ZcashSignPczt) -> ZcashSpendAuthSignatures:
     except RuntimeError:
         raise wire.ProcessError("Zcash PCZT rejected")
     finally:
-        try:
-            # The deadline task may be closing us right now; it then exits itself.
-            if deadline is not loop.this_task:
-                loop.close(deadline)
-        finally:
-            _cancel_native()
-            del wallet_seed
+        # Runs on normal return, on host-cancel, and on autolock: when the idle
+        # timer closes this workflow the GeneratorExit unwinds through here, so
+        # the native session (and its secrets) is always torn down.
+        _cancel_native()
+        del wallet_seed
 
 
 def _cancel_native() -> None:
@@ -281,7 +247,6 @@ async def _stream_and_sign(
     network_label: str,
     account_label: str,
     path: str,
-    deadline,
 ) -> ZcashSpendAuthSignatures:
     from trezor import utils, wire
     from trezor.crypto import random
@@ -337,8 +302,6 @@ async def _stream_and_sign(
             or len(reply.data) != length
         ):
             raise wire.DataError("Invalid PCZT chunk")
-        # Host activity: re-arm the idle deadline (Fable review #M2).
-        _rearm_deadline(deadline)
         data = memoryview(reply.data)
         del reply
         fed = 0
@@ -358,8 +321,6 @@ async def _stream_and_sign(
                     raise wire.ProcessError("Zcash PCZT rejected")
                 if timings is not None:
                     timings.segment()
-                # New ButtonRequest: re-arm the idle deadline (Fable review #M2).
-                _rearm_deadline(deadline)
                 await _confirm_output(
                     receiver, value, payments, coin_name, account_label, path
                 )
@@ -376,8 +337,6 @@ async def _stream_and_sign(
 
     if totals is None:
         raise wire.ProcessError("Zcash PCZT rejected")
-    # Consent ButtonRequest: re-arm the idle deadline (Fable review #M2).
-    _rearm_deadline(deadline)
     await _confirm_totals(totals, coin_name, network_label, account_label, path)
     ironwood_account.require_session(session)
     session_approve()
