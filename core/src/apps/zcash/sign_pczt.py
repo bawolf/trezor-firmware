@@ -33,14 +33,24 @@ MAXIMUM_FEE = const(1_000_000)
 EXPIRY_WINDOW = const(100)
 
 # CHUNK_TIMEOUT_MS drops a host that stalls a single chunk read. There is no
-# bespoke walk-away/idle timeout: like Bitcoin's signer, an unattended or
-# abandoned sign is torn down by Trezor's standard autolock. When the idle timer
-# fires, `lock_manager.lock_device` calls `workflow.close_others()`, which closes
-# this paused workflow; the resulting GeneratorExit runs the `finally` teardown
-# in `sign_pczt` (`session_cancel` drops the native request, wiping its session
-# secrets). ZcashSignPczt is not in `workflow.ALLOW_WHILE_LOCKED`, so
-# `autolock_interrupts_workflow` stays True and the interrupt applies. See
-# .context/product-scaffold/autolock-timeout/REPORT.md for the full trace.
+# bespoke walk-away/idle timeout: an unattended or abandoned sign is torn down by
+# Trezor's standard autolock, the same mechanism Bitcoin sign_tx relies on. When
+# the idle timer fires, `lock_manager.lock_device` calls `workflow.close_others()`,
+# which closes this paused workflow; the resulting GeneratorExit unwinds through
+# `sign_pczt`'s `finally`, and `_cancel_native()` (`session_cancel`) drops the
+# native request, wiping its session secrets. ZcashSignPczt is not in
+# `workflow.ALLOW_WHILE_LOCKED`, so `autolock_interrupts_workflow` stays True and
+# the interrupt applies.
+#
+# Parity with Bitcoin sign_tx is two-sided. (1) Teardown: an abandoned sign is
+# closed by autolock and its secrets are wiped in the `finally` above. (2)
+# Survival of a legitimate long sign: Bitcoin keeps the idle timer alive across
+# its silent verification phase via `progress.report()` (which reaches
+# `workflow.idle_timer.touch()`); we do the equivalent by touching the idle timer
+# after each verified chunk in `_stream_and_sign` (see there), so autolock does
+# not kill an actively-progressing sign. Unlike Bitcoin we deliberately do NOT
+# set `autolock_interrupts_workflow = False`, because a truly abandoned
+# pre-consent sign must still be torn down.
 CHUNK_TIMEOUT_MS = const(5_000)
 
 # Curated, non-secret native ValueError messages allowed to reach the host
@@ -248,7 +258,7 @@ async def _stream_and_sign(
     account_label: str,
     path: str,
 ) -> ZcashSpendAuthSignatures:
-    from trezor import utils, wire
+    from trezor import utils, wire, workflow
     from trezor.crypto import random
     from trezor.messages import ZcashPcztAck, ZcashPcztRequest, ZcashSpendAuthSignatures
     from trezorironwood import (
@@ -334,6 +344,18 @@ async def _stream_and_sign(
                 raise wire.ProcessError("Zcash PCZT rejected")
         offset += length
         del data
+        # Keep the idle timer alive across the silent verification phase, the way
+        # Bitcoin sign_tx keeps it alive via progress.report(): change/padding/
+        # dummy actions (and the final review) are verified after the last payment
+        # is confirmed and show no layout, so nothing else resets the timer and a
+        # short-autolock device (e.g. T3W1 battery default ~40 s) could otherwise
+        # kill a legitimate in-progress sign. `workflow.idle_timer.touch()` is the
+        # same call ProgressLayout.report makes (trezor/ui/__init__.py). Bounded:
+        # at most MAX_PCZT_BYTES/CHUNK_BYTES (64) chunks, each read capped by
+        # CHUNK_TIMEOUT_MS, so a trickling host cannot extend the sign
+        # indefinitely; a genuine walk-away (parked at a ButtonRequest, or an
+        # abandoned stream caught by CHUNK_TIMEOUT_MS) still reaches autolock.
+        workflow.idle_timer.touch()
 
     if totals is None:
         raise wire.ProcessError("Zcash PCZT rejected")
