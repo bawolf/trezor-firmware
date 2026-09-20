@@ -89,6 +89,11 @@ pub struct Totals {
     pub fee: u64,
     pub padding_outputs: usize,
     pub payment_outputs: usize,
+    /// Total Orchard actions in the bundle (payments + change + padding). This
+    /// is the quantity the MAX_ACTIONS = 32 cap bounds; the handler shows it so
+    /// the user sees the true size of what they authorize, not just the visible
+    /// payment count.
+    pub action_count: usize,
 }
 
 /// One request. Dropped (and so wiped) on `cancel`, on any error, after
@@ -181,6 +186,11 @@ pub enum Failure {
     Policy,
     /// Calls were made out of order, or a derivation input is unusable.
     State,
+    /// The PCZT exceeds a fixed device bound (too many actions, or too large).
+    /// Distinct from `Malformed` so the user sees a comprehensible reason
+    /// instead of a raw "malformed" for an otherwise well-formed but oversized
+    /// transaction (Ironwood action-cap guardrail; MAX_ACTIONS = 32).
+    Capacity,
     /// Signing or entropy failed.
     Signing,
 }
@@ -189,7 +199,8 @@ impl From<trezor_ironwood::ErrorCode> for Failure {
     fn from(code: trezor_ironwood::ErrorCode) -> Self {
         use trezor_ironwood::ErrorCode::*;
         match code {
-            Malformed | Capacity => Self::Malformed,
+            Malformed => Self::Malformed,
+            Capacity => Self::Capacity,
             Policy => Self::Policy,
             State | Internal => Self::State,
             Entropy | Signing => Self::Signing,
@@ -290,6 +301,11 @@ pub fn feed(chunk: &[u8]) -> core::result::Result<(usize, Step), Failure> {
                         .iter()
                         .filter(|output| output.kind == trezor_ironwood::OutputKind::Payment)
                         .count(),
+                    // One Orchard action per output; `outputs` holds every
+                    // payment and change output, `padding_outputs` counts the
+                    // rest. Their sum is the declared action count the wire
+                    // parser capped at MAX_ACTIONS.
+                    action_count: projection.outputs.len() + projection.padding_outputs,
                 };
                 signing.review = Some(review);
                 Step::Review(totals)

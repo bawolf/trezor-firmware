@@ -134,6 +134,7 @@ async def _confirm_totals(
         fee,
         _padding_outputs,
         payment_outputs,
+        action_count,
     ) = totals
     # Bitcoin's totals screen: what leaves the wallet (payments plus fee), the
     # fee, and the source account. The host reference height is a policy input
@@ -148,6 +149,10 @@ async def _confirm_totals(
         fee_items=[
             ("Expires at block", str(expiry_height), None),
             (TR.words__outputs, str(payment_outputs), None),
+            # The full bundle size the device signs (payments + change +
+            # padding), i.e. the count bounded by the 32-action hard cap. Shown
+            # so the user sees the true size, not just the visible payments.
+            ("Total actions", str(action_count), None),
         ],
     )
 
@@ -213,8 +218,12 @@ async def sign_pczt(msg: ZcashSignPczt) -> ZcashSpendAuthSignatures:
             account_label,
             path,
         )
-    except ValueError:
-        raise wire.DataError("Malformed PCZT")
+    except ValueError as exc:
+        # Native ValueError messages are curated and non-secret ("Malformed
+        # PCZT", "Too many transaction actions (max 32)", ...). Propagate the
+        # specific one so an oversized-but-well-formed transaction reports a
+        # comprehensible reason instead of a raw "malformed".
+        raise wire.DataError(str(exc) or "Malformed PCZT")
     except RuntimeError:
         raise wire.ProcessError("Zcash PCZT rejected")
     finally:
