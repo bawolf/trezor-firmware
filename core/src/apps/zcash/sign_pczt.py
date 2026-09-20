@@ -283,8 +283,6 @@ async def _stream_and_sign(
     path: str,
     deadline,
 ) -> ZcashSpendAuthSignatures:
-    import utime
-
     from trezor import utils, wire
     from trezor.crypto import random
     from trezor.messages import ZcashPcztAck, ZcashPcztRequest, ZcashSpendAuthSignatures
@@ -297,12 +295,21 @@ async def _stream_and_sign(
 
     from . import ironwood_account
 
-    # MEASUREMENT-ONLY latency instrumentation (signing-latency-instrumentation
-    # build). All phases are Python-driven, so utime.ticks_ms around the native
-    # calls captures the on-device wall-clock spent in each. This times compute
-    # only (the native calls), never the UI/button waits, and does not change
-    # any signing behavior. See docs/decisions/2026-09-18-signing-latency-*.
-    _t0 = utime.ticks_ms()
+    # Optional MEASUREMENT-ONLY latency instrumentation. `ironwood_measurement`
+    # is frozen only in the `--ironwood-measurement` build (the same feature that
+    # exposes the native bench / region-telemetry bindings); a PRODUCTION build
+    # freezes no such module, so this takes the ImportError path and `timings`
+    # stays None — the signing loop below then runs with no timing hooks at all
+    # and no `utime.ticks_ms` in the hot path (Fable review #M1 / R1).
+    try:
+        from .ironwood_measurement import Timings
+
+        timings = Timings()
+    except ImportError:
+        timings = None
+
+    if timings is not None:
+        timings.begin_start()
     session_begin(
         wallet_seed,
         network,
@@ -312,9 +319,8 @@ async def _stream_and_sign(
         EXPIRY_WINDOW,
         pczt_length,
     )
-    derive_ms = utime.ticks_diff(utime.ticks_ms(), _t0)
-    feed_ms = 0  # cumulative wall-clock inside session_feed (compute only)
-    feed_seg_ms = []  # per-step feed compute, split at each output / the review
+    if timings is not None:
+        timings.begin_done()
     transfer_id = random.bytes(TRANSFER_ID_BYTES)
     offset = 0
     payments = 0
@@ -339,16 +345,19 @@ async def _stream_and_sign(
         while fed < length:
             # One chunk may complete several outputs; each returns separately
             # and the remainder is fed again after its confirmation.
-            _tf = utime.ticks_ms()  # MEASUREMENT-ONLY
+            if timings is not None:
+                timings.feed_start()
             consumed, kind, payload = session_feed(data[fed:])
-            feed_ms += utime.ticks_diff(utime.ticks_ms(), _tf)  # MEASUREMENT-ONLY
+            if timings is not None:
+                timings.feed_done()
             utils.zero_unused_stack()
             fed += consumed
             if kind == _STEP_OUTPUT:
                 _action_index, receiver, value, is_change = payload
                 if is_change:
                     raise wire.ProcessError("Zcash PCZT rejected")
-                feed_seg_ms.append(feed_ms - sum(feed_seg_ms))  # MEASUREMENT-ONLY
+                if timings is not None:
+                    timings.segment()
                 # New ButtonRequest: re-arm the idle deadline (Fable review #M2).
                 _rearm_deadline(deadline)
                 await _confirm_output(
@@ -357,7 +366,8 @@ async def _stream_and_sign(
                 payments += 1
                 ironwood_account.require_session(session)
             elif kind == _STEP_REVIEW:
-                feed_seg_ms.append(feed_ms - sum(feed_seg_ms))  # MEASUREMENT-ONLY
+                if timings is not None:
+                    timings.segment()
                 totals = payload
             elif consumed == 0:
                 raise wire.ProcessError("Zcash PCZT rejected")
@@ -371,66 +381,27 @@ async def _stream_and_sign(
     await _confirm_totals(totals, coin_name, network_label, account_label, path)
     ironwood_account.require_session(session)
     session_approve()
-    _ts = utime.ticks_ms()  # MEASUREMENT-ONLY
+    if timings is not None:
+        timings.sign_start()
     try:
         records = session_sign(wallet_seed)
     finally:
         utils.zero_unused_stack()
-    sign_ms = utime.ticks_diff(utime.ticks_ms(), _ts)  # MEASUREMENT-ONLY
+    if timings is not None:
+        timings.sign_done()
     if type(records) is not bytes or len(records) == 0 or len(records) % RECORD_LEN:
         raise wire.ProcessError("Zcash signing failed")
 
-    # MEASUREMENT-ONLY latency trailer, gated on the ironwood-measurement build.
-    # `session_region_high_water` is bound ONLY in that build (it exposes the
-    # internal region layout to the host), so a PRODUCTION build (default) takes
-    # the ImportError path and returns the signature records with NO timing
-    # trailer and NO console print. The proto `debug_timings` field stays unset
-    # in production, matching its documentation (Fable review #M1).
-    try:
-        from trezorironwood import session_region_high_water
-    except ImportError:
-        # PRODUCTION: no post-consent telemetry.
+    # PRODUCTION (default): no measurement module, so return the signature
+    # records with the proto `debug_timings` field unset, matching its
+    # documentation (Fable review #M1).
+    if timings is None:
         return ZcashSpendAuthSignatures(transfer_id=transfer_id, records=records)
 
-    # MEASUREMENT build only from here. An ASCII key=value breakdown of the
-    # per-phase on-device wall-clock plus the region counters, so a plain host
-    # (no DebugLink) reads where the ~35 s first-review and ~103 s sign time go.
-    #
-    # SWEEP PROTOCOL: run ascending N (2, 4, 8, 16, 32) on ONE boot. session_peak
-    # is per-session (resets at session_begin), so it should stay ~flat (~45,760 B)
-    # across N — that is the O(1)-RAM claim. in_use_at_begin is the persistent
-    # set (Pasta table + orchard OnceBox caches) already allocated when each
-    # session began; after session 1 it must stay CONSTANT — any upward drift is
-    # a cross-session leak. boot_peak is the boot-monotone max (only grows).
-    session_peak, in_use_at_begin, boot_peak = session_region_high_water()
-    # The full boot-lifetime signing region size: the denominator for the
-    # high-water ratios (mirrors ironwood_allocator.rs; measurement-only).
-    region_bytes = 96 * 1024
-    # The full bundle action count (payments + change + padding) from the review
-    # totals, NOT the payment count, so the trailer figure matches the 32-action
-    # guardrail cap (Fable review #S5).
-    action_count = totals[8]
-    debug_timings = (
-        "derive_ms=%d feed_ms=%d sign_ms=%d action_count=%d "
-        "feed_seg_ms=%s session_peak_bytes=%d in_use_at_begin_bytes=%d "
-        "boot_peak_bytes=%d region_bytes=%d"
-        % (
-            derive_ms,
-            feed_ms,
-            sign_ms,
-            action_count,
-            ",".join(str(x) for x in feed_seg_ms),
-            session_peak,
-            in_use_at_begin,
-            boot_peak,
-            region_bytes,
-        )
-    ).encode()
-    if __debug__:
-        from trezor import log
-
-        log.debug(__name__, "ironwood latency: %s", debug_timings)
-    print("ironwood latency:", debug_timings)  # JTAG/emulator log readout
+    # MEASUREMENT build only: attach the per-phase latency + region-counter
+    # trailer. `totals[8]` is the full bundle action count (Fable review #S5).
     return ZcashSpendAuthSignatures(
-        transfer_id=transfer_id, records=records, debug_timings=debug_timings
+        transfer_id=transfer_id,
+        records=records,
+        debug_timings=timings.trailer(totals[8]),
     )

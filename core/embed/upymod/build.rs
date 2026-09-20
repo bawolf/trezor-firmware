@@ -1267,6 +1267,12 @@ impl<'a> MpyBuilder<'a> {
             files.add(src, "trezor/enums/Tezos*.py")?;
 
             files.add(src, "apps/zcash/*.py")?;
+            if !cfg!(feature = "ironwood-measurement") {
+                // MEASUREMENT-ONLY op-timing / latency module: frozen only in
+                // `--ironwood-measurement` builds so production carries no
+                // measurement Python at all (Fable review R1).
+                files.remove(src, "apps/zcash/ironwood_measurement.py");
+            }
 
             files.add(src, "apps/webauthn/*.py")?;
 
