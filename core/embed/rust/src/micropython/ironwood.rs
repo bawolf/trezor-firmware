@@ -91,6 +91,10 @@ extern "C" fn derive_viewing_key(n_args: usize, args: *const Obj) -> Obj {
 fn failure(failure: Failure) -> Error {
     match failure {
         Failure::Malformed => Error::ValueError(c"Malformed PCZT"),
+        // A well-formed but oversized transaction (more than the 32-action cap,
+        // or over the byte limit). Its own comprehensible reason, not a raw
+        // "malformed": the handler surfaces this message to the user.
+        Failure::Capacity => Error::ValueError(c"Too many transaction actions (max 32)"),
         Failure::Policy => Error::RuntimeError(c"PCZT violates device policy"),
         Failure::State => Error::RuntimeError(c"Invalid signing state"),
         Failure::Signing => Error::RuntimeError(c"Signing failed"),
@@ -182,6 +186,7 @@ extern "C" fn session_feed(n_args: usize, args: *const Obj) -> Obj {
                     Obj::try_from(totals.fee)?,
                     Obj::try_from(totals.padding_outputs)?,
                     Obj::try_from(totals.payment_outputs)?,
+                    Obj::try_from(totals.action_count)?,
                 ])?
                 .into(),
             ),
@@ -329,8 +334,9 @@ pub static mp_module_trezorironwood: Module = obj_module! {
     ///     bytes; kind 1 is a payment output to confirm, payload
     ///     (action_index, receiver, value, is_change); kind 2 is the review, payload
     ///     (expiry_height, blocks_until_expiry, input_total, payment_total,
-    ///     change_total, fee, padding_outputs, payment_outputs). Unconsumed bytes
-    ///     must be fed again. ValueError: malformed; RuntimeError: rejected."""
+    ///     change_total, fee, padding_outputs, payment_outputs, action_count).
+    ///     Unconsumed bytes must be fed again. ValueError: malformed / too many
+    ///     actions; RuntimeError: rejected."""
     Qstr::MP_QSTR_session_feed => obj_fn_var!(1, 1, session_feed).as_obj(),
     /// def session_approve() -> None:
     ///     """Record consent for the reviewed PCZT; call only after the trusted totals screen."""
@@ -384,8 +390,9 @@ pub static mp_module_trezorironwood: Module = obj_module! {
     ///     bytes; kind 1 is a payment output to confirm, payload
     ///     (action_index, receiver, value, is_change); kind 2 is the review, payload
     ///     (expiry_height, blocks_until_expiry, input_total, payment_total,
-    ///     change_total, fee, padding_outputs, payment_outputs). Unconsumed bytes
-    ///     must be fed again. ValueError: malformed; RuntimeError: rejected."""
+    ///     change_total, fee, padding_outputs, payment_outputs, action_count).
+    ///     Unconsumed bytes must be fed again. ValueError: malformed / too many
+    ///     actions; RuntimeError: rejected."""
     Qstr::MP_QSTR_session_feed => obj_fn_var!(1, 1, session_feed).as_obj(),
     /// def session_approve() -> None:
     ///     """Record consent for the reviewed PCZT; call only after the trusted totals screen."""

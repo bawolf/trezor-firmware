@@ -491,6 +491,21 @@ fn action_byte_and_money_bounds_rejected() {
     assert!(preflight(&bytes).is_err());
 }
 #[test]
+fn over_action_cap_is_clean_capacity_not_malformed() {
+    // Guardrail: a well-formed bundle with more than MAX_ACTIONS (32) actions
+    // must reject as `Capacity` — a clean, user-comprehensible "too many
+    // actions" class the adapter surfaces as such — and specifically NOT as a
+    // raw `Malformed`. See `ironwood_signing::Failure::Capacity` and the native
+    // `failure()` map for the user-facing message.
+    let over_cap = mutate(|v| {
+        let action = v["ironwood"]["actions"][0].clone();
+        v["ironwood"]["actions"] = vec![action; MAX_ACTIONS + 1].into();
+    });
+    let code = preflight(&over_cap).unwrap_err().code();
+    assert_eq!(code, ErrorCode::Capacity);
+    assert_ne!(code, ErrorCode::Malformed);
+}
+#[test]
 fn every_truncation_and_trailing_byte_is_rejected() {
     let bytes = fixture();
     for n in 0..bytes.len() {
