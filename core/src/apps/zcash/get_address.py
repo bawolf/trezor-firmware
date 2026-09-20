@@ -33,79 +33,18 @@ def _derive_receiver(
 
 
 def _op_timing_bench() -> str | None:
-    # MEASUREMENT-ONLY per-operation latency bench (ironwood-measurement build).
-    # Times the two candidate per-action verification costs in isolation, so a
-    # hardware run can attribute the ~23 s per real spend to Sinsemilla hashing
-    # versus Pallas scalar multiplication. Each op is one native call timed with
-    # utime.ticks_ms here on the Python side; the native side returns a folded
-    # accumulator so nothing is optimised away. Uses the same computed-generator
-    # Sinsemilla and pinned Pasta the signing path links. Changes no signing
-    # behavior.
-    #
-    # The `bench` / `session_region_high_water` native bindings exist ONLY when
-    # the firmware was built with the `ironwood-measurement` Cargo feature. In a
-    # PRODUCTION build (default, feature OFF) they are absent, the import below
-    # raises ImportError, and this returns None so the reserved diversifier index
-    # derives normally instead of running any bench (Fable review R1).
-    import utime
-
+    # MEASUREMENT-ONLY per-operation latency bench. The `ironwood_measurement`
+    # module (which carries the bench body and the native bench /
+    # region-telemetry bindings) is frozen ONLY when the firmware is built with
+    # the `ironwood-measurement` Cargo feature. In a PRODUCTION build (default,
+    # feature OFF) there is no such module, this returns None, and the reserved
+    # 0xff diversifier index derives an address normally instead of running any
+    # bench (Fable review R1).
     try:
-        from trezorironwood import bench, session_region_high_water
+        from .ironwood_measurement import op_timing_bench
     except ImportError:
         return None
-
-    # `bench` ignores this argument (it allocates from the boot-lifetime `.buf`
-    # region the signing path installs), so pass an EMPTY bytearray. A 96 KiB GC
-    # bytearray here would be dead weight — a single contiguous allocation from
-    # the now-138.7 KiB heap that can raise MemoryError under fragmentation for a
-    # reason unrelated to the bench (Fable review SHOULD-FIX #4).
-    region = bytearray()
-    slow_iters = 6  # Sinsemilla ops cost seconds each under computed generators
-    fast_iters = 200  # scalar mult is milliseconds
-
-    # Warm one-time init (Pasta sqrt table, domain generator derivation) off the
-    # clock so it is not billed to the first timed op.
-    bench(0, region, 1)
-
-    def _time(selector, iters):
-        start = utime.ticks_ms()
-        acc = bench(selector, region, iters)
-        elapsed = utime.ticks_diff(utime.ticks_ms(), start)
-        return elapsed / iters, acc
-
-    nc_ms, nc_acc = _time(1, slow_iters)  # note commitment (hash + blinding)
-    sh_ms, sh_acc = _time(2, slow_iters)  # Sinsemilla hash only
-    sm_ms, sm_acc = _time(3, fast_iters)  # Pallas variable-base scalar mult
-    iv_ms, iv_acc = _time(4, slow_iters)  # commit_ivk (FVK derivation)
-    session_peak, _in_use_at_begin, boot_peak = session_region_high_water()
-
-    result = (
-        "ironwood op timing slow_iters=%d fast_iters=%d "
-        "note_commitment_ms=%.2f sinsemilla_hash_ms=%.2f blinding_mult_ms=%.2f "
-        "scalar_mul_ms=%.4f commit_ivk_ms=%.2f "
-        "session_peak=%d boot_peak=%d acc=%d,%d,%d,%d"
-        % (
-            slow_iters,
-            fast_iters,
-            nc_ms,
-            sh_ms,
-            nc_ms - sh_ms,
-            sm_ms,
-            iv_ms,
-            session_peak,
-            boot_peak,
-            nc_acc,
-            sh_acc,
-            sm_acc,
-            iv_acc,
-        )
-    )
-    if __debug__:
-        from trezor import log
-
-        log.debug(__name__, "%s", result)
-    print("ironwood op timing:", result)
-    return result
+    return op_timing_bench()
 
 
 async def get_address(msg: ZcashGetAddress) -> ZcashAddress:

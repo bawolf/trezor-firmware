@@ -166,7 +166,7 @@ message ZcashSignedPcztAck {
  */
 message ZcashSpendAuthSignatures {
     required bytes transfer_id = 1;  // the transfer the records belong to
-    required bytes records = 2;      // n * 66 bytes, 1 <= n <= 8
+    required bytes records = 2;      // n * 66 bytes, 1 <= n <= 32 (MAX_ACTIONS)
     // MEASUREMENT-ONLY, present in the signing-latency instrumentation build.
     // An ASCII key=value breakdown of the on-device wall-clock spent per signing
     // phase (derive/feed/sign), the per-action feed segments, and the region
