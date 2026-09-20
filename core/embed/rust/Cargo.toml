@@ -84,6 +84,10 @@ ironwood = [
     "dep:rand_core",
     "dep:trezor-ironwood",
     "dep:trezor-ironwood-receive",
+    # Flash lever: production firmware links the small-flash computed-generators
+    # Sinsemilla. Host regression (`cargo test -p trezor-ironwood`) omits it and
+    # links the fast table generators instead (see the crate feature comment).
+    "trezor-ironwood/computed-generators",
 ]
 # Measurement-only op-timing scaffolding: the native `bench` binding, the
 # `session_region_high_water` region-telemetry binding, and the reserved-0xff

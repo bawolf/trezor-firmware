@@ -78,7 +78,15 @@ minicbor = { version = "1.0.0", default-features = false }
 num-derive = "0.4.2"
 num-traits = { version = "0.2.19", default-features = false, features = ["libm"] }
 ironwood-pasta-curves = { package = "pasta_curves", version = "=0.5.1", default-features = false, features = ["uninline-portable"] }
-ironwood-sinsemilla = { package = "sinsemilla", version = "=0.1.0", default-features = false, features = ["computed-generators"] }
+# Default (no `computed-generators`) links the FAST precomputed-table Sinsemilla.
+# Production firmware turns computed generators ON via the crate's own
+# `computed-generators` feature (see `ironwood`'s feature wiring in the `rust`
+# crate manifest and `trezor-ironwood`'s `computed-generators` feature): that is
+# the small-flash lever. Leaving it OFF here means host regression builds
+# (`cargo test -p trezor-ironwood`) link the table generators and run in minutes
+# instead of tens of minutes. The streaming Session == reference Engine
+# equivalence is representation-independent, so the corpus is valid under either.
+ironwood-sinsemilla = { package = "sinsemilla", version = "=0.1.0", default-features = false }
 orchard = { version = "=0.15.3", default-features = false }
 trezor-pasta-curves = { package = "pasta_curves", git = "https://github.com/jarys/pasta_curves", rev = "e11dfe4089d0da24483094a99cceb89f32974c17", default-features = false, features = ["uninline-portable"] }
 pareen = { version = "0.3.3", path = "../../rust/pareen", default-features = false, features = ["libm", "easer"] }
