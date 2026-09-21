@@ -17,7 +17,9 @@ use pczt::roles::verifier::{OrchardError, Verifier};
 use serde_json::{Value, json};
 use stream::{ACTION_BUDGET, HEADER_BUDGET, Header, Item, SECTION_BUDGET, Scanner, TRAILER_BUDGET};
 use trezor_ironwood::testing::preflight;
-use trezor_ironwood::{Error, ErrorCode, MAX_ACTIONS, MAX_PCZT_BYTES, Network, Result};
+use trezor_ironwood::{
+    Error, ErrorCode, MAX_ACTIONS, MAX_PCZT_BYTES, Network, Result, USER_ADDRESS_BUDGET,
+};
 use zcash_protocol::memo::MemoBytes;
 use zcash_protocol::value::MAX_MONEY;
 
@@ -25,11 +27,25 @@ const WHOLE: usize = usize::MAX;
 const CHUNKINGS: [usize; 5] = [1, 7, 64, 1024, WHOLE];
 
 /// Longest accepted encodings: minimal canonical varints for the fixed values,
-/// eight-byte varints for money, every optional field present.
-const HEADER_ACCEPTED_MAX: usize = 8 + 3 * 5 + (1 + 5) + 5 + 5 + 1 + 1 + 3 + 1 + 1;
-const ACTION_ACCEPTED_MAX: usize =
-    9 * 33 + 65 + 2 * 44 + 2 * 9 + 97 + 5 + 2 + 32 + 1 + 582 + 81 + 33;
-const TRAILER_ACCEPTED_MAX: usize = 1 + 8 + 1 + 33 + 1 + 2;
+/// eight-byte varints for money, every optional field present (an empty
+/// Sapling bundle with anchor and `bsk`, a `user_address` at its budget, the
+/// Ironwood `bsk`).
+const HEADER_ACCEPTED_MAX: usize =
+    8 + 3 * 5 + (1 + 5) + 5 + 5 + 1 + 1 + 2 + (1 + 3 + 33 + 33) + 1 + 1;
+const ACTION_ACCEPTED_MAX: usize = 9 * 33
+    + 65
+    + 2 * 44
+    + 2 * 9
+    + 97
+    + 4
+    + 2
+    + 32
+    + 1
+    + 582
+    + 81
+    + 33
+    + (1 + 2 + USER_ADDRESS_BUDGET);
+const TRAILER_ACCEPTED_MAX: usize = 1 + 8 + 1 + 33 + 1 + 1 + 33;
 const _: () = assert!(
     HEADER_ACCEPTED_MAX + MAX_ACTIONS * ACTION_ACCEPTED_MAX + TRAILER_ACCEPTED_MAX
         <= MAX_PCZT_BYTES
@@ -324,6 +340,53 @@ fn with_action(v: &mut Value, index: usize) -> &mut Value {
     &mut v["ironwood"]["actions"][index]
 }
 
+/// The fixture with an empty Sapling bundle, as the Full signer view keeps it:
+/// with or without the default anchor and the host's `bsk`.
+fn sapling_present(anchor: bool, bsk: bool) -> Vec<u8> {
+    mutate(|v| {
+        v["sapling"] = json!({
+            "spends": [],
+            "outputs": [],
+            "value_sum": 0,
+            "anchor": if anchor { json!(vec![0u8; 32]) } else { Value::Null },
+            "bsk": if bsk { json!(vec![9u8; 32]) } else { Value::Null },
+        })
+    })
+}
+
+/// `sapling_present(false, false)` with the byte `offset` past the Sapling
+/// tag overwritten: 1 is the spend count, 2 the output count.
+fn patch_after_sapling_tag(offset: usize, byte: u8) -> Vec<u8> {
+    let absent = fixture();
+    let mut present = sapling_present(false, false);
+    let tag = absent
+        .iter()
+        .zip(&present)
+        .position(|(a, b)| a != b)
+        .unwrap();
+    assert_eq!(present[tag], 1);
+    present[tag + offset] = byte;
+    present
+}
+
+/// A two-byte `user_address` whose first byte is not UTF-8: what postcard's
+/// `String` refuses.
+fn user_address_with_invalid_utf8() -> Vec<u8> {
+    let absent = fixture();
+    let mut present = mutate(|v| {
+        let i = payment(v);
+        with_action(v, i)["output"]["user_address"] = json!("ab");
+    });
+    let tag = absent
+        .iter()
+        .zip(&present)
+        .position(|(a, b)| a != b)
+        .unwrap();
+    assert_eq!(present[tag..tag + 4], [1, 2, b'a', b'b']);
+    present[tag + 2] = 0xff;
+    present
+}
+
 fn accepted_corpus() -> Vec<(String, Vec<u8>)> {
     let mut corpus = vec![
         ("fixture".into(), fixture()),
@@ -384,6 +447,29 @@ fn accepted_corpus() -> Vec<(String, Vec<u8>)> {
                 with_action(v, i)["output"]["ock"] = json!(vec![7; 32]);
             }),
         ),
+        ("sapling present".into(), sapling_present(false, false)),
+        ("sapling full view".into(), sapling_present(true, true)),
+        (
+            "user_address".into(),
+            mutate(|v| {
+                let i = payment(v);
+                with_action(v, i)["output"]["user_address"] = json!("u1recipient");
+            }),
+        ),
+        (
+            "user_address at budget".into(),
+            mutate(|v| {
+                let i = payment(v);
+                with_action(v, i)["output"]["user_address"] =
+                    json!("u".repeat(USER_ADDRESS_BUDGET));
+            }),
+        ),
+        (
+            "bsk present".into(),
+            mutate(|v| v["ironwood"]["bsk"] = json!(vec![0u8; 32])),
+        ),
+        ("change without ovk".into(), build_with_change_without_ovk()),
+        ("stock sdk view".into(), build_stock_sdk_view()),
         (
             "absent dummy signature".into(),
             mutate(|v| {
@@ -484,10 +570,20 @@ fn rejected_corpus() -> Vec<(String, Vec<u8>, ErrorCode)> {
             Policy,
         ),
         (
-            "sapling present".into(),
+            "sapling spend".into(),
+            patch_after_sapling_tag(1, 1),
+            Policy,
+        ),
+        (
+            "sapling output".into(),
+            patch_after_sapling_tag(2, 1),
+            Policy,
+        ),
+        (
+            "sapling value sum".into(),
             mutate(|v| {
                 v["sapling"] = json!({
-                    "spends": [], "outputs": [], "value_sum": 0, "anchor": null, "bsk": null
+                    "spends": [], "outputs": [], "value_sum": 1, "anchor": null, "bsk": null
                 })
             }),
             Policy,
@@ -588,9 +684,17 @@ fn rejected_corpus() -> Vec<(String, Vec<u8>, ErrorCode)> {
             Policy,
         ),
         (
-            "user address".into(),
-            mutate(|v| with_action(v, 0)["output"]["user_address"] = json!("attacker")),
+            "user_address over budget".into(),
+            mutate(|v| {
+                with_action(v, 0)["output"]["user_address"] =
+                    json!("u".repeat(USER_ADDRESS_BUDGET + 1))
+            }),
             Policy,
+        ),
+        (
+            "user_address invalid utf-8".into(),
+            user_address_with_invalid_utf8(),
+            Malformed,
         ),
         (
             "output proprietary".into(),
@@ -615,11 +719,6 @@ fn rejected_corpus() -> Vec<(String, Vec<u8>, ErrorCode)> {
         (
             "zkproof present".into(),
             mutate(|v| v["ironwood"]["zkproof"] = json!(vec![0u8; 4])),
-            Policy,
-        ),
-        (
-            "bsk present".into(),
-            mutate(|v| v["ironwood"]["bsk"] = json!(vec![0u8; 32])),
             Policy,
         ),
     ];
@@ -669,13 +768,13 @@ fn varint(mut value: u64) -> Vec<u8> {
 
 #[test]
 fn budgets_bound_the_grammar() {
-    assert_eq!(HEADER_BUDGET, 94);
-    assert_eq!(ACTION_BUDGET, 1349);
-    assert_eq!(TRAILER_BUDGET, 57);
+    assert_eq!(HEADER_BUDGET, 190);
+    assert_eq!(ACTION_BUDGET, 1870);
+    assert_eq!(TRAILER_BUDGET, 89);
     assert_eq!(SECTION_BUDGET, ACTION_BUDGET);
-    assert_eq!(HEADER_ACCEPTED_MAX, 46);
-    assert_eq!(ACTION_ACCEPTED_MAX, 1301);
-    assert_eq!(TRAILER_ACCEPTED_MAX, 46);
+    assert_eq!(HEADER_ACCEPTED_MAX, 115);
+    assert_eq!(ACTION_ACCEPTED_MAX, 1815);
+    assert_eq!(TRAILER_ACCEPTED_MAX, 78);
     for (name, bytes) in accepted_corpus() {
         let scanned = scan(&bytes, WHOLE).unwrap();
         let sections = &scanned.sections;
@@ -791,13 +890,36 @@ fn overlong_varints_before_a_verdict_keep_wire_scan_verdicts() {
 
     let mut header = wide();
     header.extend(&ten_byte); // proprietary count: nonzero
-    assert!(header.len() > HEADER_ACCEPTED_MAX && header.len() <= HEADER_BUDGET);
+    assert!(header.len() <= HEADER_BUDGET);
     let bytes = [header, rest.to_vec()].concat();
     assert_eq!(preflight(&bytes).unwrap_err(), ErrorCode::Policy);
     assert_same_verdict("wide header, proprietary", &bytes);
 
+    // An empty Sapling bundle with its anchor and `bsk`, as the Full view
+    // keeps it, is the longest admitted header prefix: empty proprietary map,
+    // no transparent bundle, Sapling present with zero spends and outputs,
+    // then (after the value sum) the anchor and `bsk`.
+    let sapling_counts = [0, 0, 1, 0, 0];
+    let sapling_rest = || {
+        let mut bytes = vec![1];
+        bytes.extend([0; 32]);
+        bytes.push(1);
+        bytes.extend([9; 32]);
+        bytes
+    };
     let mut header = wide();
-    header.extend([0, 0, 0, 0, 1]);
+    header.extend(sapling_counts);
+    header.extend(&ten_byte); // sapling value sum: nonzero
+    assert!(header.len() <= HEADER_BUDGET);
+    let bytes = [header, rest.to_vec()].concat();
+    assert_eq!(preflight(&bytes).unwrap_err(), ErrorCode::Policy);
+    assert_same_verdict("wide header, sapling value sum", &bytes);
+
+    let mut header = wide();
+    header.extend(sapling_counts);
+    header.push(0); // sapling value sum
+    header.extend(sapling_rest());
+    header.extend([0, 1]);
     header.extend(&ten_byte); // action count
     assert!(header.len() > HEADER_ACCEPTED_MAX && header.len() <= HEADER_BUDGET);
     let bytes = [header, rest.to_vec()].concat();
@@ -814,14 +936,17 @@ fn overlong_varints_before_a_verdict_keep_wire_scan_verdicts() {
     let anchored = mutate(|v| {
         v["ironwood"]["anchor"] = json!(vec![0; 32]);
         v["ironwood"]["value_sum"][0] = json!(MAX_MONEY);
+        v["ironwood"]["bsk"] = json!(vec![9; 32]);
     });
     let sections = scan(&anchored, WHOLE).unwrap().sections;
     let trailer_start = anchored.len() - sections[sections.len() - 1];
     let note_version = trailer_start + 1 + 8 + 1 + 33;
-    assert_eq!(anchored[note_version..], [1, 0, 0]);
+    assert_eq!(anchored[note_version..note_version + 3], [1, 0, 1]);
+    assert_eq!(anchored.len(), note_version + 3 + 32);
+    let tail = &anchored[note_version + 1..];
     let mut bytes = anchored[..note_version].to_vec();
     bytes.extend(&ten_byte);
-    bytes.extend([0, 0]);
+    bytes.extend(tail);
     assert!(bytes.len() - trailer_start > TRAILER_ACCEPTED_MAX);
     assert!(bytes.len() - trailer_start <= TRAILER_BUDGET);
     assert_eq!(preflight(&bytes).unwrap_err(), ErrorCode::Policy);
@@ -829,7 +954,7 @@ fn overlong_varints_before_a_verdict_keep_wire_scan_verdicts() {
 
     let mut bytes = anchored[..note_version].to_vec();
     bytes.extend([0x81, 0]);
-    bytes.extend([0, 0]);
+    bytes.extend(tail);
     assert_eq!(preflight(&bytes).unwrap_err(), ErrorCode::Malformed);
     assert_same_verdict("wide trailer, overlong one", &bytes);
 }

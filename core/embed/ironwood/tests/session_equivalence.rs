@@ -28,7 +28,7 @@ use trezor_ironwood::{
     Engine, ErrorCode, Event, Network, OutputKind, Policy, Review, ReviewedOutput, Session,
     SignatureRecord,
 };
-pub use trezor_ironwood::{Error, MAX_ACTIONS, MAX_PCZT_BYTES, Result};
+pub use trezor_ironwood::{Error, MAX_ACTIONS, MAX_PCZT_BYTES, Result, USER_ADDRESS_BUDGET};
 use zcash_protocol::memo::MemoBytes;
 use zcash_protocol::value::MAX_MONEY;
 
@@ -104,6 +104,33 @@ fn corpus() -> Vec<Case> {
         },
         case("wrong change ovk", build_with_wrong_change_ovk()),
         case("discarded payment ovk", build_with_discarded_payment_ovk()),
+        case("change without ovk", build_with_change_without_ovk()),
+        case("stock sdk view", build_stock_sdk_view()),
+        case(
+            "sapling full view",
+            mutate(|v| {
+                v["sapling"] = json!({
+                    "spends": [], "outputs": [], "value_sum": 0,
+                    "anchor": vec![0u8; 32], "bsk": vec![9u8; 32]
+                })
+            }),
+        ),
+        case(
+            "sapling value sum",
+            mutate(|v| {
+                v["sapling"] = json!({
+                    "spends": [], "outputs": [], "value_sum": 1, "anchor": null, "bsk": null
+                })
+            }),
+        ),
+        case(
+            "user_address over budget",
+            mutate(|v| {
+                let i = payment(v);
+                with_action(v, i)["output"]["user_address"] =
+                    json!("u".repeat(USER_ADDRESS_BUDGET + 1))
+            }),
+        ),
         case("dummy spend padding", build_with_dummy_spend_padding()),
         case("zero change", build(990_000, 0, MemoBytes::empty(), false)),
         case(

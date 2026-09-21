@@ -59,6 +59,8 @@ pub use wire::MAX_ACTIONS;
 /// Maximum uploaded or returned PCZT size. A transport enforces this before
 /// allocation; [`Engine::begin`] rechecks the exact assembled bytes.
 pub use wire::MAX_PCZT_BYTES;
+/// Longest `output.user_address` string admitted on the wire.
+pub use wire::USER_ADDRESS_BUDGET;
 use zcash_note_encryption::Domain;
 use zcash_protocol::consensus::{
     BlockHeight, BranchId, MAIN_NETWORK, NetworkConstants, Parameters, TEST_NETWORK,
@@ -787,20 +789,38 @@ fn verify_encryption(
         )?;
     }
     if note.value().inner() > 0 {
-        // Every value-bearing output must remain recoverable under the
-        // receiver-appropriate device OVK. A host that constructed it with
-        // `OvkPolicy::Discard` (`ovk=None`) is intentionally rejected.
-        ensure_malformed(
+        let recovers_under = |scope| {
             orchard::note_encryption::recover_output_bound_with_ovk(
                 &domain,
-                &fvk.to_ovk(outgoing_scope),
+                &fvk.to_ovk(scope),
                 action,
                 action.cv_net(),
                 out_ciphertext,
                 note,
             )
-            .is_some_and(|m| m == memo),
-        )?;
+            .is_some_and(|m| m == memo)
+        };
+        match outgoing_scope {
+            // A payment, to a foreign address or to one of the wallet's own
+            // external addresses, must stay recoverable under the device's
+            // external OVK so the wallet can later see what it sent. A host
+            // that built it with `OvkPolicy::Discard` (`ovk=None`) is rejected.
+            Scope::External => ensure_malformed(recovers_under(Scope::External))?,
+            // Change. `outgoing_scope` is `Internal` only when the session's
+            // own scope classifier placed the receiver among the device's
+            // internal addresses, and the note itself is already bound by the
+            // commitment check and the pk_d/esk recovery above, so the wallet
+            // reaches it through its internal IVK and needs no OVK. The stock
+            // SDK default `OvkPolicy::Sender` therefore encrypts change with no
+            // OVK at all (`internal_ovk: None`), and that is admitted. A change
+            // output the external OVK recovers instead was built under the
+            // wrong scope and is still refused.
+            Scope::Internal => {
+                if !recovers_under(Scope::Internal) {
+                    ensure_malformed(!recovers_under(Scope::External))?;
+                }
+            }
+        }
     }
     // The standard Orchard builder creates zero-value padding with `ovk=None`,
     // so its `out_ciphertext` is random and cannot be recovered unless the PCZT

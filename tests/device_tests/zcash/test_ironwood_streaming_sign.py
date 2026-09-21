@@ -67,7 +67,9 @@ def fixture_tool(tmp_path_factory) -> Path:
     return target / "debug" / "examples" / "ironwood_fixture"
 
 
-def _build_fixture(tool: Path, directory: Path, actions: int) -> tuple[bytes, dict]:
+def _build_fixture(
+    tool: Path, directory: Path, actions: int, *options: str
+) -> tuple[bytes, dict]:
     out = directory / f"fixture-{actions}.pczt"
     summary = subprocess.run(
         [
@@ -79,6 +81,7 @@ def _build_fixture(tool: Path, directory: Path, actions: int) -> tuple[bytes, di
             str(HOST_HEIGHT),
             str(actions),
             str(out),
+            *options,
         ],
         check=True,
         capture_output=True,
@@ -146,6 +149,34 @@ def test_streamed_sign_verifies(
     assert "verified 1 signature(s)" in _verify(
         fixture_tool, tmp_path, actions, signatures
     )
+
+
+@pytest.mark.parametrize("view", ["full", "sdk"])
+def test_stock_sdk_view_signs(
+    session: Session, fixture_tool: Path, tmp_path: Path, view: str
+) -> None:
+    """What a stock-SDK wallet hands over unmodified signs.
+
+    `full` is `redact_pczt_for_signer(SignerView::Full)` (the empty Sapling
+    bundle keeps its anchor and bsk, the Ironwood bsk stays); `sdk` adds the
+    SDK's default `OvkPolicy::Sender` (change encrypted with no OVK) and the
+    recipient string stamped on every payment as `user_address`. The review is
+    the same as for the device-profile redaction: the payments, then totals.
+    """
+    pczt, summary = _build_fixture(fixture_tool, tmp_path, 4, f"view={view}")
+    payments = len(summary["payments"])
+    assert summary["shape"] == {
+        "sapling_present": True,
+        "ironwood_bsk_present": True,
+        "user_addresses": payments if view == "sdk" else 0,
+    }
+
+    with session.test_ctx as client:
+        client.set_input_flow(_accept_flow(session, payments))
+        signatures = zcash.sign_pczt(session, pczt, NETWORK, ACCOUNT, HOST_HEIGHT)
+
+    assert len(signatures) == 1
+    assert "verified 1 signature(s)" in _verify(fixture_tool, tmp_path, 4, signatures)
 
 
 def test_device_fvk_matches_fixture(

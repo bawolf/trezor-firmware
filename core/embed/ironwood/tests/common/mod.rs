@@ -132,10 +132,50 @@ pub fn build_with_wrong_change_ovk() -> Vec<u8> {
         MemoBytes::empty(),
         43,
         OutputPolicy {
-            change_ovk_scope: Scope::External,
+            change_ovk_scope: Some(Scope::External),
             ..OutputPolicy::standard(false)
         },
     )
+}
+
+/// Change encrypted with no OVK at all: what the stock SDK's default
+/// `OvkPolicy::Sender` builds (`internal_ovk: None`).
+pub fn build_with_change_without_ovk() -> Vec<u8> {
+    build_with_network(
+        local_network(),
+        600_000,
+        390_000,
+        MemoBytes::empty(),
+        45,
+        OutputPolicy {
+            change_ovk_scope: None,
+            ..OutputPolicy::standard(false)
+        },
+    )
+}
+
+/// The bytes a stock-SDK wallet hands over unmodified: `OvkPolicy::Sender`
+/// change, `redact_pczt_for_signer(Full)` (the empty Sapling bundle keeps its
+/// anchor and `bsk`, the Ironwood `bsk` stays) and the recipient string the
+/// wallet showed its user stamped on the payment as `user_address`.
+pub fn build_stock_sdk_view() -> Vec<u8> {
+    let bytes = build_with_network(
+        local_network(),
+        600_000,
+        390_000,
+        MemoBytes::empty(),
+        47,
+        OutputPolicy {
+            change_ovk_scope: None,
+            full_view: true,
+            ..OutputPolicy::standard(false)
+        },
+    );
+    let mut value = json(&bytes);
+    let i = payment(&value);
+    value["ironwood"]["actions"][i]["output"]["user_address"] =
+        serde_json::Value::String("u1stocksdkrecipientstringshowntotheuser".into());
+    encode(value)
 }
 
 pub fn build_with_discarded_payment_ovk() -> Vec<u8> {
@@ -167,7 +207,11 @@ pub fn build_with_dummy_spend_padding() -> Vec<u8> {
 struct OutputPolicy {
     self_payment: bool,
     payment_ovk_scope: Option<Scope>,
-    change_ovk_scope: Scope,
+    change_ovk_scope: Option<Scope>,
+    /// Keep what `redact_pczt_for_signer(Full)` keeps (the empty Sapling
+    /// bundle with its anchor and `bsk`, the Ironwood `bsk`) instead of the
+    /// device-profile redaction `finish` applies.
+    full_view: bool,
 }
 
 impl OutputPolicy {
@@ -175,7 +219,8 @@ impl OutputPolicy {
         Self {
             self_payment,
             payment_ovk_scope: Some(Scope::External),
-            change_ovk_scope: Scope::Internal,
+            change_ovk_scope: Some(Scope::Internal),
+            full_view: false,
         }
     }
 }
@@ -244,23 +289,49 @@ fn build_with_network<P: Parameters>(
     if change > 0 {
         builder
             .add_ironwood_output::<zip317::FeeError>(
-                Some(fvk.to_ovk(output_policy.change_ovk_scope)),
+                output_policy
+                    .change_ovk_scope
+                    .map(|scope| fvk.to_ovk(scope)),
                 fvk.address_at(1u32, Scope::Internal),
                 Zatoshis::from_u64(change).unwrap(),
                 MemoBytes::empty(),
             )
             .unwrap();
     }
-    finish(builder, &mut rng)
+    if output_policy.full_view {
+        finish_full_view(builder, &mut rng)
+    } else {
+        finish(builder, &mut rng)
+    }
 }
 
-fn finish<P: Parameters>(builder: DeferredPcztBuilder<P>, rng: &mut ChaCha20Rng) -> Vec<u8> {
+fn finalize<P: Parameters>(builder: DeferredPcztBuilder<P>, rng: &mut ChaCha20Rng) -> Pczt {
     let result = builder
         .build_for_pczt(rng, &zip317::FeeRule::standard())
         .unwrap();
-    let pczt = IoFinalizer::new(Creator::build_from_parts(result.pczt_parts).unwrap())
+    IoFinalizer::new(Creator::build_from_parts(result.pczt_parts).unwrap())
         .finalize_io()
-        .unwrap();
+        .unwrap()
+}
+
+/// `redact_pczt_for_signer(SignerView::Full)` keeps everything the device
+/// grammar now admits and ignores; only the spend witnesses are cleared, as
+/// the Full view clears them.
+fn finish_full_view<P: Parameters>(
+    builder: DeferredPcztBuilder<P>,
+    rng: &mut ChaCha20Rng,
+) -> Vec<u8> {
+    Redactor::new(finalize(builder, rng))
+        .redact_ironwood_with(|mut ironwood| {
+            ironwood.redact_actions(|mut action| action.clear_spend_witness());
+        })
+        .finish()
+        .serialize()
+        .unwrap()
+}
+
+fn finish<P: Parameters>(builder: DeferredPcztBuilder<P>, rng: &mut ChaCha20Rng) -> Vec<u8> {
+    let pczt = finalize(builder, rng);
     Redactor::new(pczt)
         .redact_sapling_with(|mut sapling| {
             sapling.clear_bsk();

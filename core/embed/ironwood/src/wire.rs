@@ -13,6 +13,11 @@ pub const MAX_PCZT_BYTES: usize = 65_536;
 // ~+5 KB at CAP=32 and stays O(1) in N; peak RAM is dominated by the single live
 // action's transient working set, not this cap. NEW change pending Fable review.
 pub const MAX_ACTIONS: usize = 32;
+/// Longest `output.user_address` admitted, in bytes. The stock SDK stamps the
+/// ZIP-321 recipient string on every payment output; a unified address with
+/// every receiver type is about 213 characters, so this bounds the scanner's
+/// section buffer without refusing any real address.
+pub const USER_ADDRESS_BUDGET: usize = 512;
 
 #[derive(Clone, Copy)]
 pub(crate) struct Header {
@@ -105,6 +110,30 @@ impl<'a> Reader<'a> {
         Ok(())
     }
 
+    /// Absent, or present and empty (`stream.rs::empty_sapling`).
+    fn empty_sapling(&mut self) -> Result<()> {
+        if !self.tag()? {
+            return Ok(());
+        }
+        policy(self.varint()? == 0)?; // spends
+        policy(self.varint()? == 0)?; // outputs
+        policy(self.varint()? == 0)?; // value_sum
+        self.optional(32)?; // anchor
+        self.optional(32)?; // bsk
+        Ok(())
+    }
+
+    /// Bounded UTF-8 string, ignored (`stream.rs::user_address`).
+    fn user_address(&mut self) -> Result<()> {
+        if !self.tag()? {
+            return Ok(());
+        }
+        let length = self.varint()?;
+        policy(length <= USER_ADDRESS_BUDGET as u64)?;
+        let bytes = self.take(length as usize)?;
+        malformed(core::str::from_utf8(bytes).is_ok())
+    }
+
     fn action(&mut self) -> Result<()> {
         self.required(32)?; // cv_net
 
@@ -131,8 +160,8 @@ impl<'a> Reader<'a> {
         self.value()?; // output.value
         self.required(32)?; // output.rseed
         self.optional(32)?; // output.ock
-        self.absent()?;
-        self.absent()?;
+        self.absent()?; // output.zip32_derivation
+        self.user_address()?;
         self.empty_map()?;
 
         self.required(32)?; // rcv
@@ -156,9 +185,9 @@ pub(crate) fn scan(bytes: &[u8]) -> Result<Header> {
     };
     policy(r.byte()? == 0)?;
     r.empty_map()?;
-    r.absent()?;
-    r.absent()?;
-    r.absent()?;
+    r.absent()?; // transparent
+    r.empty_sapling()?;
+    r.absent()?; // orchard
     policy(r.tag()?)?;
     let count = r.varint()?;
     if count == 0 {
@@ -175,8 +204,8 @@ pub(crate) fn scan(bytes: &[u8]) -> Result<Header> {
     policy(!r.tag()?)?;
     r.optional(32)?; // anchor, allowed to be deferred in v6
     policy(r.varint()? == 1)?;
-    r.absent()?;
-    r.absent()?;
+    r.absent()?; // zkproof
+    r.optional(32)?; // bsk, ignored
     malformed(r.rest.is_empty())?;
     Ok(header)
 }

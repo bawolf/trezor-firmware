@@ -237,17 +237,25 @@ fn missing_approval_fields_rejected_before_protocol_parsing() {
     }
 }
 #[test]
-fn host_change_labels_and_addresses_rejected() {
+fn host_change_labels_rejected_and_user_address_ignored() {
     let claimed_change = mutate(|v| {
         let i = payment(v);
         v["ironwood"]["actions"][i]["output"]["proprietary"] = json!({"change": [1]});
     });
     assert!(preflight(&claimed_change).is_err());
+    // The stock SDK stamps the recipient string the wallet showed its user on
+    // every payment output. It is admitted and ignored: the projection and
+    // the sighash are those of the same bundle without it, and the receiver
+    // shown is the one the device verified.
     let address = mutate(|v| {
         let i = payment(v);
         v["ironwood"]["actions"][i]["output"]["user_address"] = "attacker change".into();
     });
-    assert!(preflight(&address).is_err());
+    let plain = engine().begin_test(&fixture()).unwrap();
+    let labelled = engine().begin_test(&address).unwrap();
+    assert_eq!(labelled.projection(), plain.projection());
+    assert_eq!(labelled.sighash(), plain.sighash());
+    assert_eq!(labelled.projection().change_total, 390_000);
 }
 #[test]
 fn external_self_payment_is_not_change() {
@@ -282,6 +290,59 @@ fn nonzero_output_with_discarded_ovk_is_rejected() {
             .unwrap_err(),
         ErrorCode::Malformed,
     );
+}
+
+/// The stock SDK default `OvkPolicy::Sender` encrypts change with no OVK
+/// (`internal_ovk: None`). The receiver is classified internal by the device's
+/// own IVK and the note is bound by the commitment and pk_d/esk recovery, so
+/// the output is admitted as change; a payment without an OVK stays refused
+/// (`nonzero_output_with_discarded_ovk_is_rejected`) and change under the
+/// external OVK stays refused
+/// (`internal_change_requires_internal_outgoing_viewing_key`).
+#[test]
+fn change_without_ovk_is_accepted() {
+    let review = engine()
+        .begin_test(&build_with_change_without_ovk())
+        .unwrap();
+    assert_eq!(review.projection().change_total, 390_000);
+    assert_eq!(review.projection().payment_total, 600_000);
+    assert_eq!(review.projection().outputs.len(), 2);
+}
+
+/// What a stock-SDK wallet hands over unmodified signs: change without an OVK,
+/// the Full view's empty Sapling bundle and Ironwood `bsk`, and the
+/// `user_address` on the payment. The `bsk` and the Sapling bundle are outside
+/// the projection and the sighash is the bundle's own.
+#[test]
+fn stock_sdk_full_view_is_accepted_and_signs() {
+    let bytes = build_stock_sdk_view();
+    let view = json(&bytes);
+    assert!(
+        view["sapling"].is_object(),
+        "Full view keeps the Sapling bundle"
+    );
+    assert!(
+        view["ironwood"]["bsk"].is_array(),
+        "Full view keeps the bsk"
+    );
+    let mut e = engine();
+    let review = e.begin_test(&bytes).unwrap();
+    assert_eq!(review.projection().payment_total, 600_000);
+    assert_eq!(review.projection().change_total, 390_000);
+    e.approve(review.token()).unwrap();
+    let signed = e.sign(review.token(), &keys().1).unwrap();
+    assert_eq!(signatures(&signed).len(), 1);
+}
+
+/// The Ironwood `bsk` the Full view keeps is ignored: same projection, same
+/// sighash, same signatures as without it.
+#[test]
+fn ironwood_bsk_is_ignored() {
+    let with_bsk = mutate(|v| v["ironwood"]["bsk"] = json!(vec![7u8; 32]));
+    let plain = engine().begin_test(&fixture()).unwrap();
+    let ignored = engine().begin_test(&with_bsk).unwrap();
+    assert_eq!(ignored.projection(), plain.projection());
+    assert_eq!(ignored.sighash(), plain.sighash());
 }
 #[test]
 fn nonempty_memo_rejected_even_when_encryption_is_valid() {
@@ -418,17 +479,39 @@ fn production_network_branch_height_and_account_are_validated_and_bound() {
     assert_ne!(three.token().context(), prior.token().context());
 }
 #[test]
-fn mixed_pools_and_noncanonical_empty_bundles_rejected() {
-    for pool in ["orchard", "sapling", "transparent"] {
+fn mixed_pools_and_nonempty_bundles_rejected_empty_sapling_admitted() {
+    for pool in ["orchard", "transparent"] {
         let bytes = mutate(|v| {
             v[pool] = match pool {
                 "orchard" => v["ironwood"].clone(),
-                "transparent" => json!({"inputs":[], "outputs":[]}),
-                _ => json!({"spends":[], "outputs":[], "value_sum":0, "anchor":null, "bsk":null}),
+                _ => json!({"inputs":[], "outputs":[]}),
             };
         });
         assert!(preflight(&bytes).is_err(), "accepted {pool}");
     }
+    // An empty Sapling bundle is what the Full signer view keeps, with or
+    // without its anchor and `bsk`; it is admitted and changes nothing.
+    let plain = engine().begin_test(&fixture()).unwrap();
+    for (name, anchor, bsk) in [
+        ("bare", Value::Null, Value::Null),
+        ("full view", json!(vec![0u8; 32]), json!(vec![9u8; 32])),
+    ] {
+        let bytes = mutate(|v| {
+            v["sapling"] =
+                json!({"spends":[], "outputs":[], "value_sum":0, "anchor":anchor, "bsk":bsk});
+        });
+        let review = engine().begin_test(&bytes).unwrap();
+        assert_eq!(review.projection(), plain.projection(), "{name}");
+        assert_eq!(review.sighash(), plain.sighash(), "{name}");
+    }
+    // Anything in it is not.
+    let nonzero_sum = mutate(|v| {
+        v["sapling"] = json!({"spends":[], "outputs":[], "value_sum":1, "anchor":null, "bsk":null});
+    });
+    assert_error(
+        engine().begin_test(&nonzero_sum).unwrap_err(),
+        ErrorCode::Policy,
+    );
 }
 #[test]
 fn dummy_signature_and_key_injection_rejected() {

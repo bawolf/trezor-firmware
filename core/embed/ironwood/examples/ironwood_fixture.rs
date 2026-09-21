@@ -10,9 +10,17 @@
 //! host-computed sighash: the same check a wallet performs.
 //!
 //! ```text
-//! ironwood_fixture build <seed-hex> <mainnet|testnet> <account> <height> <outputs> <out>
+//! ironwood_fixture build <seed-hex> <mainnet|testnet> <account> <height> <outputs> <out> [view=device|full|sdk]
 //! ironwood_fixture verify <pczt-file> <records-file>
 //! ```
+//!
+//! `view` selects what the host hands over: `device` (default) is the
+//! device-profile redaction the desktop driver applies; `full` is
+//! `redact_pczt_for_signer(SignerView::Full)` as a stock SDK wallet emits it
+//! (the empty Sapling bundle keeps its anchor and `bsk`, the Ironwood `bsk`
+//! stays); `sdk` is `full` plus the SDK's default `OvkPolicy::Sender` (change
+//! encrypted with no OVK) and the recipient string stamped on every payment
+//! as `user_address`.
 //!
 //! `build` prints a JSON summary (fvk, payments, fee, expiry) on stdout.
 
@@ -28,6 +36,7 @@ use pczt::roles::creator::Creator;
 use pczt::roles::io_finalizer::IoFinalizer;
 use pczt::roles::redactor::Redactor;
 use pczt::roles::signer::{Signer, SpendAuthSignature};
+use pczt::v2::Pczt as PcztV2;
 use rand_chacha::ChaCha20Rng;
 use rand_chacha::rand_core::SeedableRng;
 use serde_json::json;
@@ -44,9 +53,9 @@ const POOL_IRONWOOD: u8 = 0x03;
 fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().collect();
     let result = match args.get(1).map(String::as_str) {
-        Some("build") if args.len() == 8 => build(&args[2..]),
+        Some("build") if args.len() >= 8 => build(&args[2..]),
         Some("verify") if args.len() == 4 => verify(&args[2], &args[3]),
-        _ => Err("usage: build <seed-hex> <mainnet|testnet> <account> <height> <outputs> <out> | verify <pczt> <records>".into()),
+        _ => Err("usage: build <seed-hex> <mainnet|testnet> <account> <height> <outputs> <out> [view=device|full|sdk] | verify <pczt> <records>".into()),
     };
     match result {
         Ok(()) => ExitCode::SUCCESS,
@@ -71,6 +80,31 @@ fn hex_encode(bytes: &[u8]) -> String {
     bytes.iter().map(|b| format!("{b:02x}")).collect()
 }
 
+/// What the host hands the device (see the module docs).
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum View {
+    Device,
+    Full,
+    Sdk,
+}
+
+struct Options {
+    view: View,
+}
+
+fn parse_options(args: &[String]) -> Result<Options, String> {
+    let mut options = Options { view: View::Device };
+    for arg in args {
+        match arg.split_once('=') {
+            Some(("view", "device")) => options.view = View::Device,
+            Some(("view", "full")) => options.view = View::Full,
+            Some(("view", "sdk")) => options.view = View::Sdk,
+            _ => return Err(format!("unknown option {arg}")),
+        }
+    }
+    Ok(options)
+}
+
 fn build(args: &[String]) -> Result<(), String> {
     let seed = hex_decode(&args[0])?;
     let account: u32 = args[2].parse().map_err(|_| "bad account")?;
@@ -82,9 +116,10 @@ fn build(args: &[String]) -> Result<(), String> {
             trezor_ironwood::MAX_ACTIONS
         ));
     }
+    let options = parse_options(&args[6..])?;
     let (bytes, summary) = match args[1].as_str() {
-        "mainnet" => build_with(MAIN_NETWORK, 133, &seed, account, height, outputs)?,
-        "testnet" => build_with(TEST_NETWORK, 1, &seed, account, height, outputs)?,
+        "mainnet" => build_with(MAIN_NETWORK, 133, &seed, account, height, outputs, &options)?,
+        "testnet" => build_with(TEST_NETWORK, 1, &seed, account, height, outputs, &options)?,
         _ => return Err("network must be mainnet or testnet".into()),
     };
     fs::write(&args[5], bytes).map_err(|e| e.to_string())?;
@@ -92,6 +127,7 @@ fn build(args: &[String]) -> Result<(), String> {
     Ok(())
 }
 
+#[allow(clippy::too_many_arguments)]
 fn build_with<P: Parameters>(
     network: P,
     coin_type: u32,
@@ -99,6 +135,7 @@ fn build_with<P: Parameters>(
     account: u32,
     height: u32,
     outputs: usize,
+    options: &Options,
 ) -> Result<(Vec<u8>, serde_json::Value), String> {
     // `zip32::AccountId` is inferred from the parameter; the crate has no zip32
     // dep.
@@ -154,19 +191,21 @@ fn build_with<P: Parameters>(
     let mut payments = Vec::new();
     for i in 0..outputs {
         let value = (i as u64 + 1) * 100_000;
-        let (recipient, ovk_scope) = if i % 2 == 0 {
+        let (recipient, ovk) = if i % 2 == 0 {
             let address = other.address_at(i as u32, Scope::External);
             payments.push(json!({
                 "receiver": hex_encode(&address.to_raw_address_bytes()),
                 "value": value,
             }));
-            (address, Scope::External)
+            (address, Some(fvk.to_ovk(Scope::External)))
         } else {
-            (fvk.address_at(i as u32, Scope::Internal), Scope::Internal)
+            // `OvkPolicy::Sender`, the SDK default, gives change no OVK.
+            let ovk = (options.view != View::Sdk).then(|| fvk.to_ovk(Scope::Internal));
+            (fvk.address_at(i as u32, Scope::Internal), ovk)
         };
         builder
             .add_ironwood_output::<zip317::FeeError>(
-                Some(fvk.to_ovk(ovk_scope)),
+                ovk,
                 recipient,
                 Zatoshis::from_u64(value).unwrap(),
                 MemoBytes::empty(),
@@ -179,18 +218,63 @@ fn build_with<P: Parameters>(
     let pczt = IoFinalizer::new(Creator::build_from_parts(result.pczt_parts).unwrap())
         .finalize_io()
         .unwrap();
-    let bytes = Redactor::new(pczt)
-        .redact_sapling_with(|mut sapling| {
-            sapling.clear_bsk();
-            sapling.clear_anchor();
-        })
-        .redact_ironwood_with(|mut ironwood| {
-            ironwood.clear_bsk();
+    let redactor = Redactor::new(pczt);
+    let redactor = match options.view {
+        View::Device => redactor
+            .redact_sapling_with(|mut sapling| {
+                sapling.clear_bsk();
+                sapling.clear_anchor();
+            })
+            .redact_ironwood_with(|mut ironwood| {
+                ironwood.clear_bsk();
+                ironwood.redact_actions(|mut action| action.clear_spend_witness());
+            }),
+        // `SignerView::Full` clears only the spend witnesses.
+        View::Full | View::Sdk => redactor.redact_ironwood_with(|mut ironwood| {
             ironwood.redact_actions(|mut action| action.clear_spend_witness());
-        })
-        .finish()
-        .serialize()
-        .unwrap();
+        }),
+    };
+    let mut bytes = redactor.finish().serialize().unwrap();
+    // The v2 JSON view: the low-level fields are private, so `user_address`
+    // is set through it, and the summary reports the shape from it so a test
+    // can assert what it exercised.
+    let v2_view = |bytes: &[u8]| -> Result<serde_json::Value, String> {
+        serde_json::to_value(
+            PcztV2::try_from(Pczt::parse(bytes).map_err(|e| format!("parse: {e:?}"))?)
+                .map_err(|e| format!("v2: {e:?}"))?,
+        )
+        .map_err(|e| e.to_string())
+    };
+    if options.view == View::Sdk {
+        // The SDK stamps the recipient string it showed the user on every
+        // payment output; the device ignores it.
+        let mut view = v2_view(&bytes)?;
+        for action in view["ironwood"]["actions"]
+            .as_array_mut()
+            .ok_or("no ironwood actions")?
+        {
+            let value = action["output"]["value"].as_u64().unwrap_or(0);
+            let external = payments.iter().any(|p| p["value"].as_u64() == Some(value));
+            if value > 0 && external {
+                action["output"]["user_address"] = json!(format!("u1payee{value}"));
+            }
+        }
+        bytes = serde_json::from_value::<PcztV2>(view)
+            .map_err(|e| e.to_string())?
+            .serialize();
+    }
+    let view = v2_view(&bytes)?;
+    let user_addresses = view["ironwood"]["actions"]
+        .as_array()
+        .ok_or("no ironwood actions")?
+        .iter()
+        .filter(|action| action["output"]["user_address"].is_string())
+        .count();
+    let shape = json!({
+        "sapling_present": view["sapling"].is_object(),
+        "ironwood_bsk_present": view["ironwood"]["bsk"].is_array(),
+        "user_addresses": user_addresses,
+    });
 
     let payment_total: u64 = payments.iter().map(|p| p["value"].as_u64().unwrap()).sum();
     let fee = outputs.max(2) as u64 * 5_000;
@@ -202,6 +286,7 @@ fn build_with<P: Parameters>(
         "fee": fee,
         "expiry_height": height + 40,
         "pczt_length": bytes.len(),
+        "shape": shape,
     });
     Ok((bytes, summary))
 }

@@ -14,7 +14,7 @@ use zcash_note_encryption::{ENC_CIPHERTEXT_SIZE, OUT_CIPHERTEXT_SIZE};
 use zcash_protocol::value::MAX_MONEY;
 use zeroize::Zeroize;
 
-use crate::{Error, MAX_ACTIONS, MAX_PCZT_BYTES, Result};
+use crate::{Error, MAX_ACTIONS, MAX_PCZT_BYTES, Result, USER_ADDRESS_BUDGET};
 
 const MAGIC: [u8; 8] = *b"PCZT\x02\0\0\0";
 /// Longest encoding the canonical varint reader consumes before deciding.
@@ -22,35 +22,38 @@ const VARINT: usize = 10;
 const TAG: usize = 1;
 
 /// Header bytes: magic, six `u32` varints (one behind the lock-time tag),
-/// `tx_modifiable`, the proprietary count, three pool tags, the Ironwood tag
-/// and the action count.
-pub const HEADER_BUDGET: usize = MAGIC.len() + 6 * VARINT + TAG + 1 + VARINT + 4 * TAG + VARINT;
+/// `tx_modifiable`, the proprietary count, three pool tags, an empty Sapling
+/// bundle (three zero counts and two optional 32-byte fields), the Ironwood
+/// tag and the action count.
+pub const HEADER_BUDGET: usize =
+    MAGIC.len() + 6 * VARINT + TAG + 1 + VARINT + 4 * TAG + 3 * VARINT + 2 * (TAG + 32) + VARINT;
 
 /// Action bytes: nine tagged 32-byte fields, the optional signature, two
-/// recipients, two values, the FVK, five absent tags, two proprietary counts,
-/// the ephemeral key, the ciphertext variant, both length-prefixed
-/// ciphertexts and the optional OCK.
+/// recipients, two values, the FVK, three absent tags, two proprietary
+/// counts, the ephemeral key, the ciphertext variant, both length-prefixed
+/// ciphertexts, the optional OCK and the optional bounded `user_address`.
 pub const ACTION_BUDGET: usize = 9 * (TAG + 32)
     + (TAG + 64)
     + 2 * (TAG + 43)
     + 2 * (TAG + VARINT)
     + (TAG + 96)
-    + 5 * TAG
+    + 3 * TAG
     + 2 * VARINT
     + 32
     + VARINT
     + (VARINT + ENC_CIPHERTEXT_SIZE)
     + (VARINT + OUT_CIPHERTEXT_SIZE)
-    + (TAG + 32);
+    + (TAG + 32)
+    + (TAG + VARINT + USER_ADDRESS_BUDGET);
 
 /// Trailer bytes: flags, value-sum magnitude and sign, the optional anchor,
-/// the note version and two absent tags.
-pub const TRAILER_BUDGET: usize = 1 + VARINT + TAG + (TAG + 32) + VARINT + 2 * TAG;
+/// the note version, the absent proof tag and the optional `bsk`.
+pub const TRAILER_BUDGET: usize = 1 + VARINT + TAG + (TAG + 32) + VARINT + TAG + (TAG + 32);
 
 /// The largest single section; the scanner's only buffer.
 pub const SECTION_BUDGET: usize = ACTION_BUDGET;
 
-const _: () = assert!(HEADER_BUDGET == 94 && ACTION_BUDGET == 1349 && TRAILER_BUDGET == 57);
+const _: () = assert!(HEADER_BUDGET == 190 && ACTION_BUDGET == 1870 && TRAILER_BUDGET == 89);
 const _: () = assert!(HEADER_BUDGET <= SECTION_BUDGET && TRAILER_BUDGET <= SECTION_BUDGET);
 
 /// The global fields `wire::scan` returns plus the admitted action count.
@@ -157,6 +160,16 @@ impl<'a> Reader<'a> {
         Ok(bytes)
     }
 
+    fn slice(&mut self, n: usize) -> Parse<&'a [u8]> {
+        let (bytes, rest) = self
+            .rest
+            .split_at_checked(n)
+            .ok_or(Halt::More(self.position + n))?;
+        self.rest = rest;
+        self.position += n;
+        Ok(bytes)
+    }
+
     fn byte(&mut self) -> Parse<u8> {
         Ok(self.fixed::<1>()?[0])
     }
@@ -219,6 +232,41 @@ impl<'a> Reader<'a> {
         malformed(self.varint()? == N as u64)?;
         self.fixed()
     }
+
+    /// `Option<sapling::Bundle>`: absent, or present and empty. The stock SDK
+    /// signer view (`redact_pczt_for_signer(Full)`) keeps the empty Sapling
+    /// bundle's anchor and `bsk`, which makes v2 encode the bundle present.
+    /// Spends, outputs and a nonzero value sum stay refused; the anchor and
+    /// `bsk` are skipped. The value sum is a zigzag `i128` whose zero is the
+    /// one-byte encoding; the `u64` reader's ten-byte limit is reached only
+    /// by values this refuses anyway.
+    fn empty_sapling(&mut self) -> Parse<()> {
+        if !self.tag()? {
+            return Ok(());
+        }
+        policy(self.varint()? == 0)?; // spends
+        policy(self.varint()? == 0)?; // outputs
+        policy(self.varint()? == 0)?; // value_sum
+        self.optional::<32>()?; // anchor
+        self.optional::<32>()?; // bsk
+        Ok(())
+    }
+
+    /// `Option<String>`: the recipient string the wallet showed its user, which
+    /// the stock SDK sets on every payment output. Untrusted metadata outside
+    /// the sighash: admitted within [`USER_ADDRESS_BUDGET`], required to be
+    /// UTF-8 as postcard's `String` is, and not used. The device shows the
+    /// receiver it verified, never this string.
+    fn user_address(&mut self) -> Parse<()> {
+        if !self.tag()? {
+            return Ok(());
+        }
+        let length = self.varint()?;
+        policy(length <= USER_ADDRESS_BUDGET as u64)?;
+        let bytes = self.slice(length as usize)?;
+        malformed(core::str::from_utf8(bytes).is_ok())?;
+        Ok(())
+    }
 }
 
 fn header(r: &mut Reader<'_>) -> Parse<Header> {
@@ -232,7 +280,7 @@ fn header(r: &mut Reader<'_>) -> Parse<Header> {
     policy(r.byte()? == 0)?; // tx_modifiable
     r.empty_map()?; // global proprietary
     r.absent()?; // transparent
-    r.absent()?; // sapling
+    r.empty_sapling()?;
     r.absent()?; // orchard
     policy(r.tag()?)?; // ironwood
     let actions = r.varint()?;
@@ -280,7 +328,7 @@ fn action<'a>(r: &mut Reader<'a>) -> Parse<Action<'a>> {
     let output_rseed = r.required::<32>()?;
     let ock = r.optional::<32>()?;
     r.absent()?; // zip32_derivation
-    r.absent()?; // user_address
+    r.user_address()?;
     r.empty_map()?; // proprietary
 
     let rcv = r.required::<32>()?;
@@ -319,7 +367,9 @@ fn trailer<'a>(r: &mut Reader<'a>) -> Parse<Trailer<'a>> {
     let anchor = r.optional::<32>()?;
     policy(r.varint()? == 1)?; // note_version V3
     r.absent()?; // zkproof
-    r.absent()?; // bsk
+    // The host's binding signing key, kept by the Full signer view. The
+    // device never needs it: the host computes the binding signature.
+    r.optional::<32>()?; // bsk
     Ok(Trailer {
         flags,
         value_sum,
