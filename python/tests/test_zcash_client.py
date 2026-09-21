@@ -23,7 +23,7 @@ partial result escapes and that the workflow is cancelled.
 
 The PCZT fixtures are real donor bytes; see `fixtures/zcash/MANIFEST.json` for
 provenance and limitations. The host never parses a PCZT, so these exercise the
-transfer protocol only, never signing.
+transfer protocol and the signature-record response only, never signing.
 """
 
 from __future__ import annotations
@@ -63,6 +63,7 @@ VIEWING_KEYS = {
 # zcash_address 0.13.0 Ufvk APIs from the public seed bytes 00..1f.
 
 CHUNK = zcash.CHUNK_BYTES
+RECORD = zcash.RECORD_BYTES
 
 
 # ====== Scripted transport ====== #
@@ -193,34 +194,41 @@ def upload_requests(
     ]
 
 
-def download_chunks(
-    signed: bytes, transfer_id: bytes = TRANSFER_ID
-) -> list[messages.ZcashSignedPczt]:
+def records_for(indices: t.Sequence[int], pool: int = zcash.POOL_IRONWOOD) -> bytes:
+    """Device-format signature records, one per action index, in the given order."""
+    return b"".join(
+        bytes((pool, index)) + bytes(((index * 37 + 11) % 256,)) * 64
+        for index in indices
+    )
+
+
+def signatures(
+    records: bytes, transfer_id: bytes = TRANSFER_ID
+) -> messages.ZcashSpendAuthSignatures:
+    return messages.ZcashSpendAuthSignatures(transfer_id=transfer_id, records=records)
+
+
+def expected_signatures(records: bytes) -> list[zcash.SpendAuthSignature]:
     return [
-        messages.ZcashSignedPczt(
-            transfer_id=transfer_id,
-            pczt_length=len(signed),
-            offset=off,
-            data=signed[off : off + length],
+        zcash.SpendAuthSignature(
+            records[start + 1], records[start + 2 : start + RECORD]
         )
-        for off, length in chunks(len(signed))
+        for start in range(0, len(records), RECORD)
     ]
 
 
 def sign_script(
-    pczt: bytes, signed: bytes, transfer_id: bytes = TRANSFER_ID
+    pczt: bytes, records: bytes, transfer_id: bytes = TRANSFER_ID
 ) -> list[MessageType]:
-    """The full device side of a successful signing workflow."""
-    return [
-        *upload_requests(len(pczt), transfer_id),
-        *download_chunks(signed, transfer_id),
-        messages.Success(),
-    ]
+    """The full device side of a successful signing workflow.
+
+    The record response is terminal (`@end`): nothing follows it on the wire.
+    """
+    return [*upload_requests(len(pczt), transfer_id), signatures(records, transfer_id)]
 
 
 def expected_host_messages(
     pczt: bytes,
-    signed: bytes,
     network: messages.ZcashNetwork = MAINNET,
     account: int = 0,
     transfer_id: bytes = TRANSFER_ID,
@@ -238,10 +246,6 @@ def expected_host_messages(
             transfer_id=transfer_id, offset=off, data=pczt[off : off + length]
         )
         for off, length in chunks(len(pczt))
-    ]
-    out += [
-        messages.ZcashSignedPcztAck(transfer_id=transfer_id, next_offset=off + length)
-        for off, length in chunks(len(signed))
     ]
     return out
 
@@ -590,13 +594,14 @@ def test_bad_pczt_is_rejected_before_any_io(
 @pytest.mark.parametrize("network", NETWORKS)
 def test_sign_pczt_transcript(actions: int, network: messages.ZcashNetwork) -> None:
     pczt = _load(PCZT_BY_ACTIONS[actions])
-    signed = pczt  # this lane cannot produce a signed PCZT; see the manifest
-    session = scripted(*sign_script(pczt, signed))
+    # One record per action; the host never checks records against the PCZT.
+    records = records_for(range(actions))
+    session = scripted(*sign_script(pczt, records))
 
-    assert zcash.sign_pczt(session, pczt, network, 3, REFERENCE_HEIGHT) == signed
-    assert sent(session) == expected_host_messages(
-        pczt, signed, network=network, account=3
-    )
+    result = zcash.sign_pczt(session, pczt, network, 3, REFERENCE_HEIGHT)
+    assert result == expected_signatures(records)
+    assert [r.action_index for r in result] == list(range(actions))
+    assert sent(session) == expected_host_messages(pczt, network=network, account=3)
     assert not remaining(session)
     assert_no_cancel(session)
 
@@ -604,18 +609,40 @@ def test_sign_pczt_transcript(actions: int, network: messages.ZcashNetwork) -> N
 def test_sign_pczt_chunk_counts_match_the_manifest() -> None:
     for record in FIXTURE_MANIFEST["fixtures"]:
         pczt = _load(record["file"])
-        session = scripted(*sign_script(pczt, pczt))
+        session = scripted(*sign_script(pczt, records_for([0])))
         zcash.sign_pczt(session, pczt, MAINNET, 0, REFERENCE_HEIGHT)
         acks = [m for m in sent(session) if isinstance(m, messages.ZcashPcztAck)]
         assert len(acks) == record["chunks_at_1024"]
 
 
-def test_sign_pczt_transfer_accepts_device_chosen_payload_length() -> None:
-    """The transfer layer does not interpret or bind the returned PCZT bytes."""
+@pytest.mark.parametrize(
+    "indices",
+    [[0], [3], [0, 1], [0, 5, 31], [31], list(range(zcash.MAX_ACTIONS))],
+    ids=["single", "nonzero", "pair", "sparse", "last-index", "max-count"],
+)
+def test_sign_pczt_accepts_every_admissible_record_set(indices: list[int]) -> None:
+    """Records are one per real spend, ascending; dummies simply have none."""
     pczt = _load(PCZT_BY_ACTIONS[2])
-    signed = pczt + b"\x00" * 64
-    session = scripted(*sign_script(pczt, signed))
-    assert zcash.sign_pczt(session, pczt, MAINNET, 0, REFERENCE_HEIGHT) == signed
+    records = records_for(indices)
+    session = scripted(*sign_script(pczt, records))
+    result = zcash.sign_pczt(session, pczt, MAINNET, 0, REFERENCE_HEIGHT)
+    assert result == expected_signatures(records)
+    assert all(len(r.signature) == 64 for r in result)
+    assert not remaining(session)
+    assert_no_cancel(session)
+
+
+def test_sign_pczt_ignores_measurement_trailer() -> None:
+    """The optional debug trailer never changes the parsed result."""
+    pczt = _load(PCZT_BY_ACTIONS[1])
+    records = records_for([0])
+    response = messages.ZcashSpendAuthSignatures(
+        transfer_id=TRANSFER_ID, records=records, debug_timings=b"derive=1"
+    )
+    session = scripted(*upload_requests(len(pczt)), response)
+    result = zcash.sign_pczt(session, pczt, MAINNET, 0, REFERENCE_HEIGHT)
+    assert result == expected_signatures(records)
+    assert zcash.last_debug_timings == b"derive=1"
 
 
 @pytest.mark.parametrize(
@@ -623,8 +650,11 @@ def test_sign_pczt_transfer_accepts_device_chosen_payload_length() -> None:
 )
 def test_sign_pczt_boundary_lengths(total: int) -> None:
     pczt = bytes((i * 7 + 1) % 256 for i in range(total))
-    session = scripted(*sign_script(pczt, pczt))
-    assert zcash.sign_pczt(session, pczt, MAINNET, 0, REFERENCE_HEIGHT) == pczt
+    records = records_for([0])
+    session = scripted(*sign_script(pczt, records))
+    result = zcash.sign_pczt(session, pczt, MAINNET, 0, REFERENCE_HEIGHT)
+    assert result == expected_signatures(records)
+    assert sent(session) == expected_host_messages(pczt)
 
 
 # ====== sign_pczt: hostile upload ====== #
@@ -727,11 +757,11 @@ def test_upload_rejects_premature_success() -> None:
     assert_cancelled(session)
 
 
-def test_upload_rejects_signed_chunk_before_upload_completes() -> None:
+def test_upload_rejects_signatures_before_upload_completes() -> None:
     pczt = _load(PCZT_BY_ACTIONS[8])
     script: t.Sequence[MessageType] = [
         upload_requests(len(pczt))[0],
-        *download_chunks(pczt),
+        signatures(records_for([0])),
     ]
     session = scripted(*script)
     with pytest.raises(exceptions.UnexpectedMessageError):
@@ -765,137 +795,103 @@ def test_failure_during_upload_yields_no_result(
     assert_no_cancel(session)
 
 
-# ====== sign_pczt: hostile download ====== #
+# ====== sign_pczt: hostile signature response ====== #
 
 
-@pytest.mark.parametrize("total", [0, zcash.MAX_PCZT_BYTES + 1, 2**31])
-def test_download_rejects_bad_total_length(total: int) -> None:
-    pczt = _load(PCZT_BY_ACTIONS[1])
-    script: t.Sequence[MessageType] = [
-        *upload_requests(len(pczt)),
-        messages.ZcashSignedPczt(
-            transfer_id=TRANSFER_ID, pczt_length=total, offset=0, data=b"\x00" * CHUNK
-        ),
-    ]
-    assert_violation(script, pczt)
+def assert_records_rejected(records: bytes) -> Session:
+    """A malformed record blob must yield no result.
 
-
-def test_download_rejects_changed_total_length() -> None:
-    pczt = _load(PCZT_BY_ACTIONS[8])
-    signed = pczt
-    chunk_list = download_chunks(signed)
-    chunk_list[2] = messages.ZcashSignedPczt(
-        transfer_id=TRANSFER_ID,
-        pczt_length=len(signed) + CHUNK,
-        offset=chunk_list[2].offset,
-        data=chunk_list[2].data,
-    )
-    script: t.Sequence[MessageType] = [*upload_requests(len(pczt)), *chunk_list]
-    assert_violation(script, pczt)
-
-
-def test_download_rejects_changed_transfer_id() -> None:
+    The device workflow is already complete when the blob arrives, so there is
+    nothing to cancel: the host must raise without sending a Cancel.
+    """
     pczt = _load(PCZT_BY_ACTIONS[2])
-    chunk_list = download_chunks(pczt)
-    chunk_list[1] = messages.ZcashSignedPczt(
-        transfer_id=OTHER_TRANSFER_ID,
-        pczt_length=len(pczt),
-        offset=chunk_list[1].offset,
-        data=chunk_list[1].data,
-    )
-    script: t.Sequence[MessageType] = [*upload_requests(len(pczt)), *chunk_list]
-    assert_violation(script, pczt)
-
-
-@pytest.mark.parametrize("bad_offset", [1, CHUNK, 2**31])
-def test_download_rejects_wrong_first_offset(bad_offset: int) -> None:
-    pczt = _load(PCZT_BY_ACTIONS[1])
-    script: t.Sequence[MessageType] = [
-        *upload_requests(len(pczt)),
-        messages.ZcashSignedPczt(
-            transfer_id=TRANSFER_ID,
-            pczt_length=len(pczt),
-            offset=bad_offset,
-            data=b"\x00" * CHUNK,
-        ),
-    ]
-    assert_violation(script, pczt)
-
-
-def test_download_rejects_repeated_chunk() -> None:
-    pczt = _load(PCZT_BY_ACTIONS[8])
-    chunk_list = download_chunks(pczt)
-    chunk_list[4] = chunk_list[3]
-    script: t.Sequence[MessageType] = [*upload_requests(len(pczt)), *chunk_list]
-    assert_violation(script, pczt)
-
-
-def test_download_rejects_repeated_final_chunk() -> None:
-    pczt = _load(PCZT_BY_ACTIONS[2])
-    chunk_list = download_chunks(pczt)
-    script: t.Sequence[MessageType] = [
-        *upload_requests(len(pczt)),
-        *chunk_list,
-        chunk_list[-1],
-    ]
-    session = scripted(*script)
-    # The transfer is complete, so anything but Success is a violation.
-    with pytest.raises(exceptions.UnexpectedMessageError):
+    session = scripted(*sign_script(pczt, records))
+    with pytest.raises(exceptions.ProtocolError, match="Invalid Zcash signature"):
         zcash.sign_pczt(session, pczt, MAINNET, 0, REFERENCE_HEIGHT)
-    assert_cancelled(session)
+    assert_no_cancel(session)
+    assert not remaining(session)
+    return session
 
 
-@pytest.mark.parametrize("delta", [-1, 1], ids=["short", "long"])
-def test_download_rejects_wrong_chunk_size(delta: int) -> None:
-    pczt = _load(PCZT_BY_ACTIONS[8])
-    chunk_list = download_chunks(pczt)
-    first = chunk_list[0]
-    data = first.data[:-1] if delta < 0 else first.data + b"\x00"
-    chunk_list[0] = messages.ZcashSignedPczt(
-        transfer_id=TRANSFER_ID,
-        pczt_length=len(pczt),
-        offset=0,
-        data=data,
+@pytest.mark.parametrize(
+    "records",
+    [
+        b"",
+        bytes(RECORD - 1),
+        bytes(RECORD + 1),
+        records_for([0]) + b"\x00",
+        records_for([0])[:-1],
+        records_for(range(zcash.MAX_ACTIONS + 1)),
+    ],
+    ids=["empty", "short", "long", "trailing-byte", "truncated", "too-many"],
+)
+def test_signatures_reject_bad_blob_length(records: bytes) -> None:
+    assert_records_rejected(records)
+
+
+@pytest.mark.parametrize("pool", [0x00, 0x01, 0x02, 0x04, 0xFF])
+def test_signatures_reject_wrong_pool(pool: int) -> None:
+    assert_records_rejected(records_for([0], pool=pool))
+
+
+def test_signatures_reject_wrong_pool_in_any_position() -> None:
+    good, bad = records_for([0]), records_for([1], pool=0x02)
+    assert_records_rejected(good + bad)
+    assert_records_rejected(bad + good)
+
+
+@pytest.mark.parametrize(
+    "indices",
+    [[1, 0], [0, 0], [0, 2, 1], [3, 3, 4], [5, 4, 6]],
+    ids=["descending", "repeated", "swap-tail", "repeated-tail", "dip"],
+)
+def test_signatures_reject_non_ascending_index(indices: list[int]) -> None:
+    assert_records_rejected(records_for(indices))
+
+
+@pytest.mark.parametrize("index", [zcash.MAX_ACTIONS, zcash.MAX_ACTIONS + 1, 255])
+def test_signatures_reject_out_of_range_index(index: int) -> None:
+    assert_records_rejected(records_for([index]))
+    assert_records_rejected(records_for([0, index]))
+
+
+def test_signatures_reject_changed_transfer_id() -> None:
+    pczt = _load(PCZT_BY_ACTIONS[1])
+    session = scripted(
+        *upload_requests(len(pczt), TRANSFER_ID),
+        signatures(records_for([0]), OTHER_TRANSFER_ID),
     )
-    script: t.Sequence[MessageType] = [*upload_requests(len(pczt)), *chunk_list]
-    assert_violation(script, pczt)
+    with pytest.raises(exceptions.ProtocolError, match="Changed transfer ID"):
+        zcash.sign_pczt(session, pczt, MAINNET, 0, REFERENCE_HEIGHT)
+    assert_no_cancel(session)
 
 
-def test_download_rejects_short_final_chunk() -> None:
-    pczt = _load(PCZT_BY_ACTIONS[2])
-    chunk_list = download_chunks(pczt)
-    last = chunk_list[-1]
-    chunk_list[-1] = messages.ZcashSignedPczt(
-        transfer_id=TRANSFER_ID,
-        pczt_length=len(pczt),
-        offset=last.offset,
-        data=last.data[:-1],
-    )
-    script: t.Sequence[MessageType] = [*upload_requests(len(pczt)), *chunk_list]
-    assert_violation(script, pczt)
-
-
-def test_download_rejects_premature_success() -> None:
-    pczt = _load(PCZT_BY_ACTIONS[8])
-    script: t.Sequence[MessageType] = [
+def test_signatures_reject_non_bytes_records() -> None:
+    pczt = _load(PCZT_BY_ACTIONS[1])
+    session = scripted(
         *upload_requests(len(pczt)),
-        *download_chunks(pczt)[:3],
+        messages.ZcashSpendAuthSignatures(
+            transfer_id=TRANSFER_ID, records=t.cast(bytes, records_for([0]).decode("latin-1"))
+        ),
+    )
+    with pytest.raises(exceptions.ProtocolError, match="Invalid Zcash signature"):
+        zcash.sign_pczt(session, pczt, MAINNET, 0, REFERENCE_HEIGHT)
+    assert_no_cancel(session)
+
+
+@pytest.mark.parametrize(
+    "response",
+    [
         messages.Success(),
-    ]
-    session = scripted(*script)
-    with pytest.raises(exceptions.UnexpectedMessageError):
-        zcash.sign_pczt(session, pczt, MAINNET, 0, REFERENCE_HEIGHT)
-    assert_cancelled(session)
-
-
-def test_download_requires_success_to_terminate() -> None:
-    pczt = _load(PCZT_BY_ACTIONS[1])
-    script: t.Sequence[MessageType] = [
-        *upload_requests(len(pczt)),
-        *download_chunks(pczt),
         messages.ZcashAddress(address="u1example"),
-    ]
-    session = scripted(*script)
+        messages.ZcashPcztRequest(transfer_id=TRANSFER_ID, offset=0, length=CHUNK),
+    ],
+    ids=["success", "address", "extra-request"],
+)
+def test_completed_upload_accepts_only_signatures(response: MessageType) -> None:
+    """Once the last chunk is served, records are the only admissible answer."""
+    pczt = _load(PCZT_BY_ACTIONS[8])
+    session = scripted(*upload_requests(len(pczt)), response)
     with pytest.raises(exceptions.UnexpectedMessageError):
         zcash.sign_pczt(session, pczt, MAINNET, 0, REFERENCE_HEIGHT)
     assert_cancelled(session)
@@ -909,16 +905,11 @@ def test_download_requires_success_to_terminate() -> None:
         (messages.FailureType.InvalidSession, exceptions.InvalidSessionError),
     ],
 )
-def test_failure_during_download_yields_no_result(
+def test_failure_in_place_of_signatures_yields_no_result(
     failure: int, expected: type[Exception]
 ) -> None:
     pczt = _load(PCZT_BY_ACTIONS[8])
-    script: t.Sequence[MessageType] = [
-        *upload_requests(len(pczt)),
-        *download_chunks(pczt)[:2],
-        messages.Failure(code=failure),
-    ]
-    session = scripted(*script)
+    session = scripted(*upload_requests(len(pczt)), messages.Failure(code=failure))
     with pytest.raises(expected):
         zcash.sign_pczt(session, pczt, MAINNET, 0, REFERENCE_HEIGHT)
     assert_no_cancel(session)
@@ -930,8 +921,10 @@ def test_failure_during_download_yields_no_result(
 def test_second_transfer_rejects_first_transfer_id() -> None:
     """A response minted for one transfer must not be usable in another."""
     pczt = _load(PCZT_BY_ACTIONS[2])
-    first = scripted(*sign_script(pczt, pczt, TRANSFER_ID))
-    assert zcash.sign_pczt(first, pczt, MAINNET, 0, REFERENCE_HEIGHT) == pczt
+    records = records_for([0, 1])
+    first = scripted(*sign_script(pczt, records, TRANSFER_ID))
+    result = zcash.sign_pczt(first, pczt, MAINNET, 0, REFERENCE_HEIGHT)
+    assert result == expected_signatures(records)
 
     stale = upload_requests(len(pczt), OTHER_TRANSFER_ID)
     stale[1] = messages.ZcashPcztRequest(
@@ -943,25 +936,16 @@ def test_second_transfer_rejects_first_transfer_id() -> None:
     assert_cancelled(second)
 
 
-def test_download_rejects_id_from_a_different_transfer() -> None:
-    pczt = _load(PCZT_BY_ACTIONS[1])
-    script: t.Sequence[MessageType] = [
-        *upload_requests(len(pczt), TRANSFER_ID),
-        *download_chunks(pczt, OTHER_TRANSFER_ID),
-    ]
-    assert_violation(script, pczt)
-
-
 def test_host_never_reuses_a_transfer_id_across_workflows() -> None:
     """The host echoes only the ID the device minted for this workflow."""
     pczt = _load(PCZT_BY_ACTIONS[2])
     for transfer_id in (TRANSFER_ID, OTHER_TRANSFER_ID):
-        session = scripted(*sign_script(pczt, pczt, transfer_id))
+        session = scripted(*sign_script(pczt, records_for([0]), transfer_id))
         zcash.sign_pczt(session, pczt, MAINNET, 0, REFERENCE_HEIGHT)
         ids = {
             m.transfer_id
             for m in sent(session)
-            if isinstance(m, (messages.ZcashPcztAck, messages.ZcashSignedPcztAck))
+            if isinstance(m, messages.ZcashPcztAck)
         }
         assert ids == {transfer_id}
 

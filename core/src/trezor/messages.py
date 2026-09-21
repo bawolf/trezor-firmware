@@ -8236,42 +8236,6 @@ if TYPE_CHECKING:
         def is_type_of(cls, msg: Any) -> TypeGuard["ZcashPcztAck"]:
             return isinstance(msg, cls)
 
-    class ZcashSignedPczt(protobuf.MessageType):
-        transfer_id: "AnyBytes"
-        pczt_length: "int"
-        offset: "int"
-        data: "AnyBytes"
-
-        def __init__(
-            self,
-            *,
-            transfer_id: "AnyBytes",
-            pczt_length: "int",
-            offset: "int",
-            data: "AnyBytes",
-        ) -> None:
-            pass
-
-        @classmethod
-        def is_type_of(cls, msg: Any) -> TypeGuard["ZcashSignedPczt"]:
-            return isinstance(msg, cls)
-
-    class ZcashSignedPcztAck(protobuf.MessageType):
-        transfer_id: "AnyBytes"
-        next_offset: "int"
-
-        def __init__(
-            self,
-            *,
-            transfer_id: "AnyBytes",
-            next_offset: "int",
-        ) -> None:
-            pass
-
-        @classmethod
-        def is_type_of(cls, msg: Any) -> TypeGuard["ZcashSignedPcztAck"]:
-            return isinstance(msg, cls)
-
     class ZcashSpendAuthSignatures(protobuf.MessageType):
         transfer_id: "AnyBytes"
         records: "AnyBytes"

@@ -420,7 +420,7 @@ enum MessageType {
     MessageType_ZcashSignPczt = 32104 [(wire_in) = true];
     MessageType_ZcashPcztRequest = 32105 [(wire_out) = true];
     MessageType_ZcashPcztAck = 32106 [(wire_in) = true];
-    MessageType_ZcashSignedPczt = 32107 [(wire_out) = true];
-    MessageType_ZcashSignedPcztAck = 32108 [(wire_in) = true];
+    // 32107 and 32108 carried the removed whole-PCZT download pair (signed
+    // chunk + ack). They are freed, not reused.
     MessageType_ZcashSpendAuthSignatures = 32109 [(wire_out) = true];
 }

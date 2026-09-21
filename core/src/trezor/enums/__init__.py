@@ -786,6 +786,4 @@ if TYPE_CHECKING:
         ZcashSignPczt = 32104
         ZcashPcztRequest = 32105
         ZcashPcztAck = 32106
-        ZcashSignedPczt = 32107
-        ZcashSignedPcztAck = 32108
         ZcashSpendAuthSignatures = 32109

@@ -18,10 +18,12 @@ option java_package = "com.satoshilabs.trezor.lib.protobuf";
 // identifiers.
 //
 // Transfer constants shared by host and device:
-//   MAX_PCZT_BYTES    = 65536  (applies separately to the uploaded PCZT
-//                               and to the returned one)
+//   MAX_PCZT_BYTES    = 65536  (bound on the uploaded PCZT; the device never
+//                               returns a PCZT)
 //   CHUNK_BYTES       = 1024
 //   TRANSFER_ID_BYTES = 16
+//   RECORD_BYTES      = 66     (one spend authorization signature record)
+//   MAX_ACTIONS       = 32
 //
 // Every field below is required so that an omitted scalar cannot silently
 // select network, account, height, offset, or length zero.
@@ -89,9 +91,9 @@ message ZcashViewingKey {
  * The device pulls the exact declared byte count in contiguous chunks and
  * consumes them as a stream, never retaining the whole PCZT. Once every
  * real spend is signed it returns the spend authorization signatures as
- * records (ZcashSpendAuthSignatures); the host applies them to its own copy
- * of the PCZT. The ZcashSignedPczt download messages below are the earlier
- * whole-PCZT response shape, kept until the response contract is settled.
+ * detached records (ZcashSpendAuthSignatures); the host applies them to its
+ * own copy of the PCZT. That is the single response shape of this workflow:
+ * the device never sends a PCZT back, in whole or in chunks.
  * @start
  * @next ZcashPcztRequest
  * @next Failure
@@ -120,37 +122,12 @@ message ZcashPcztRequest {
  * Request: Host supplies the exact requested chunk.
  * @next ZcashPcztRequest
  * @next ZcashSpendAuthSignatures
- * @next ZcashSignedPczt
  * @next Failure
  */
 message ZcashPcztAck {
     required bytes transfer_id = 1;  // repeats the requested transfer ID exactly
     required uint32 offset = 2;      // repeats the requested offset exactly
     required bytes data = 3;         // length is exactly the requested length
-}
-
-/**
- * Response: One contiguous chunk of the signed PCZT. The entire signed result
- * is serialized and size-checked before the first chunk is emitted, so no
- * partial PCZT or partial signature set is ever released.
- * @next ZcashSignedPcztAck
- */
-message ZcashSignedPczt {
-    required bytes transfer_id = 1;
-    required uint32 pczt_length = 2;  // total download length, stable across the response
-    required uint32 offset = 3;
-    required bytes data = 4;          // exactly min(CHUNK_BYTES, remaining)
-}
-
-/**
- * Request: Host acknowledges a signed chunk by its exclusive end offset.
- * @next ZcashSignedPczt
- * @next Success
- * @next Failure
- */
-message ZcashSignedPcztAck {
-    required bytes transfer_id = 1;
-    required uint32 next_offset = 2;  // exclusive end offset of the acknowledged chunk
 }
 
 /**
