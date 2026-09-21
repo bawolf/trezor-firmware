@@ -50,9 +50,13 @@ PROVISIONAL = {
     "ZcashSignPczt": (32104, "in"),
     "ZcashPcztRequest": (32105, "out"),
     "ZcashPcztAck": (32106, "in"),
-    "ZcashSignedPczt": (32107, "out"),
-    "ZcashSignedPcztAck": (32108, "in"),
+    "ZcashSpendAuthSignatures": (32109, "out"),
 }
+
+# Freed by the collapse to a single response shape: they carried the removed
+# whole-PCZT download pair (signed chunk + ack). Nothing may reclaim them
+# without coordination.
+FREED_WIRE_IDS = (32107, 32108)
 
 # Numbers the contract names only as candidates for a future coordinated
 # allocation. Nothing may claim them yet, so the tests assert they are FREE.
@@ -106,6 +110,30 @@ def test_no_wire_id_collisions() -> None:
 def test_zcash_messages_are_exactly_the_contract_set() -> None:
     declared = {m.name for m in messages.MessageType if m.name.startswith("Zcash")}
     assert declared == set(PROVISIONAL)
+
+
+@requires_repo_schema
+def test_freed_download_ids_stay_unclaimed() -> None:
+    """The whole-PCZT download pair is gone; its IDs are freed, not reused."""
+    taken = {int(m) for m in messages.MessageType}
+    assert taken.isdisjoint(FREED_WIRE_IDS)
+    proto = MESSAGES_PROTO.read_text()
+    for value in FREED_WIRE_IDS:
+        assert f"= {value} " not in proto
+    # No download-shaped message survives, by name or by field.
+    schema = ZCASH_PROTO.read_text()
+    assert not re.search(r"^message Zcash\w*Signed\w*", schema, re.M)
+    assert "next_offset" not in schema
+    assert not any(
+        n.startswith("Zcash") and "Signed" in n for n in messages.MessageType.__members__
+    )
+
+
+def test_signing_has_exactly_one_response_shape() -> None:
+    """The device answers a completed upload with records, never a PCZT."""
+    fields = {f.name for f in messages.ZcashSpendAuthSignatures.FIELDS.values()}
+    assert {"transfer_id", "records"} <= fields
+    assert "pczt_length" not in fields and "data" not in fields
 
 
 def test_candidate_allocation_is_still_free() -> None:
@@ -230,10 +258,9 @@ def test_roundtrip_all_messages(network: messages.ZcashNetwork) -> None:
         ),
         messages.ZcashPcztRequest(transfer_id=transfer_id, offset=0, length=1024),
         messages.ZcashPcztAck(transfer_id=transfer_id, offset=0, data=b"\x00" * 1024),
-        messages.ZcashSignedPczt(
-            transfer_id=transfer_id, pczt_length=1236, offset=0, data=b"\x01" * 1024
+        messages.ZcashSpendAuthSignatures(
+            transfer_id=transfer_id, records=b"\x03\x00" + b"\x01" * 64
         ),
-        messages.ZcashSignedPcztAck(transfer_id=transfer_id, next_offset=1024),
     ):
         assert _roundtrip(msg) == msg
 
@@ -271,7 +298,7 @@ def test_viewing_key_response_has_fixed_small_wire_size(
             },
         ),
         (messages.ZcashPcztRequest, {"transfer_id": bytes(16), "offset": 0}),
-        (messages.ZcashSignedPcztAck, {"transfer_id": bytes(16)}),
+        (messages.ZcashSpendAuthSignatures, {"transfer_id": bytes(16)}),
     ],
     ids=lambda v: v.__name__ if isinstance(v, type) else "",
 )

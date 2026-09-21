@@ -853,8 +853,6 @@ class MessageType(IntEnum):
     ZcashSignPczt = 32104
     ZcashPcztRequest = 32105
     ZcashPcztAck = 32106
-    ZcashSignedPczt = 32107
-    ZcashSignedPcztAck = 32108
     ZcashSpendAuthSignatures = 32109
 
 
@@ -10312,46 +10310,6 @@ class ZcashPcztAck(protobuf.MessageType):
         self.transfer_id = transfer_id
         self.offset = offset
         self.data = data
-
-
-class ZcashSignedPczt(protobuf.MessageType):
-    MESSAGE_WIRE_TYPE = 32107
-    FIELDS = {
-        1: protobuf.Field("transfer_id", "bytes", repeated=False, required=True),
-        2: protobuf.Field("pczt_length", "uint32", repeated=False, required=True),
-        3: protobuf.Field("offset", "uint32", repeated=False, required=True),
-        4: protobuf.Field("data", "bytes", repeated=False, required=True),
-    }
-
-    def __init__(
-        self,
-        *,
-        transfer_id: "bytes",
-        pczt_length: "int",
-        offset: "int",
-        data: "bytes",
-    ) -> None:
-        self.transfer_id = transfer_id
-        self.pczt_length = pczt_length
-        self.offset = offset
-        self.data = data
-
-
-class ZcashSignedPcztAck(protobuf.MessageType):
-    MESSAGE_WIRE_TYPE = 32108
-    FIELDS = {
-        1: protobuf.Field("transfer_id", "bytes", repeated=False, required=True),
-        2: protobuf.Field("next_offset", "uint32", repeated=False, required=True),
-    }
-
-    def __init__(
-        self,
-        *,
-        transfer_id: "bytes",
-        next_offset: "int",
-    ) -> None:
-        self.transfer_id = transfer_id
-        self.next_offset = next_offset
 
 
 class ZcashSpendAuthSignatures(protobuf.MessageType):
