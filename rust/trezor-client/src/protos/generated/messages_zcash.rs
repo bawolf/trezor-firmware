@@ -1543,31 +1543,29 @@ impl ::protobuf::reflect::ProtobufValue for ZcashPcztAck {
     type RuntimeType = ::protobuf::reflect::rt::RuntimeTypeMessage<Self>;
 }
 
-// @@protoc_insertion_point(message:hw.trezor.messages.zcash.ZcashSignedPczt)
+// @@protoc_insertion_point(message:hw.trezor.messages.zcash.ZcashSpendAuthSignatures)
 #[derive(PartialEq,Clone,Default,Debug)]
-pub struct ZcashSignedPczt {
+pub struct ZcashSpendAuthSignatures {
     // message fields
-    // @@protoc_insertion_point(field:hw.trezor.messages.zcash.ZcashSignedPczt.transfer_id)
+    // @@protoc_insertion_point(field:hw.trezor.messages.zcash.ZcashSpendAuthSignatures.transfer_id)
     pub transfer_id: ::std::option::Option<::std::vec::Vec<u8>>,
-    // @@protoc_insertion_point(field:hw.trezor.messages.zcash.ZcashSignedPczt.pczt_length)
-    pub pczt_length: ::std::option::Option<u32>,
-    // @@protoc_insertion_point(field:hw.trezor.messages.zcash.ZcashSignedPczt.offset)
-    pub offset: ::std::option::Option<u32>,
-    // @@protoc_insertion_point(field:hw.trezor.messages.zcash.ZcashSignedPczt.data)
-    pub data: ::std::option::Option<::std::vec::Vec<u8>>,
+    // @@protoc_insertion_point(field:hw.trezor.messages.zcash.ZcashSpendAuthSignatures.records)
+    pub records: ::std::option::Option<::std::vec::Vec<u8>>,
+    // @@protoc_insertion_point(field:hw.trezor.messages.zcash.ZcashSpendAuthSignatures.debug_timings)
+    pub debug_timings: ::std::option::Option<::std::vec::Vec<u8>>,
     // special fields
-    // @@protoc_insertion_point(special_field:hw.trezor.messages.zcash.ZcashSignedPczt.special_fields)
+    // @@protoc_insertion_point(special_field:hw.trezor.messages.zcash.ZcashSpendAuthSignatures.special_fields)
     pub special_fields: ::protobuf::SpecialFields,
 }
 
-impl<'a> ::std::default::Default for &'a ZcashSignedPczt {
-    fn default() -> &'a ZcashSignedPczt {
-        <ZcashSignedPczt as ::protobuf::Message>::default_instance()
+impl<'a> ::std::default::Default for &'a ZcashSpendAuthSignatures {
+    fn default() -> &'a ZcashSpendAuthSignatures {
+        <ZcashSpendAuthSignatures as ::protobuf::Message>::default_instance()
     }
 }
 
-impl ZcashSignedPczt {
-    pub fn new() -> ZcashSignedPczt {
+impl ZcashSpendAuthSignatures {
+    pub fn new() -> ZcashSpendAuthSignatures {
         ::std::default::Default::default()
     }
 
@@ -1607,125 +1605,112 @@ impl ZcashSignedPczt {
         self.transfer_id.take().unwrap_or_else(|| ::std::vec::Vec::new())
     }
 
-    // required uint32 pczt_length = 2;
+    // required bytes records = 2;
 
-    pub fn pczt_length(&self) -> u32 {
-        self.pczt_length.unwrap_or(0)
-    }
-
-    pub fn clear_pczt_length(&mut self) {
-        self.pczt_length = ::std::option::Option::None;
-    }
-
-    pub fn has_pczt_length(&self) -> bool {
-        self.pczt_length.is_some()
-    }
-
-    // Param is passed by value, moved
-    pub fn set_pczt_length(&mut self, v: u32) {
-        self.pczt_length = ::std::option::Option::Some(v);
-    }
-
-    // required uint32 offset = 3;
-
-    pub fn offset(&self) -> u32 {
-        self.offset.unwrap_or(0)
-    }
-
-    pub fn clear_offset(&mut self) {
-        self.offset = ::std::option::Option::None;
-    }
-
-    pub fn has_offset(&self) -> bool {
-        self.offset.is_some()
-    }
-
-    // Param is passed by value, moved
-    pub fn set_offset(&mut self, v: u32) {
-        self.offset = ::std::option::Option::Some(v);
-    }
-
-    // required bytes data = 4;
-
-    pub fn data(&self) -> &[u8] {
-        match self.data.as_ref() {
+    pub fn records(&self) -> &[u8] {
+        match self.records.as_ref() {
             Some(v) => v,
             None => &[],
         }
     }
 
-    pub fn clear_data(&mut self) {
-        self.data = ::std::option::Option::None;
+    pub fn clear_records(&mut self) {
+        self.records = ::std::option::Option::None;
     }
 
-    pub fn has_data(&self) -> bool {
-        self.data.is_some()
+    pub fn has_records(&self) -> bool {
+        self.records.is_some()
     }
 
     // Param is passed by value, moved
-    pub fn set_data(&mut self, v: ::std::vec::Vec<u8>) {
-        self.data = ::std::option::Option::Some(v);
+    pub fn set_records(&mut self, v: ::std::vec::Vec<u8>) {
+        self.records = ::std::option::Option::Some(v);
     }
 
     // Mutable pointer to the field.
     // If field is not initialized, it is initialized with default value first.
-    pub fn mut_data(&mut self) -> &mut ::std::vec::Vec<u8> {
-        if self.data.is_none() {
-            self.data = ::std::option::Option::Some(::std::vec::Vec::new());
+    pub fn mut_records(&mut self) -> &mut ::std::vec::Vec<u8> {
+        if self.records.is_none() {
+            self.records = ::std::option::Option::Some(::std::vec::Vec::new());
         }
-        self.data.as_mut().unwrap()
+        self.records.as_mut().unwrap()
     }
 
     // Take field
-    pub fn take_data(&mut self) -> ::std::vec::Vec<u8> {
-        self.data.take().unwrap_or_else(|| ::std::vec::Vec::new())
+    pub fn take_records(&mut self) -> ::std::vec::Vec<u8> {
+        self.records.take().unwrap_or_else(|| ::std::vec::Vec::new())
+    }
+
+    // optional bytes debug_timings = 3;
+
+    pub fn debug_timings(&self) -> &[u8] {
+        match self.debug_timings.as_ref() {
+            Some(v) => v,
+            None => &[],
+        }
+    }
+
+    pub fn clear_debug_timings(&mut self) {
+        self.debug_timings = ::std::option::Option::None;
+    }
+
+    pub fn has_debug_timings(&self) -> bool {
+        self.debug_timings.is_some()
+    }
+
+    // Param is passed by value, moved
+    pub fn set_debug_timings(&mut self, v: ::std::vec::Vec<u8>) {
+        self.debug_timings = ::std::option::Option::Some(v);
+    }
+
+    // Mutable pointer to the field.
+    // If field is not initialized, it is initialized with default value first.
+    pub fn mut_debug_timings(&mut self) -> &mut ::std::vec::Vec<u8> {
+        if self.debug_timings.is_none() {
+            self.debug_timings = ::std::option::Option::Some(::std::vec::Vec::new());
+        }
+        self.debug_timings.as_mut().unwrap()
+    }
+
+    // Take field
+    pub fn take_debug_timings(&mut self) -> ::std::vec::Vec<u8> {
+        self.debug_timings.take().unwrap_or_else(|| ::std::vec::Vec::new())
     }
 
     fn generated_message_descriptor_data() -> ::protobuf::reflect::GeneratedMessageDescriptorData {
-        let mut fields = ::std::vec::Vec::with_capacity(4);
+        let mut fields = ::std::vec::Vec::with_capacity(3);
         let mut oneofs = ::std::vec::Vec::with_capacity(0);
         fields.push(::protobuf::reflect::rt::v2::make_option_accessor::<_, _>(
             "transfer_id",
-            |m: &ZcashSignedPczt| { &m.transfer_id },
-            |m: &mut ZcashSignedPczt| { &mut m.transfer_id },
+            |m: &ZcashSpendAuthSignatures| { &m.transfer_id },
+            |m: &mut ZcashSpendAuthSignatures| { &mut m.transfer_id },
         ));
         fields.push(::protobuf::reflect::rt::v2::make_option_accessor::<_, _>(
-            "pczt_length",
-            |m: &ZcashSignedPczt| { &m.pczt_length },
-            |m: &mut ZcashSignedPczt| { &mut m.pczt_length },
+            "records",
+            |m: &ZcashSpendAuthSignatures| { &m.records },
+            |m: &mut ZcashSpendAuthSignatures| { &mut m.records },
         ));
         fields.push(::protobuf::reflect::rt::v2::make_option_accessor::<_, _>(
-            "offset",
-            |m: &ZcashSignedPczt| { &m.offset },
-            |m: &mut ZcashSignedPczt| { &mut m.offset },
+            "debug_timings",
+            |m: &ZcashSpendAuthSignatures| { &m.debug_timings },
+            |m: &mut ZcashSpendAuthSignatures| { &mut m.debug_timings },
         ));
-        fields.push(::protobuf::reflect::rt::v2::make_option_accessor::<_, _>(
-            "data",
-            |m: &ZcashSignedPczt| { &m.data },
-            |m: &mut ZcashSignedPczt| { &mut m.data },
-        ));
-        ::protobuf::reflect::GeneratedMessageDescriptorData::new_2::<ZcashSignedPczt>(
-            "ZcashSignedPczt",
+        ::protobuf::reflect::GeneratedMessageDescriptorData::new_2::<ZcashSpendAuthSignatures>(
+            "ZcashSpendAuthSignatures",
             fields,
             oneofs,
         )
     }
 }
 
-impl ::protobuf::Message for ZcashSignedPczt {
-    const NAME: &'static str = "ZcashSignedPczt";
+impl ::protobuf::Message for ZcashSpendAuthSignatures {
+    const NAME: &'static str = "ZcashSpendAuthSignatures";
 
     fn is_initialized(&self) -> bool {
         if self.transfer_id.is_none() {
             return false;
         }
-        if self.pczt_length.is_none() {
-            return false;
-        }
-        if self.offset.is_none() {
-            return false;
-        }
-        if self.data.is_none() {
+        if self.records.is_none() {
             return false;
         }
         true
@@ -1737,14 +1722,11 @@ impl ::protobuf::Message for ZcashSignedPczt {
                 10 => {
                     self.transfer_id = ::std::option::Option::Some(is.read_bytes()?);
                 },
-                16 => {
-                    self.pczt_length = ::std::option::Option::Some(is.read_uint32()?);
+                18 => {
+                    self.records = ::std::option::Option::Some(is.read_bytes()?);
                 },
-                24 => {
-                    self.offset = ::std::option::Option::Some(is.read_uint32()?);
-                },
-                34 => {
-                    self.data = ::std::option::Option::Some(is.read_bytes()?);
+                26 => {
+                    self.debug_timings = ::std::option::Option::Some(is.read_bytes()?);
                 },
                 tag => {
                     ::protobuf::rt::read_unknown_or_skip_group(tag, is, self.special_fields.mut_unknown_fields())?;
@@ -1761,14 +1743,11 @@ impl ::protobuf::Message for ZcashSignedPczt {
         if let Some(v) = self.transfer_id.as_ref() {
             my_size += ::protobuf::rt::bytes_size(1, &v);
         }
-        if let Some(v) = self.pczt_length {
-            my_size += ::protobuf::rt::uint32_size(2, v);
+        if let Some(v) = self.records.as_ref() {
+            my_size += ::protobuf::rt::bytes_size(2, &v);
         }
-        if let Some(v) = self.offset {
-            my_size += ::protobuf::rt::uint32_size(3, v);
-        }
-        if let Some(v) = self.data.as_ref() {
-            my_size += ::protobuf::rt::bytes_size(4, &v);
+        if let Some(v) = self.debug_timings.as_ref() {
+            my_size += ::protobuf::rt::bytes_size(3, &v);
         }
         my_size += ::protobuf::rt::unknown_fields_size(self.special_fields.unknown_fields());
         self.special_fields.cached_size().set(my_size as u32);
@@ -1779,14 +1758,11 @@ impl ::protobuf::Message for ZcashSignedPczt {
         if let Some(v) = self.transfer_id.as_ref() {
             os.write_bytes(1, v)?;
         }
-        if let Some(v) = self.pczt_length {
-            os.write_uint32(2, v)?;
+        if let Some(v) = self.records.as_ref() {
+            os.write_bytes(2, v)?;
         }
-        if let Some(v) = self.offset {
-            os.write_uint32(3, v)?;
-        }
-        if let Some(v) = self.data.as_ref() {
-            os.write_bytes(4, v)?;
+        if let Some(v) = self.debug_timings.as_ref() {
+            os.write_bytes(3, v)?;
         }
         os.write_unknown_fields(self.special_fields.unknown_fields())?;
         ::std::result::Result::Ok(())
@@ -1800,245 +1776,42 @@ impl ::protobuf::Message for ZcashSignedPczt {
         &mut self.special_fields
     }
 
-    fn new() -> ZcashSignedPczt {
-        ZcashSignedPczt::new()
+    fn new() -> ZcashSpendAuthSignatures {
+        ZcashSpendAuthSignatures::new()
     }
 
     fn clear(&mut self) {
         self.transfer_id = ::std::option::Option::None;
-        self.pczt_length = ::std::option::Option::None;
-        self.offset = ::std::option::Option::None;
-        self.data = ::std::option::Option::None;
+        self.records = ::std::option::Option::None;
+        self.debug_timings = ::std::option::Option::None;
         self.special_fields.clear();
     }
 
-    fn default_instance() -> &'static ZcashSignedPczt {
-        static instance: ZcashSignedPczt = ZcashSignedPczt {
+    fn default_instance() -> &'static ZcashSpendAuthSignatures {
+        static instance: ZcashSpendAuthSignatures = ZcashSpendAuthSignatures {
             transfer_id: ::std::option::Option::None,
-            pczt_length: ::std::option::Option::None,
-            offset: ::std::option::Option::None,
-            data: ::std::option::Option::None,
+            records: ::std::option::Option::None,
+            debug_timings: ::std::option::Option::None,
             special_fields: ::protobuf::SpecialFields::new(),
         };
         &instance
     }
 }
 
-impl ::protobuf::MessageFull for ZcashSignedPczt {
+impl ::protobuf::MessageFull for ZcashSpendAuthSignatures {
     fn descriptor() -> ::protobuf::reflect::MessageDescriptor {
         static descriptor: ::protobuf::rt::Lazy<::protobuf::reflect::MessageDescriptor> = ::protobuf::rt::Lazy::new();
-        descriptor.get(|| file_descriptor().message_by_package_relative_name("ZcashSignedPczt").unwrap()).clone()
+        descriptor.get(|| file_descriptor().message_by_package_relative_name("ZcashSpendAuthSignatures").unwrap()).clone()
     }
 }
 
-impl ::std::fmt::Display for ZcashSignedPczt {
+impl ::std::fmt::Display for ZcashSpendAuthSignatures {
     fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
         ::protobuf::text_format::fmt(self, f)
     }
 }
 
-impl ::protobuf::reflect::ProtobufValue for ZcashSignedPczt {
-    type RuntimeType = ::protobuf::reflect::rt::RuntimeTypeMessage<Self>;
-}
-
-// @@protoc_insertion_point(message:hw.trezor.messages.zcash.ZcashSignedPcztAck)
-#[derive(PartialEq,Clone,Default,Debug)]
-pub struct ZcashSignedPcztAck {
-    // message fields
-    // @@protoc_insertion_point(field:hw.trezor.messages.zcash.ZcashSignedPcztAck.transfer_id)
-    pub transfer_id: ::std::option::Option<::std::vec::Vec<u8>>,
-    // @@protoc_insertion_point(field:hw.trezor.messages.zcash.ZcashSignedPcztAck.next_offset)
-    pub next_offset: ::std::option::Option<u32>,
-    // special fields
-    // @@protoc_insertion_point(special_field:hw.trezor.messages.zcash.ZcashSignedPcztAck.special_fields)
-    pub special_fields: ::protobuf::SpecialFields,
-}
-
-impl<'a> ::std::default::Default for &'a ZcashSignedPcztAck {
-    fn default() -> &'a ZcashSignedPcztAck {
-        <ZcashSignedPcztAck as ::protobuf::Message>::default_instance()
-    }
-}
-
-impl ZcashSignedPcztAck {
-    pub fn new() -> ZcashSignedPcztAck {
-        ::std::default::Default::default()
-    }
-
-    // required bytes transfer_id = 1;
-
-    pub fn transfer_id(&self) -> &[u8] {
-        match self.transfer_id.as_ref() {
-            Some(v) => v,
-            None => &[],
-        }
-    }
-
-    pub fn clear_transfer_id(&mut self) {
-        self.transfer_id = ::std::option::Option::None;
-    }
-
-    pub fn has_transfer_id(&self) -> bool {
-        self.transfer_id.is_some()
-    }
-
-    // Param is passed by value, moved
-    pub fn set_transfer_id(&mut self, v: ::std::vec::Vec<u8>) {
-        self.transfer_id = ::std::option::Option::Some(v);
-    }
-
-    // Mutable pointer to the field.
-    // If field is not initialized, it is initialized with default value first.
-    pub fn mut_transfer_id(&mut self) -> &mut ::std::vec::Vec<u8> {
-        if self.transfer_id.is_none() {
-            self.transfer_id = ::std::option::Option::Some(::std::vec::Vec::new());
-        }
-        self.transfer_id.as_mut().unwrap()
-    }
-
-    // Take field
-    pub fn take_transfer_id(&mut self) -> ::std::vec::Vec<u8> {
-        self.transfer_id.take().unwrap_or_else(|| ::std::vec::Vec::new())
-    }
-
-    // required uint32 next_offset = 2;
-
-    pub fn next_offset(&self) -> u32 {
-        self.next_offset.unwrap_or(0)
-    }
-
-    pub fn clear_next_offset(&mut self) {
-        self.next_offset = ::std::option::Option::None;
-    }
-
-    pub fn has_next_offset(&self) -> bool {
-        self.next_offset.is_some()
-    }
-
-    // Param is passed by value, moved
-    pub fn set_next_offset(&mut self, v: u32) {
-        self.next_offset = ::std::option::Option::Some(v);
-    }
-
-    fn generated_message_descriptor_data() -> ::protobuf::reflect::GeneratedMessageDescriptorData {
-        let mut fields = ::std::vec::Vec::with_capacity(2);
-        let mut oneofs = ::std::vec::Vec::with_capacity(0);
-        fields.push(::protobuf::reflect::rt::v2::make_option_accessor::<_, _>(
-            "transfer_id",
-            |m: &ZcashSignedPcztAck| { &m.transfer_id },
-            |m: &mut ZcashSignedPcztAck| { &mut m.transfer_id },
-        ));
-        fields.push(::protobuf::reflect::rt::v2::make_option_accessor::<_, _>(
-            "next_offset",
-            |m: &ZcashSignedPcztAck| { &m.next_offset },
-            |m: &mut ZcashSignedPcztAck| { &mut m.next_offset },
-        ));
-        ::protobuf::reflect::GeneratedMessageDescriptorData::new_2::<ZcashSignedPcztAck>(
-            "ZcashSignedPcztAck",
-            fields,
-            oneofs,
-        )
-    }
-}
-
-impl ::protobuf::Message for ZcashSignedPcztAck {
-    const NAME: &'static str = "ZcashSignedPcztAck";
-
-    fn is_initialized(&self) -> bool {
-        if self.transfer_id.is_none() {
-            return false;
-        }
-        if self.next_offset.is_none() {
-            return false;
-        }
-        true
-    }
-
-    fn merge_from(&mut self, is: &mut ::protobuf::CodedInputStream<'_>) -> ::protobuf::Result<()> {
-        while let Some(tag) = is.read_raw_tag_or_eof()? {
-            match tag {
-                10 => {
-                    self.transfer_id = ::std::option::Option::Some(is.read_bytes()?);
-                },
-                16 => {
-                    self.next_offset = ::std::option::Option::Some(is.read_uint32()?);
-                },
-                tag => {
-                    ::protobuf::rt::read_unknown_or_skip_group(tag, is, self.special_fields.mut_unknown_fields())?;
-                },
-            };
-        }
-        ::std::result::Result::Ok(())
-    }
-
-    // Compute sizes of nested messages
-    #[allow(unused_variables)]
-    fn compute_size(&self) -> u64 {
-        let mut my_size = 0;
-        if let Some(v) = self.transfer_id.as_ref() {
-            my_size += ::protobuf::rt::bytes_size(1, &v);
-        }
-        if let Some(v) = self.next_offset {
-            my_size += ::protobuf::rt::uint32_size(2, v);
-        }
-        my_size += ::protobuf::rt::unknown_fields_size(self.special_fields.unknown_fields());
-        self.special_fields.cached_size().set(my_size as u32);
-        my_size
-    }
-
-    fn write_to_with_cached_sizes(&self, os: &mut ::protobuf::CodedOutputStream<'_>) -> ::protobuf::Result<()> {
-        if let Some(v) = self.transfer_id.as_ref() {
-            os.write_bytes(1, v)?;
-        }
-        if let Some(v) = self.next_offset {
-            os.write_uint32(2, v)?;
-        }
-        os.write_unknown_fields(self.special_fields.unknown_fields())?;
-        ::std::result::Result::Ok(())
-    }
-
-    fn special_fields(&self) -> &::protobuf::SpecialFields {
-        &self.special_fields
-    }
-
-    fn mut_special_fields(&mut self) -> &mut ::protobuf::SpecialFields {
-        &mut self.special_fields
-    }
-
-    fn new() -> ZcashSignedPcztAck {
-        ZcashSignedPcztAck::new()
-    }
-
-    fn clear(&mut self) {
-        self.transfer_id = ::std::option::Option::None;
-        self.next_offset = ::std::option::Option::None;
-        self.special_fields.clear();
-    }
-
-    fn default_instance() -> &'static ZcashSignedPcztAck {
-        static instance: ZcashSignedPcztAck = ZcashSignedPcztAck {
-            transfer_id: ::std::option::Option::None,
-            next_offset: ::std::option::Option::None,
-            special_fields: ::protobuf::SpecialFields::new(),
-        };
-        &instance
-    }
-}
-
-impl ::protobuf::MessageFull for ZcashSignedPcztAck {
-    fn descriptor() -> ::protobuf::reflect::MessageDescriptor {
-        static descriptor: ::protobuf::rt::Lazy<::protobuf::reflect::MessageDescriptor> = ::protobuf::rt::Lazy::new();
-        descriptor.get(|| file_descriptor().message_by_package_relative_name("ZcashSignedPcztAck").unwrap()).clone()
-    }
-}
-
-impl ::std::fmt::Display for ZcashSignedPcztAck {
-    fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
-        ::protobuf::text_format::fmt(self, f)
-    }
-}
-
-impl ::protobuf::reflect::ProtobufValue for ZcashSignedPcztAck {
+impl ::protobuf::reflect::ProtobufValue for ZcashSpendAuthSignatures {
     type RuntimeType = ::protobuf::reflect::rt::RuntimeTypeMessage<Self>;
 }
 
@@ -2122,15 +1895,13 @@ static file_descriptor_proto_data: &'static [u8] = b"\
     Id\x12\x16\n\x06offset\x18\x02\x20\x02(\rR\x06offset\x12\x16\n\x06length\
     \x18\x03\x20\x02(\rR\x06length\"[\n\x0cZcashPcztAck\x12\x1f\n\x0btransfe\
     r_id\x18\x01\x20\x02(\x0cR\ntransferId\x12\x16\n\x06offset\x18\x02\x20\
-    \x02(\rR\x06offset\x12\x12\n\x04data\x18\x03\x20\x02(\x0cR\x04data\"\x7f\
-    \n\x0fZcashSignedPczt\x12\x1f\n\x0btransfer_id\x18\x01\x20\x02(\x0cR\ntr\
-    ansferId\x12\x1f\n\x0bpczt_length\x18\x02\x20\x02(\rR\npcztLength\x12\
-    \x16\n\x06offset\x18\x03\x20\x02(\rR\x06offset\x12\x12\n\x04data\x18\x04\
-    \x20\x02(\x0cR\x04data\"V\n\x12ZcashSignedPcztAck\x12\x1f\n\x0btransfer_\
-    id\x18\x01\x20\x02(\x0cR\ntransferId\x12\x1f\n\x0bnext_offset\x18\x02\
-    \x20\x02(\rR\nnextOffset*B\n\x0cZcashNetwork\x12\x18\n\x14ZcashNetwork_M\
-    ainnet\x10\0\x12\x18\n\x14ZcashNetwork_Testnet\x10\x01B9\n#com.satoshila\
-    bs.trezor.lib.protobufB\x12TrezorMessageZcash\
+    \x02(\rR\x06offset\x12\x12\n\x04data\x18\x03\x20\x02(\x0cR\x04data\"z\n\
+    \x18ZcashSpendAuthSignatures\x12\x1f\n\x0btransfer_id\x18\x01\x20\x02(\
+    \x0cR\ntransferId\x12\x18\n\x07records\x18\x02\x20\x02(\x0cR\x07records\
+    \x12#\n\rdebug_timings\x18\x03\x20\x01(\x0cR\x0cdebugTimings*B\n\x0cZcas\
+    hNetwork\x12\x18\n\x14ZcashNetwork_Mainnet\x10\0\x12\x18\n\x14ZcashNetwo\
+    rk_Testnet\x10\x01B9\n#com.satoshilabs.trezor.lib.protobufB\x12TrezorMes\
+    sageZcash\
 ";
 
 /// `FileDescriptorProto` object which was a source for this generated file
@@ -2148,7 +1919,7 @@ pub fn file_descriptor() -> &'static ::protobuf::reflect::FileDescriptor {
     file_descriptor.get(|| {
         let generated_file_descriptor = generated_file_descriptor_lazy.get(|| {
             let mut deps = ::std::vec::Vec::with_capacity(0);
-            let mut messages = ::std::vec::Vec::with_capacity(9);
+            let mut messages = ::std::vec::Vec::with_capacity(8);
             messages.push(ZcashGetAddress::generated_message_descriptor_data());
             messages.push(ZcashAddress::generated_message_descriptor_data());
             messages.push(ZcashGetViewingKey::generated_message_descriptor_data());
@@ -2156,8 +1927,7 @@ pub fn file_descriptor() -> &'static ::protobuf::reflect::FileDescriptor {
             messages.push(ZcashSignPczt::generated_message_descriptor_data());
             messages.push(ZcashPcztRequest::generated_message_descriptor_data());
             messages.push(ZcashPcztAck::generated_message_descriptor_data());
-            messages.push(ZcashSignedPczt::generated_message_descriptor_data());
-            messages.push(ZcashSignedPcztAck::generated_message_descriptor_data());
+            messages.push(ZcashSpendAuthSignatures::generated_message_descriptor_data());
             let mut enums = ::std::vec::Vec::with_capacity(1);
             enums.push(ZcashNetwork::generated_enum_descriptor_data());
             ::protobuf::reflect::GeneratedFileDescriptor::new_generated(

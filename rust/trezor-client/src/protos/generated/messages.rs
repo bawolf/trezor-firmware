@@ -637,10 +637,8 @@ pub enum MessageType {
     MessageType_ZcashPcztRequest = 32105,
     // @@protoc_insertion_point(enum_value:hw.trezor.messages.MessageType.MessageType_ZcashPcztAck)
     MessageType_ZcashPcztAck = 32106,
-    // @@protoc_insertion_point(enum_value:hw.trezor.messages.MessageType.MessageType_ZcashSignedPczt)
-    MessageType_ZcashSignedPczt = 32107,
-    // @@protoc_insertion_point(enum_value:hw.trezor.messages.MessageType.MessageType_ZcashSignedPcztAck)
-    MessageType_ZcashSignedPcztAck = 32108,
+    // @@protoc_insertion_point(enum_value:hw.trezor.messages.MessageType.MessageType_ZcashSpendAuthSignatures)
+    MessageType_ZcashSpendAuthSignatures = 32109,
 }
 
 impl ::protobuf::Enum for MessageType {
@@ -957,8 +955,7 @@ impl ::protobuf::Enum for MessageType {
             32104 => ::std::option::Option::Some(MessageType::MessageType_ZcashSignPczt),
             32105 => ::std::option::Option::Some(MessageType::MessageType_ZcashPcztRequest),
             32106 => ::std::option::Option::Some(MessageType::MessageType_ZcashPcztAck),
-            32107 => ::std::option::Option::Some(MessageType::MessageType_ZcashSignedPczt),
-            32108 => ::std::option::Option::Some(MessageType::MessageType_ZcashSignedPcztAck),
+            32109 => ::std::option::Option::Some(MessageType::MessageType_ZcashSpendAuthSignatures),
             _ => ::std::option::Option::None
         }
     }
@@ -1270,8 +1267,7 @@ impl ::protobuf::Enum for MessageType {
             "MessageType_ZcashSignPczt" => ::std::option::Option::Some(MessageType::MessageType_ZcashSignPczt),
             "MessageType_ZcashPcztRequest" => ::std::option::Option::Some(MessageType::MessageType_ZcashPcztRequest),
             "MessageType_ZcashPcztAck" => ::std::option::Option::Some(MessageType::MessageType_ZcashPcztAck),
-            "MessageType_ZcashSignedPczt" => ::std::option::Option::Some(MessageType::MessageType_ZcashSignedPczt),
-            "MessageType_ZcashSignedPcztAck" => ::std::option::Option::Some(MessageType::MessageType_ZcashSignedPcztAck),
+            "MessageType_ZcashSpendAuthSignatures" => ::std::option::Option::Some(MessageType::MessageType_ZcashSpendAuthSignatures),
             _ => ::std::option::Option::None
         }
     }
@@ -1582,8 +1578,7 @@ impl ::protobuf::Enum for MessageType {
         MessageType::MessageType_ZcashSignPczt,
         MessageType::MessageType_ZcashPcztRequest,
         MessageType::MessageType_ZcashPcztAck,
-        MessageType::MessageType_ZcashSignedPczt,
-        MessageType::MessageType_ZcashSignedPcztAck,
+        MessageType::MessageType_ZcashSpendAuthSignatures,
     ];
 }
 
@@ -1900,8 +1895,7 @@ impl ::protobuf::EnumFull for MessageType {
             MessageType::MessageType_ZcashSignPczt => 302,
             MessageType::MessageType_ZcashPcztRequest => 303,
             MessageType::MessageType_ZcashPcztAck => 304,
-            MessageType::MessageType_ZcashSignedPczt => 305,
-            MessageType::MessageType_ZcashSignedPcztAck => 306,
+            MessageType::MessageType_ZcashSpendAuthSignatures => 305,
         };
         Self::enum_descriptor().value_by_index(index)
     }
@@ -1920,7 +1914,7 @@ impl MessageType {
 }
 
 static file_descriptor_proto_data: &'static [u8] = b"\
-    \n\x0emessages.proto\x12\x12hw.trezor.messages\x1a\roptions.proto*\xd4l\
+    \n\x0emessages.proto\x12\x12hw.trezor.messages\x1a\roptions.proto*\xb1l\
     \n\x0bMessageType\x12(\n\x16MessageType_Initialize\x10\0\x1a\x0c\xb0\xb5\
     \x18\x01\x80\xa6\x1d\x01\x90\xb5\x18\x01\x12\x1e\n\x10MessageType_Ping\
     \x10\x01\x1a\x08\x80\xa6\x1d\x01\x90\xb5\x18\x01\x12%\n\x13MessageType_S\
@@ -2270,20 +2264,19 @@ static file_descriptor_proto_data: &'static [u8] = b"\
     ingKey\x10\xe7\xfa\x01\x1a\x04\x98\xb5\x18\x01\x12%\n\x19MessageType_Zca\
     shSignPczt\x10\xe8\xfa\x01\x1a\x04\x90\xb5\x18\x01\x12(\n\x1cMessageType\
     _ZcashPcztRequest\x10\xe9\xfa\x01\x1a\x04\x98\xb5\x18\x01\x12$\n\x18Mess\
-    ageType_ZcashPcztAck\x10\xea\xfa\x01\x1a\x04\x90\xb5\x18\x01\x12'\n\x1bM\
-    essageType_ZcashSignedPczt\x10\xeb\xfa\x01\x1a\x04\x98\xb5\x18\x01\x12*\
-    \n\x1eMessageType_ZcashSignedPcztAck\x10\xec\xfa\x01\x1a\x04\x90\xb5\x18\
-    \x01\x1a\x08\xc8\xf3\x18\x01\xd0\xf3\x18\x01\"\x04\x08Z\x10\\\"\x04\x08M\
-    \x10N\"\x04\x08G\x10J\"\x06\x08\xd9\x03\x10\xda\x03\"\x04\x08r\x10z\"\
-    \x05\x08{\x10\x95\x01\"\x06\x08\xdb\x01\x10\xdb\x01\"\x06\x08\xe0\x01\
-    \x10\xe0\x01\"\x06\x08\xe2\x01\x10\xe2\x01\"\x06\x08\xe3\x01\x10\xe3\x01\
-    \"\x06\x08\xe4\x01\x10\xe4\x01\"\x06\x08\xe5\x01\x10\xe5\x01\"\x06\x08\
-    \xe7\x01\x10\xe7\x01\"\x06\x08\xe8\x01\x10\xe8\x01\"\x06\x08\xe9\x01\x10\
-    \xe9\x01\"\x06\x08\xea\x01\x10\xea\x01\"\x06\x08\xec\x01\x10\xec\x01\"\
-    \x06\x08\xed\x01\x10\xed\x01\"\x06\x08\xac\x02\x10\xb0\x02\"\x06\x08\xb5\
-    \x02\x10\xb8\x02\"\x06\x08\xbc\x05\x10\xc5\x05\"\x06\x08\xe9\x07\x10\xf7\
-    \x07\"\x06\x08\xfa\x07\x10\xcb\x08B8\n#com.satoshilabs.trezor.lib.protob\
-    ufB\rTrezorMessage\x80\xa6\x1d\x01\
+    ageType_ZcashPcztAck\x10\xea\xfa\x01\x1a\x04\x90\xb5\x18\x01\x120\n$Mess\
+    ageType_ZcashSpendAuthSignatures\x10\xed\xfa\x01\x1a\x04\x98\xb5\x18\x01\
+    \x1a\x08\xc8\xf3\x18\x01\xd0\xf3\x18\x01\"\x04\x08Z\x10\\\"\x04\x08M\x10\
+    N\"\x04\x08G\x10J\"\x06\x08\xd9\x03\x10\xda\x03\"\x04\x08r\x10z\"\x05\
+    \x08{\x10\x95\x01\"\x06\x08\xdb\x01\x10\xdb\x01\"\x06\x08\xe0\x01\x10\
+    \xe0\x01\"\x06\x08\xe2\x01\x10\xe2\x01\"\x06\x08\xe3\x01\x10\xe3\x01\"\
+    \x06\x08\xe4\x01\x10\xe4\x01\"\x06\x08\xe5\x01\x10\xe5\x01\"\x06\x08\xe7\
+    \x01\x10\xe7\x01\"\x06\x08\xe8\x01\x10\xe8\x01\"\x06\x08\xe9\x01\x10\xe9\
+    \x01\"\x06\x08\xea\x01\x10\xea\x01\"\x06\x08\xec\x01\x10\xec\x01\"\x06\
+    \x08\xed\x01\x10\xed\x01\"\x06\x08\xac\x02\x10\xb0\x02\"\x06\x08\xb5\x02\
+    \x10\xb8\x02\"\x06\x08\xbc\x05\x10\xc5\x05\"\x06\x08\xe9\x07\x10\xf7\x07\
+    \"\x06\x08\xfa\x07\x10\xcb\x08B8\n#com.satoshilabs.trezor.lib.protobufB\
+    \rTrezorMessage\x80\xa6\x1d\x01\
 ";
 
 /// `FileDescriptorProto` object which was a source for this generated file

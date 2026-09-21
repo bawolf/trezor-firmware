@@ -364,6 +364,5 @@ trezor_message_impl! {
     ZcashSignPczt => MessageType_ZcashSignPczt,
     ZcashPcztRequest => MessageType_ZcashPcztRequest,
     ZcashPcztAck => MessageType_ZcashPcztAck,
-    ZcashSignedPczt => MessageType_ZcashSignedPczt,
-    ZcashSignedPcztAck => MessageType_ZcashSignedPcztAck,
+    ZcashSpendAuthSignatures => MessageType_ZcashSpendAuthSignatures,
 }
