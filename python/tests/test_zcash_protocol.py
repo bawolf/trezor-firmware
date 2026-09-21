@@ -120,6 +120,9 @@ def test_freed_download_ids_stay_unclaimed() -> None:
     proto = MESSAGES_PROTO.read_text()
     for value in FREED_WIRE_IDS:
         assert f"= {value} " not in proto
+    # protoc enforces the freeing: a `reserved` statement makes any reuse of
+    # the numbers a compile error, the enum's own idiom (cf. `reserved 219;`).
+    assert re.search(r"^\s*reserved 32107, 32108;", proto, re.M)
     # No download-shaped message survives, by name or by field.
     schema = ZCASH_PROTO.read_text()
     assert not re.search(r"^message Zcash\w*Signed\w*", schema, re.M)
@@ -200,7 +203,10 @@ def test_no_identifier_is_claimed_as_upstream() -> None:
     """Every mention of upstream assignment must be a denial, not a claim."""
     block = _squash(MESSAGES_PROTO.read_text().split("// Zcash", 1)[1])
     for claim in ("assigned", "reserved"):
-        for match in re.finditer(rf"\b{claim}\b", block):
+        # Prose only: protoc's `reserved <numbers>;` statement is the enum's
+        # own freed-ID mechanism (test_freed_download_ids_stay_unclaimed pins
+        # it), not a statement about upstream allocation.
+        for match in re.finditer(rf"\b{claim}\b(?!\s+\d)", block):
             # Wide enough to survive comment reflow, narrow enough not to reach
             # back into the previous sentence and find an unrelated negation.
             preceding = block[max(0, match.start() - 40) : match.start()]

@@ -1,7 +1,7 @@
 {
   "schema": "trezor-ironwood-host-fixture-manifest/1",
   "purpose": "Host-side PCZT transfer-shape vectors for trezorlib.zcash.sign_pczt. The host never parses PCZT bytes, so these exercise the chunked transfer protocol only. They are NOT positive signing coverage; the contract's positive signing controls belong to the firmware/native lane. The per-fixture PCZT structure fields (signature, output and padding counts, shielded_sighash) are recorded as provenance for the firmware lane; the host tests read only file, byte_length, sha256, chunks_at_1024 and action_count.",
-  "provisional_wire_id_revision": "32100-32108 (local-only, not upstream-assigned)",
+  "provisional_wire_id_revision": "32100-32106 and 32109 (local-only, not upstream-assigned; 32107 and 32108 are reserved, never reused)",
   "contract": "common/protob/messages-zcash.proto and trezorlib.zcash transfer constants",
   "source_evidence": "preserved arena-peak-8action-01 synthetic fixture corpus",
   "source_dir": "inputs/pczt",
@@ -12,8 +12,7 @@
   "limitations": [
     "The fixture hashes were compared outside this repository against two donor records. This checkout can verify integrity against this manifest, but cannot independently reproduce that provenance comparison.",
     "The generator command that produced the corpus is not recorded in the preserved evidence. Closing that provenance gap belongs to the lane that owns the pinned builder.",
-    "These are synthetic regtest-context fixtures. They live only under tests and are not reachable from any production protobuf, handler, or policy path.",
-    "This lane cannot produce a signed PCZT, so transcripts reuse the same bytes for the device-to-host direction."
+    "These are synthetic regtest-context fixtures. They live only under tests and are not reachable from any production protobuf, handler, or policy path."
   ],
   "fixtures": [
     {
