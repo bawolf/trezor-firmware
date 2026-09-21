@@ -35,7 +35,7 @@ CRATE = REPO / "core" / "embed" / "ironwood"
 
 pytestmark = [
     pytest.mark.altcoin,
-    pytest.mark.models("t3t1"),
+    pytest.mark.models("t3t1", "t3w1"),
     pytest.mark.setup_client(mnemonic=MNEMONIC),
 ]
 
@@ -103,7 +103,8 @@ def _verify(tool: Path, directory: Path, actions: int, signatures) -> str:
     ).stdout
 
 
-# On T3T1 each payment is two ConfirmOutput screens: the address, then the amount.
+# On T3T1 (delizia) and T3W1 (eckhart) each payment is two ConfirmOutput screens:
+# the address, then the amount.
 OUTPUT_SCREENS = 2
 
 

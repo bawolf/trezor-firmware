@@ -43,7 +43,7 @@ NS = [int(x) for x in os.environ.get("RAM_SWEEP_NS", "1,2,4,6,8").split(",") if 
 
 pytestmark = [
     pytest.mark.altcoin,
-    pytest.mark.models("t3t1"),
+    pytest.mark.models("t3t1", "t3w1"),
     pytest.mark.setup_client(mnemonic=MNEMONIC),
 ]
 

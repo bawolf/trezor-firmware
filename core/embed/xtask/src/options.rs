@@ -208,7 +208,7 @@ build_options! {
     #[arg(long, num_args = 0..=1, default_missing_value = "true")]
     map miniscript: bool,
 
-    /// Enable experimental Safe 5 Ironwood support
+    /// Enable experimental Ironwood (Zcash) support (Safe 5/T3T1, Safe 7/T3W1)
     #[arg(long, num_args = 0..=1, default_missing_value = "true")]
     map ironwood: bool,
 
@@ -282,6 +282,14 @@ build_options! {
     opt xbuild_trace: bool,
 }
 
+/// Models whose firmware may be built with `--ironwood`.
+///
+/// Both are Cortex-M33 (`thumbv8m.main-none-eabihf`) parts, so the `no_std`
+/// signer core is architecture-identical. The zcash apps go through the
+/// model-agnostic `trezor.ui.layouts` facade, so the delizia (T3T1) and
+/// eckhart (T3W1) layouts both serve them without app-level branching.
+const IRONWOOD_MODELS: &[Model] = &[Model::T3T1, Model::T3W1];
+
 impl ResolvedBuildArgs {
     /// Validates options against the user-selected top-level build target.
     ///
@@ -290,8 +298,10 @@ impl ResolvedBuildArgs {
     /// project does not map are intentionally ignored when resolving features
     /// for that cloned dependency build.
     fn validate(&self) -> Result<()> {
-        if self.ironwood && (self.project != Project::Firmware || self.model != Model::T3T1) {
-            bail!("--ironwood is supported only for Safe 5/T3T1 firmware builds");
+        if self.ironwood
+            && (self.project != Project::Firmware || !IRONWOOD_MODELS.contains(&self.model))
+        {
+            bail!("--ironwood is supported only for Safe 5/T3T1 and Safe 7/T3W1 firmware builds");
         }
         if self.ironwood && self.btc_only {
             bail!("--ironwood cannot be combined with --btc-only");
