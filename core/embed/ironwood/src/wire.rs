@@ -1,9 +1,12 @@
 //! Nonallocating admission for the pinned v2 Postcard layout. Not a general
 //! PCZT parser.
 
+#[cfg(feature = "test")]
 use zcash_note_encryption::{ENC_CIPHERTEXT_SIZE, OUT_CIPHERTEXT_SIZE};
+#[cfg(feature = "test")]
 use zcash_protocol::value::MAX_MONEY;
 
+#[cfg(feature = "test")]
 use crate::{Error, Result, ZIP32_HARDENED};
 
 pub const MAX_PCZT_BYTES: usize = 65_536;
@@ -20,6 +23,9 @@ pub const MAX_ACTIONS: usize = 32;
 /// section buffer without refusing any real address.
 pub const USER_ADDRESS_BUDGET: usize = 512;
 
+// `version`, `group` and `coin_type` are read only by the host-only reference
+// scanner below; the device checks the same fields on `stream::Header`.
+#[cfg_attr(not(feature = "test"), allow(dead_code))]
 #[derive(Clone, Copy)]
 pub(crate) struct Header {
     pub version: u32,
@@ -30,18 +36,22 @@ pub(crate) struct Header {
     pub coin_type: u32,
 }
 
+#[cfg(feature = "test")]
 fn malformed(ok: bool) -> Result<()> {
     if ok { Ok(()) } else { Err(Error::malformed()) }
 }
 
+#[cfg(feature = "test")]
 fn policy(ok: bool) -> Result<()> {
     if ok { Ok(()) } else { Err(Error::policy()) }
 }
 
+#[cfg(feature = "test")]
 struct Reader<'a> {
     rest: &'a [u8],
 }
 
+#[cfg(feature = "test")]
 impl<'a> Reader<'a> {
     fn take(&mut self, n: usize) -> Result<&'a [u8]> {
         let bytes = self.rest.get(..n).ok_or(Error::malformed())?;
@@ -184,6 +194,7 @@ impl<'a> Reader<'a> {
     }
 }
 
+#[cfg(feature = "test")]
 pub(crate) fn scan(bytes: &[u8]) -> Result<Header> {
     if bytes.len() > MAX_PCZT_BYTES {
         return Err(Error::capacity());

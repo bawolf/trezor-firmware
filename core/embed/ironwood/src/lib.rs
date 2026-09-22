@@ -30,6 +30,7 @@ use alloc::vec::Vec;
 #[cfg(feature = "ironwood-measurement")]
 pub mod bench;
 mod digest;
+#[cfg(feature = "test")]
 mod effects;
 mod error;
 mod prewarm;
@@ -51,12 +52,20 @@ pub mod testing {
 
 pub use error::{Error, ErrorCode, Result};
 use orchard::Note;
+#[cfg(feature = "test")]
 use orchard::bundle::BundleVersion;
-use orchard::keys::{FullViewingKey, Scope, SpendAuthorizingKey, SpendValidatingKey};
+use orchard::keys::{FullViewingKey, Scope};
+#[cfg(feature = "test")]
+use orchard::keys::{SpendAuthorizingKey, SpendValidatingKey};
 use orchard::note_encryption::IronwoodDomain;
+#[cfg(feature = "test")]
 use pczt::Pczt;
-use pczt::roles::low_level_signer::{OrchardParseError, Signer as LowLevelSigner};
+use pczt::roles::low_level_signer::OrchardParseError;
+#[cfg(feature = "test")]
+use pczt::roles::low_level_signer::Signer as LowLevelSigner;
+#[cfg(feature = "test")]
 use pczt::roles::verifier::{OrchardError, Verifier};
+#[cfg(feature = "test")]
 use rand_core::{CryptoRng, RngCore};
 pub use session::{Event, Session, SignatureRecord, Signatures};
 /// Maximum number of admitted Ironwood actions.
@@ -70,6 +79,7 @@ use zcash_note_encryption::Domain;
 use zcash_protocol::consensus::{
     BlockHeight, BranchId, MAIN_NETWORK, NetworkConstants, Parameters, TEST_NETWORK,
 };
+#[cfg(feature = "test")]
 use zcash_protocol::constants::{V6_TX_VERSION, V6_VERSION_GROUP_ID};
 use zcash_protocol::value::MAX_MONEY;
 use zeroize::{Zeroize, ZeroizeOnDrop};
@@ -553,6 +563,12 @@ impl Review {
     }
 }
 
+/// The whole-PCZT reference implementation. It is the oracle the streaming
+/// `Session` is differentially tested against (`tests/session_equivalence.rs`,
+/// `tests/stream_equivalence.rs`), never a device path: the firmware calls
+/// `Session` exclusively. Host-only, so the firmware image carries one
+/// implementation and one PCZT parser.
+#[cfg(feature = "test")]
 struct Pending {
     pczt: Pczt,
     signing_indices: Vec<usize>,
@@ -562,6 +578,7 @@ struct Pending {
     expected_ak: SpendValidatingKey,
 }
 
+#[cfg(feature = "test")]
 struct PendingSlot {
     pending: Option<Pending>,
     // Deliberately duplicates the returned Token's binding. Review owns the
@@ -571,6 +588,7 @@ struct PendingSlot {
     context: [u8; 32],
 }
 
+#[cfg(feature = "test")]
 impl PendingSlot {
     const fn empty() -> Self {
         Self {
@@ -636,7 +654,12 @@ impl From<OrchardParseError> for Error {
     }
 }
 
-/// Owned request state. Only a future trusted UI may call [`Engine::approve`].
+/// The whole-PCZT reference implementation. It is the oracle the streaming
+/// `Session` is differentially tested against (`tests/session_equivalence.rs`,
+/// `tests/stream_equivalence.rs`), never a device path: the firmware calls
+/// `Session` exclusively. Host-only, so the firmware image carries one
+/// implementation and one PCZT parser.
+#[cfg(feature = "test")]
 pub struct Engine<R> {
     rng: R,
     policy: Policy,
@@ -645,6 +668,7 @@ pub struct Engine<R> {
     slot: PendingSlot,
 }
 
+#[cfg(feature = "test")]
 impl<R> Drop for Engine<R> {
     fn drop(&mut self) {
         self.slot.clear();
@@ -653,6 +677,7 @@ impl<R> Drop for Engine<R> {
     }
 }
 
+#[cfg(feature = "test")]
 impl<R: RngCore + CryptoRng> Engine<R> {
     /// Creates an engine from device-owned limits, validated request context,
     /// and a trusted CSPRNG. Deterministic RNGs are test-only.
@@ -824,6 +849,7 @@ fn add(total: u64, value: u64) -> Result<u64> {
         .ok_or(Error::capacity())
 }
 
+#[cfg(feature = "test")]
 struct Validated {
     pczt: Pczt,
     projection: Projection,
@@ -833,6 +859,7 @@ struct Validated {
     expected_ak: SpendValidatingKey,
 }
 
+#[cfg(feature = "test")]
 fn validate(
     bytes: &[u8],
     policy: &Policy,
@@ -912,6 +939,7 @@ fn validate(
 
 #[inline(never)]
 #[allow(clippy::too_many_arguments)]
+#[cfg(feature = "test")]
 fn verify_bundle(
     bundle: &orchard::pczt::Bundle,
     fvk: &FullViewingKey,
