@@ -9,8 +9,17 @@
 //! "the review is pending" state, and signature records. Every key object is
 //! derived here from the wallet seed the handler lends for one call: the FVK
 //! is kept for the request because `Session::feed` borrows it on every call,
-//! the spend authorizing key exists only inside `sign`, and both are wiped
-//! before the memory is reused.
+//! and the spend authorizing key exists only inside `sign`. Both are wiped by
+//! their own `Drop` before the memory is reused.
+//!
+//! That covers the objects this module names, and not the temporaries
+//! underneath them. `AccountKeys::derive` runs `zip32`'s `HardenedOnlyKey`,
+//! which is not `Zeroize`, and `FullViewingKey::from(&sk)` computes the
+//! spend-authorizing scalar as a temporary; both `begin` and `sign` therefore
+//! leave key-derived bytes below the stack pointer. The handler clears them
+//! the way every other seed-touching Trezor call does -- a
+//! `utils.zero_unused_stack()` in a `finally` around each native call -- so
+//! that guarantee lives in `apps/zcash/sign_pczt.py`, not here.
 
 use alloc::boxed::Box;
 use core::ptr;

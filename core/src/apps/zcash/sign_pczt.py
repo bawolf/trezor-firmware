@@ -355,15 +355,26 @@ async def _stream_and_sign(
 
     if timings is not None:
         timings.begin_start()
-    session_begin(
-        wallet_seed,
-        network,
-        account,
-        host_reference_height,
-        MAXIMUM_FEE,
-        EXPIRY_WINDOW,
-        pczt_length,
-    )
+    # `session_begin` is a seed-touching native call: it runs the whole ZIP-32
+    # path and derives the account FVK, which computes the spend-authorizing
+    # scalar as a temporary, and `zip32`'s `HardenedOnlyKey` is not `Zeroize`.
+    # Wipe the completed native frames before the first host round trip, the
+    # way `session_sign`, `get_address` and `get_viewing_key` do. Without this
+    # the first wipe is after the first `session_feed` -- a `random.bytes`, a
+    # host call of up to CHUNK_TIMEOUT_MS, a protobuf decode and one action's
+    # verification later.
+    try:
+        session_begin(
+            wallet_seed,
+            network,
+            account,
+            host_reference_height,
+            MAXIMUM_FEE,
+            EXPIRY_WINDOW,
+            pczt_length,
+        )
+    finally:
+        utils.zero_unused_stack()
     if timings is not None:
         timings.begin_done()
     transfer_id = random.bytes(TRANSFER_ID_BYTES)

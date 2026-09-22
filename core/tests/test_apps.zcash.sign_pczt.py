@@ -14,6 +14,9 @@ if not utils.BITCOIN_ONLY:
 
 # Event kinds recorded on one shared timeline, in the order they happen.
 REPORT = "report"
+BEGIN = "begin"
+SIGN = "sign"
+WIPE = "wipe"
 FEED = "feed"
 PARK_IN = "park_in"
 PARK_OUT = "park_out"
@@ -47,6 +50,7 @@ class _FakeIronwood:
 
     def session_begin(self, *args) -> None:
         self.begun = True
+        self.events.append((BEGIN, None))
 
     def session_feed(self, view):
         self.events.append((FEED, len(self.steps)))
@@ -56,6 +60,7 @@ class _FakeIronwood:
         self.approved = True
 
     def session_sign(self, seed) -> bytes:
+        self.events.append((SIGN, None))
         return bytes(sign_pczt.RECORD_LEN)
 
     def session_cancel(self) -> None:
@@ -109,6 +114,7 @@ class TestIronwoodSignPcztProgress(unittest.TestCase):
         self._patch(sign_pczt, "_confirm_memo", self._confirm_memo)
         self._patch(sign_pczt, "_confirm_totals", self._confirm_totals)
         self._patch(ironwood_account, "require_session", lambda session: None)
+        self._patch(utils, "zero_unused_stack", self._wipe)
 
     def tearDown(self):
         for patcher in reversed(self.patchers):
@@ -157,6 +163,9 @@ class TestIronwoodSignPcztProgress(unittest.TestCase):
             offset=msg.offset,
             data=bytes(msg.length),
         )
+
+    def _wipe(self):
+        self.events.append((WIPE, None))
 
     async def _park(self, name):
         self.events.append((PARK_IN, name))
@@ -248,6 +257,29 @@ class TestIronwoodSignPcztProgress(unittest.TestCase):
         self.assertEqual(values[0], 0)
         self.assertEqual(values[-1], 1000 * (PCZT_LENGTH - CONSUMED) // PCZT_LENGTH)
 
+    def test_every_seed_touching_native_call_is_followed_by_a_stack_wipe(self):
+        """`session_begin` derives the account key; so does `session_sign`.
+
+        `session_begin` runs the whole ZIP-32 path and `FullViewingKey::from`,
+        which computes the spend-authorizing scalar as a temporary, and
+        `zip32`'s `HardenedOnlyKey` is not `Zeroize`. Both leave key-derived
+        bytes below the stack pointer, so both must be wrapped the way
+        `get_address` and `get_viewing_key` wrap theirs. Before this was
+        pinned, the first wipe of the run was after the first `session_feed`:
+        a host round trip (up to CHUNK_TIMEOUT_MS) and one action's
+        verification later.
+        """
+        self._run()
+
+        kinds = [kind for kind, _payload in self.events]
+        for call in (BEGIN, SIGN):
+            index = kinds.index(call)
+            self.assertEqual(kinds[index + 1], WIPE)
+        # And nothing at all happens between begin and its wipe.
+        self.assertEqual(kinds.index(BEGIN) + 1, kinds.index(WIPE))
+        # The wipe after begin precedes the first host chunk and the first feed.
+        self.assertTrue(kinds.index(WIPE) < kinds.index(FEED))
+
     def _signing_starts_at(self):
         # Everything after the totals confirmation belongs to the signing
         # layout, which starts its own count at zero.
@@ -266,8 +298,10 @@ class TestIronwoodSignPcztProgress(unittest.TestCase):
         self._run()
 
         self.assertEqual(self.events[0], (REPORT, 0))
-        self.assertEqual(self.events[1], (REPORT, 0))
-        self.assertEqual(self.events[2][0], FEED)
+        self.assertEqual(self.events[1][0], BEGIN)
+        kinds = [kind for kind, _payload in self.events]
+        # The loop's own first report follows (same value), then the first feed.
+        self.assertEqual(self.events[kinds.index(FEED) - 1], (REPORT, 0))
 
 
 if __name__ == "__main__":
