@@ -1,4 +1,4 @@
-"""Streamed Ironwood signing on the T3T1 emulator.
+"""Streamed Ironwood signing on the emulator (T3B1 / T3T1 / T3W1).
 
 The PCZT fixture is built for the emulator's wallet by the Rust example
 `core/embed/ironwood/examples/ironwood_fixture.rs`, and every returned
@@ -35,7 +35,7 @@ CRATE = REPO / "core" / "embed" / "ironwood"
 
 pytestmark = [
     pytest.mark.altcoin,
-    pytest.mark.models("t3t1", "t3w1"),
+    pytest.mark.models("t3b1", "t3t1", "t3w1"),
     pytest.mark.setup_client(mnemonic=MNEMONIC),
 ]
 
@@ -106,8 +106,8 @@ def _verify(tool: Path, directory: Path, actions: int, signatures) -> str:
     ).stdout
 
 
-# On T3T1 (delizia) and T3W1 (eckhart) each payment is two ConfirmOutput screens:
-# the address, then the amount.
+# On T3T1 (delizia), T3W1 (eckhart) and T3B1 (caesar) each payment is two
+# ConfirmOutput screens: the address, then the amount.
 OUTPUT_SCREENS = 2
 
 

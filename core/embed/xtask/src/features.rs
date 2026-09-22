@@ -271,14 +271,29 @@ mod tests {
     }
 
     #[test]
+    fn enables_ironwood_for_safe_3_firmware() {
+        let args = ResolvedBuildArgs {
+            model: Model::T3B1,
+            ironwood: true,
+            frozen: true,
+            pyopt: true,
+            ..ResolvedBuildArgs::default()
+        };
+
+        let features = resolve_features(&args).unwrap().features;
+        assert!(features.contains(&"ironwood".to_string()));
+        assert!(features.contains(&"layout_caesar".to_string()));
+    }
+
+    #[test]
     fn rejects_ironwood_for_other_models() {
-        for model in [Model::T2T1, Model::T2B1, Model::T3B1, Model::T3T2] {
+        for model in [Model::T2T1, Model::T2B1, Model::T3T2] {
             let error =
                 ResolvedBuildArgs::from_build_args(&ironwood_build_args(Project::Firmware, model))
                     .unwrap_err();
             assert_eq!(
                 error.to_string(),
-                "--ironwood is supported only for Safe 5/T3T1 and Safe 7/T3W1 firmware builds"
+                "--ironwood is supported only for Safe 3/T3B1, Safe 5/T3T1 and Safe 7/T3W1 firmware builds"
             );
         }
     }
@@ -290,7 +305,7 @@ mod tests {
                 .unwrap_err();
         assert_eq!(
             error.to_string(),
-            "--ironwood is supported only for Safe 5/T3T1 and Safe 7/T3W1 firmware builds"
+            "--ironwood is supported only for Safe 3/T3B1, Safe 5/T3T1 and Safe 7/T3W1 firmware builds"
         );
     }
 

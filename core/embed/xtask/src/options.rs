@@ -208,7 +208,8 @@ build_options! {
     #[arg(long, num_args = 0..=1, default_missing_value = "true")]
     map miniscript: bool,
 
-    /// Enable experimental Ironwood (Zcash) support (Safe 5/T3T1, Safe 7/T3W1)
+    /// Enable experimental Ironwood (Zcash) support (Safe 3/T3B1, Safe 5/T3T1,
+    /// Safe 7/T3W1)
     #[arg(long, num_args = 0..=1, default_missing_value = "true")]
     map ironwood: bool,
 
@@ -284,11 +285,19 @@ build_options! {
 
 /// Models whose firmware may be built with `--ironwood`.
 ///
-/// Both are Cortex-M33 (`thumbv8m.main-none-eabihf`) parts, so the `no_std`
-/// signer core is architecture-identical. The zcash apps go through the
-/// model-agnostic `trezor.ui.layouts` facade, so the delizia (T3T1) and
-/// eckhart (T3W1) layouts both serve them without app-level branching.
-const IRONWOOD_MODELS: &[Model] = &[Model::T3T1, Model::T3W1];
+/// All three are STM32U5 / Cortex-M33 (`thumbv8m.main-none-eabihf`) parts, so
+/// the `no_std` signer core is architecture-identical. The zcash apps go
+/// through the model-agnostic `trezor.ui.layouts` facade, so the delizia
+/// (T3T1), eckhart (T3W1) and caesar (T3B1) layouts all serve them without
+/// app-level branching.
+///
+/// The STM32F4 / Cortex-M4 models (T2T1 Model T, T2B1 Safe 3 gen 1, D001) are
+/// excluded on capacity, not on architecture: their `.stack`, `.buf` and
+/// `.heap` all share a single 191 KiB AUX1_RAM, so the boot-lifetime 96 KiB
+/// signing REGION cannot coexist with a workable MicroPython heap, and they
+/// have no U5 crypto accelerators. T3T2 is excluded because it is an
+/// unreleased devkit-only model with a smaller (1640 KiB) firmware slot.
+const IRONWOOD_MODELS: &[Model] = &[Model::T3B1, Model::T3T1, Model::T3W1];
 
 impl ResolvedBuildArgs {
     /// Validates options against the user-selected top-level build target.
@@ -301,7 +310,9 @@ impl ResolvedBuildArgs {
         if self.ironwood
             && (self.project != Project::Firmware || !IRONWOOD_MODELS.contains(&self.model))
         {
-            bail!("--ironwood is supported only for Safe 5/T3T1 and Safe 7/T3W1 firmware builds");
+            bail!(
+                "--ironwood is supported only for Safe 3/T3B1, Safe 5/T3T1 and Safe 7/T3W1 firmware builds"
+            );
         }
         if self.ironwood && self.btc_only {
             bail!("--ironwood cannot be combined with --btc-only");
