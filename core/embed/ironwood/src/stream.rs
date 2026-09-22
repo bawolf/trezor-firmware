@@ -2,7 +2,7 @@
 //! that `wire::scan` admits (phase 1 of the streaming design). The encoding is
 //! consumed one section at a time (header, each action, trailer) in a fixed
 //! buffer, so the device never holds more than one action's bytes; see
-//! docs/proposals/STREAMING_SIGNING_DESIGN.md §3-4.
+//! docs/common/zcash-ironwood-signing.md §3-4.
 //!
 //! The field grammar mirrors `wire::scan` line for line. Agreement on both
 //! acceptance and error class for every corpus PCZT, mutation, truncation and
@@ -55,6 +55,13 @@ pub const TRAILER_BUDGET: usize = 1 + VARINT + TAG + (TAG + 32) + VARINT + TAG +
 /// The largest single section; the scanner's only buffer.
 pub const SECTION_BUDGET: usize = ACTION_BUDGET;
 
+// Tripwire. The three budgets above are derived from named field sizes, so
+// they are already correct by construction; these literals exist to make any
+// grammar change surface as an explicit diff, because `SECTION_BUDGET` is the
+// scanner's single buffer and therefore a line item in the region's RAM
+// budget. A failure here is not a bug by itself: re-derive the number from
+// the field list in the doc comment above, check the new `SECTION_BUDGET`
+// against the region, and update the literal in the same commit.
 const _: () = assert!(HEADER_BUDGET == 190 && ACTION_BUDGET == 2015 && TRAILER_BUDGET == 89);
 const _: () = assert!(HEADER_BUDGET <= SECTION_BUDGET && TRAILER_BUDGET <= SECTION_BUDGET);
 

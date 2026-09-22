@@ -2,13 +2,16 @@
 //!
 //! The streaming core allocates a little (Sinsemilla pads into a `Vec<bool>`,
 //! `hash_to_curve` boxes a closure, Pasta builds its square-root table on
-//! first use; design §7). Those blocks must live in memory the MicroPython
+//! first use; docs/common/zcash-ironwood-signing.md §7). Those blocks must
+//! live in memory the MicroPython
 //! collector never touches: a GC-backed allocator freed Pasta's table, which
 //! lives behind a Rust static the collector does not scan, and Pasta trapped.
 //!
 //! So the allocator is a first-fit free list inside a fixed region reserved for
-//! the whole boot: a `.buf`-section static (`REGION`, in AUX2 RAM alongside the
-//! other persistent display/wire buffers, NOT in the MicroPython GC heap). It is
+//! the whole boot: a `.buf`-section static (`REGION`, placed wherever the
+//! model's linker script puts `.buf` -- AUX1_RAM on T3T1 and T3W1, AUX2_RAM on
+//! T3B1 -- alongside the other persistent display/wire buffers, and NOT in the
+//! MicroPython GC heap). It is
 //! formatted once, on the first `install_region`, and never freed. Blocks are
 //! split on allocation; on free the whole region is swept once (O(n)) to merge every
 //! run of adjacent free blocks, so freed per-action scratch is reclaimed

@@ -1,5 +1,5 @@
 //! Device state of one streamed Ironwood signing request
-//! (docs/proposals/STREAMING_SIGNING_DESIGN.md §4, phase 4 handler).
+//! (docs/common/zcash-ironwood-signing.md §4; the handler it serves is §10).
 //!
 //! The MicroPython module `trezorironwood` drives exactly one request at a
 //! time through `begin`, `feed`, `approve`, `sign` and `cancel`; the request
@@ -76,7 +76,8 @@ pub struct Output {
     pub receiver: [u8; 43],
     pub value: u64,
     pub is_change: bool,
-    /// What to show for the memo (design §11), recovered from the signed
+    /// What to show for the memo (§11: text within the display budget
+    /// verbatim, anything else as a hash), recovered from the signed
     /// ciphertext of this action.
     pub memo: Memo,
 }

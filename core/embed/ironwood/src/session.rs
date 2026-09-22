@@ -1,7 +1,7 @@
 //! Streaming counterpart of [`Engine`](crate::Engine): consumes a PCZT in
 //! chunks and enforces the approval semantics of `Engine::begin`, `approve`
 //! and `sign` while never holding more than one action
-//! (docs/proposals/STREAMING_SIGNING_DESIGN.md §4 and §6).
+//! (docs/common/zcash-ironwood-signing.md §4 and §6).
 //!
 //! Every check names the engine line it reproduces. Agreement with the engine
 //! on projection, sighash, error class and signature bytes over the
@@ -142,7 +142,7 @@ impl Signatures {
     }
 }
 
-/// Engine's `Pending` (lib.rs:296-303) without the retained PCZT.
+/// Engine's `Pending` (`lib.rs`) without the retained PCZT.
 struct Pending {
     approved: bool,
     sighash: [u8; 32],
@@ -150,7 +150,7 @@ struct Pending {
     records: Records,
 }
 
-/// Engine's `PendingSlot` (lib.rs:305-371) with the same contract: the
+/// Engine's `PendingSlot` (`lib.rs`) with the same contract: the
 /// returned token is duplicated here so the session compares and clears its
 /// own copy. The slot is only ever cleared in place, never moved out, so
 /// `Token` and `Records` zeroize on drop in the storage they occupied.
@@ -255,7 +255,8 @@ struct Stream {
     fvk: Zeroizing<[u8; 96]>,
     expected_ak: SpendValidatingKey,
     /// The device's seed fingerprint with the consented account path: what
-    /// any `zip32_derivation` on the wire must name (design gap (a)).
+    /// any `zip32_derivation` on the wire must name: a claim is admitted
+    /// only when it names this seed and the consented account path.
     own: OwnDerivation,
     /// Present once the header has been verified. Boxed (MUST-FIX #1) so the
     /// CAP-sized `Body` is never moved by value on the stack; it lives in the
@@ -322,7 +323,7 @@ impl<R> Session<R> {
 }
 
 impl<R: RngCore + CryptoRng> Session<R> {
-    /// As `Engine::with_rng` (lib.rs:404-417).
+    /// As [`crate::Engine::with_rng`].
     pub fn with_rng(policy: Policy, mut rng: R) -> Result<Self> {
         let mut session = [0; 32];
         if rng.try_fill_bytes(&mut session).is_err() {
@@ -341,9 +342,9 @@ impl<R: RngCore + CryptoRng> Session<R> {
 
     /// Starts a request of exactly `declared_len` bytes for the device-derived
     /// FVK and seed fingerprint ([`crate::seed_fingerprint`]). As
-    /// `Engine::begin` (lib.rs:428-429) the pending consent is cleared and the
+    /// [`crate::Engine::begin`] the pending consent is cleared and the
     /// counter advances before anything is read; the length bound is
-    /// `wire::scan`'s (lib.rs:139-141).
+    /// `wire::scan`'s.
     pub fn begin(
         &mut self,
         declared_len: usize,
@@ -478,9 +479,10 @@ impl<R: RngCore + CryptoRng> Session<R> {
         } = *stream.body.take().ok_or(Error::internal())?;
 
         // Flags: `Flags::from_byte` is what `Bundle::parse` runs (parse.rs:41-42)
-        // and `Pczt::parse` turns into `Malformed` (lib.rs:589); the exact
-        // default-flag gate is lib.rs:648-655. The cross-address restriction
-        // the engine checks next (lib.rs:659-661) is a no-op under these flags.
+        // and `Pczt::parse` turns into `Malformed` (`validate`); the exact
+        // default-flag gate is the `flag_byte()` check opening `verify_bundle`.
+        // The cross-address restriction the engine checks next
+        // (`verify_cross_address_restriction`) is a no-op under these flags.
         let version = BundleVersion::ironwood_v3();
         Flags::from_byte(trailer.flags, version).ok_or(Error::malformed())?;
         ensure_policy(
@@ -498,11 +500,12 @@ impl<R: RngCore + CryptoRng> Session<R> {
                 .ok_or(Error::malformed())?;
         }
         // The value sum admission already bounded (non-negative, at most
-        // MAX_MONEY) is what the engine's digest hashes (effects.rs:30).
+        // MAX_MONEY) is what the engine's digest hashes (`effects::sighash`).
         let value_balance = i64::try_from(trailer.value_sum).map_err(|_| Error::malformed())?;
         let sighash = digest.finish(trailer.flags, value_balance);
 
-        // VerifyDummies (lib.rs:682-687).
+        // VerifyDummies: `verify_bundle`'s dummy-spend arm, deferred to here
+        // because a dummy signature verifies against the finished sighash.
         for (_, record) in records.iter() {
             if let Record::Dummy { rk, signature } = record {
                 VerificationKey::<SpendAuth>::try_from(*rk)
@@ -512,7 +515,8 @@ impl<R: RngCore + CryptoRng> Session<R> {
             }
         }
 
-        // Bundle-level checks (lib.rs:718-730).
+        // Bundle-level checks: the tail of `verify_bundle` (a real spend and
+        // at least one reviewed output, the fee, the value-sum balance).
         let real = records
             .iter()
             .any(|(_, record)| matches!(record, Record::Real { .. }));
@@ -530,8 +534,8 @@ impl<R: RngCore + CryptoRng> Session<R> {
             )? == projection.input_total,
         )?;
 
-        // Token as lib.rs:439-466 with the byte string replaced by the running
-        // byte digest (design §6).
+        // Token as `Engine::begin` builds it, with the byte string replaced by the
+        // running byte digest (design §6).
         stream.bytes.update(&(count as u64).to_le_bytes());
         let stream_digest: [u8; 32] = stream
             .bytes
@@ -582,7 +586,7 @@ impl<R: RngCore + CryptoRng> Session<R> {
         })
     }
 
-    /// As `Engine::approve` (lib.rs:486-506). A consent call while bytes are
+    /// As [`crate::Engine::approve`]. A consent call while bytes are
     /// still streaming is a protocol violation and discards the stream.
     pub fn approve(&mut self, token: &Token) -> Result<()> {
         self.stream = None;
@@ -601,11 +605,11 @@ impl<R: RngCore + CryptoRng> Session<R> {
         Ok(())
     }
 
-    /// Consumes consent on every signing attempt, including all failures
-    /// (lib.rs:508-539). Signatures are released only when every real spend
-    /// signed. The slot is borrowed, never moved out, and cleared in place on
-    /// every exit, so the records and the retained token zeroize where they
-    /// were stored.
+    /// Consumes consent on every signing attempt, including all failures, as
+    /// [`crate::Engine::sign`] does. Signatures are released only when every
+    /// real spend signed. The slot is borrowed, never moved out, and
+    /// cleared in place on every exit, so the records and the retained
+    /// token zeroize where they were stored.
     pub fn sign(&mut self, token: &Token, ask: &SpendAuthorizingKey) -> Result<Signatures> {
         self.stream = None;
         let result = match (&self.slot.pending, &self.slot.token) {
@@ -637,7 +641,8 @@ impl<R: RngCore + CryptoRng> Session<R> {
             // `Action::sign` (orchard-0.15.3/src/pczt/signer.rs:24-37) reads the
             // parsed `alpha` and `rk`; the record is that sub-parse of the wire
             // fields, re-derived here because `pallas::Scalar` is not nameable
-            // in this crate. A wrong key is `Error::signing()` (lib.rs:532).
+            // in this crate. A wrong key is `Error::signing()`, as in
+            // [`crate::Engine::sign`].
             let spend = Spend::parse(
                 UNUSED_NULLIFIER,
                 *rk,
@@ -671,7 +676,7 @@ impl<R: RngCore + CryptoRng> Session<R> {
 }
 
 impl Body {
-    /// Header checks of `validate` (lib.rs:570-587), then the digest. Returns a
+    /// Header checks of [`crate::validate`], then the digest. Returns a
     /// `Box<Body>` built in the region and stays out of line (MUST-FIX #1) so
     /// the CAP-sized `Body` value never materialises in the caller's
     /// `session_feed` frame.
@@ -704,7 +709,7 @@ impl Body {
             expiry: header.expiry,
             coin_type: header.coin_type,
         })?;
-        // lib.rs:591-604.
+        // The projection `validate` builds from the parsed header.
         let projection = Projection {
             network: request.network,
             account: request.account,
@@ -731,9 +736,9 @@ impl Body {
         }))
     }
 
-    /// Design §4 steps 1-9: the per-action checks of `verify_bundle`
-    /// (lib.rs:664-717) in the engine's order, with the dummy signature
-    /// deferred to VerifyDummies.
+    /// Design §4 steps 1-9: the per-action checks of [`crate::verify_bundle`]
+    /// in the engine's order, with the dummy signature deferred to
+    /// VerifyDummies.
     #[inline(never)]
     fn action(
         &mut self,
@@ -778,7 +783,7 @@ impl Body {
         };
         // `orchard::Action::from_parts` (orchard-0.15.3/src/action.rs:65-67)
         // refuses an identity `rk`; the engine reaches it through
-        // `effects::sighash` (effects.rs:30-31, lib.rs:611) before any
+        // `effects::sighash` (called by `validate`) before any
         // verification, as `Malformed`. Nothing below reproduces it: a real
         // spend cannot reach it (`verify_rk` would need `alpha = -ask`), but a
         // dummy spend's `rk` is checked against the host-chosen wire FVK, so
@@ -794,13 +799,13 @@ impl Body {
         ensure_malformed(*spend.rk != [0; 32])?;
         let parsed = parse(action, wire_fvk)?;
 
-        // lib.rs:667-670.
+        // Step 1: the running input and output totals.
         self.projection.input_total = add(self.projection.input_total, input_value)?;
         self.output_total = add(self.output_total, output_value)?;
-        // lib.rs:671-673.
+        // Step 2: no nullifier repeats within the bundle.
         ensure_malformed(!self.nullifiers[..index].contains(spend.nullifier))?;
         self.nullifiers[index] = *spend.nullifier;
-        // lib.rs:674-681.
+        // Step 3: the value commitment, then nullifier ownership.
         parsed.verify_cv_net().map_err(|_| Error::malformed())?;
         // DEDUP LEVER 3: build the ivk cache once (first action), reuse for the
         // rest of the bundle. Narrow borrows so the `&mut self.scope_classifier`
@@ -825,7 +830,7 @@ impl Body {
             .output()
             .verify_note_commitment(parsed.spend())
             .map_err(|_| Error::malformed())?;
-        // lib.rs:682-691; the dummy signature waits for the sighash.
+        // Step 4: the spend record; the dummy signature waits for the sighash.
         let record = if input_value == 0 {
             let signature = spend.spend_auth_sig.ok_or(Error::malformed())?;
             Record::Dummy {
@@ -848,7 +853,7 @@ impl Body {
             enc_ciphertext: output.enc_ciphertext,
             out_ciphertext: output.out_ciphertext,
         });
-        // lib.rs:692-699.
+        // Step 5: the recipient and its scope.
         let recipient = parsed.output().recipient().ok_or(Error::malformed())?;
         let recipient_scope = self
             .scope_classifier
@@ -863,7 +868,7 @@ impl Body {
         let memo = verify_encryption(&parsed, fvk, outgoing_scope, &note)?;
         self.records.0[index] = Some(record);
         self.seen += 1;
-        // lib.rs:700-716.
+        // Step 6: padding, change and payment outputs.
         if output_value == 0 {
             self.projection.padding_outputs += 1;
             return Ok(None);
@@ -891,7 +896,7 @@ impl Body {
 /// `pczt` crate hands them (pczt-0.9.3/src/orchard.rs:2143-2233); the
 /// redactable fields are never absent on this wire, so the crate's field
 /// resolution is a no-op. A parse failure is what `Pczt::parse` turns into
-/// `Malformed` (lib.rs:589).
+/// `Malformed` (`validate`).
 fn parse(action: &stream::Action<'_>, fvk: Option<[u8; 96]>) -> Result<Action> {
     let spend = &action.spend;
     let output = &action.output;
@@ -935,7 +940,7 @@ fn parse(action: &stream::Action<'_>, fvk: Option<[u8; 96]>) -> Result<Action> {
 mod tests {
     use orchard::bundle::BundleVersion;
 
-    /// The engine's cross-address restriction check (lib.rs:659-661) is
+    /// The engine's `verify_cross_address_restriction` check is
     /// omitted here because the exact flag gate makes it vacuous; this pins
     /// that premise.
     #[test]

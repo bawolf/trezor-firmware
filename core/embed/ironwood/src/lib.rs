@@ -3,6 +3,10 @@
 #![deny(clippy::all)]
 //! Bounded Ironwood PCZT approval core for the Safe 5 Zcash application.
 //!
+//! The rules this crate enforces are written down in
+//! `docs/common/zcash-ironwood-signing.md`; the "§N" in the comments below
+//! are that document's sections.
+//!
 //! The host selects the network, account, and reference height. The device must
 //! validate those values, derive the account from its own seed, display the
 //! reference height as unverified, and bind all three to consent. Fee and
@@ -942,7 +946,8 @@ fn verify_bundle(
         let output = action.output();
         let input_value = spend.value().ok_or(Error::malformed())?.inner();
         let output_value = output.value().ok_or(Error::malformed())?.inner();
-        // A derivation claim must be the device's own (design gap (a)).
+        // A derivation claim must be the device's own: same seed
+        // fingerprint, same consented account path, or `Policy`.
         for claim in [spend.zip32_derivation(), output.zip32_derivation()]
             .into_iter()
             .flatten()
