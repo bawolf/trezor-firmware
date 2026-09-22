@@ -1,10 +1,9 @@
 //! Measurement-only micro-benchmarks for the per-action verification cost.
 //!
-//! The device latency breakdown (signing-latency-instrumentation, 2026-09-18)
-//! showed per-action verification dominates at ~23.3 s for one real spend. That
-//! phase is built from two candidate costs: Sinsemilla hashing (under the
-//! *computed* generators, ~100x slower than the table) and Pallas variable-base
-//! scalar multiplication. These benches time each operation in isolation, using
+//! Per-action verification dominates the signing latency, and that phase is
+//! built from two candidate costs: Sinsemilla hashing (under the *computed*
+//! generators, ~100x slower than the table) and Pallas variable-base scalar
+//! multiplication. These benches time each operation in isolation, using
 //! the *same* `ironwood-sinsemilla` (computed-generators) and
 //! `ironwood-pasta-curves` instances the signing path links, so the next
 //! hardware run can attribute the cost and pick the latency fix.
@@ -81,7 +80,7 @@ fn absorb_base(acc: &mut u64, value: pallas::Base) {
 ///
 /// Measurement-only: this is the selector-0 warm step of the `get_address`
 /// bench hook. The production signing path uses [`crate::prewarm`] instead,
-/// which roots only the Pasta square-root table (SHOULD-FIX #4) and does no
+/// which roots only the Pasta square-root table and does no
 /// Sinsemilla work.
 pub fn warmup() {
     // Building the domains derives Q and R via `hash_to_curve`, which builds

@@ -39,7 +39,7 @@ def _op_timing_bench() -> str | None:
     # the `ironwood-measurement` Cargo feature. In a PRODUCTION build (default,
     # feature OFF) there is no such module, this returns None, and the reserved
     # 0xff diversifier index derives an address normally instead of running any
-    # bench (Fable review R1).
+    # bench.
     try:
         from .ironwood_measurement import op_timing_bench
     except ImportError:

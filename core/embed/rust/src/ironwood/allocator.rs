@@ -24,8 +24,7 @@
 //! the region base, so a freed block is always merged with a free predecessor
 //! as well as a free successor) without a per-block footer, so the layout
 //! stays 16 bytes of header only and space efficiency is unchanged. The design
-//! is exercised on the host by a stress + 200k-op fuzz harness (see
-//! .context/fork-migration/region-allocator-fix-20260918/): zero overlap,
+//! is exercised on the host by a stress + 200k-op fuzz harness: zero overlap,
 //! undersize, misalignment, or out-of-region writes across the interleaved
 //! alloc/free pattern, and a clean null on genuine OOM.
 //!
@@ -38,16 +37,15 @@
 //! coin's stack residues have, and the same answer: what is left is
 //! key-derived scratch, not the seed, which never enters this region.
 //!
-//! Note on the 8-action fault (region-allocator-fix-20260918 report): the
-//! free-list arithmetic is memory-safe; the observed Pasta fault is a capacity
-//! problem (the 8-action working set can exceed the 96 KB region), which now
-//! fails closed through the null path below rather than corrupting a live
-//! block. On a malformed chain (a wild write from another subsystem) the walks
-//! bail to null instead of spinning, so OOM/corruption both reach the clean
-//! `alloc_error_handler` rather than hanging.
+//! Note on the 8-action fault: the free-list arithmetic is memory-safe; the
+//! observed Pasta fault is a capacity problem (the 8-action working set can
+//! exceed the 96 KB region), which now fails closed through the null path below
+//! rather than corrupting a live block. On a malformed chain (a wild write from
+//! another subsystem) the walks bail to null instead of spinning, so
+//! OOM/corruption both reach the clean `alloc_error_handler` rather than
+//! hanging.
 //!
-//! Cross-session lifetime (2026-09-18, docs/decisions/2026-09-18-cross-session-
-//! region-lifetime.md): Pasta's square-root table AND orchard's two
+//! Cross-session lifetime: Pasta's square-root table AND orchard's two
 //! `OnceBox<CommitDomain>` caches are built once per boot behind Rust `static`s
 //! the collector never scans, and they allocate through THIS region. They
 //! therefore stay valid only while the region that first held them is alive. An
@@ -320,7 +318,7 @@ unsafe impl GlobalAlloc for FreeListAllocator {
         unsafe {
             let block = pointer.sub(HEADER);
             let blen = block_len(block);
-            // MUST-FIX #1 (Fable review, 2026-09-19): the region now lives for the
+            // The region now lives for the
             // whole boot, so freed secret-class scratch (e.g. the sinsemilla
             // `padded: Vec<bool>` holding ak||nk / nullifier-key bits) is no longer
             // recycled — and overwritten — by GC churn; it would linger in `.buf`

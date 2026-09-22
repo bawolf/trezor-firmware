@@ -215,7 +215,7 @@ build_options! {
     map ironwood: bool,
 
     /// Include MEASUREMENT-ONLY Ironwood op-timing scaffolding (bench + region
-    /// telemetry). Default-OFF; excluded from production builds (Fable R1).
+    /// telemetry). Default-OFF; excluded from production builds.
     /// Requires --ironwood.
     #[arg(long, num_args = 0..=1, default_missing_value = "true")]
     map ironwood_measurement: bool,

@@ -142,7 +142,7 @@ def test_ram_sweep(
     dt = zcash.last_debug_timings
     dt_s = dt.decode() if isinstance(dt, (bytes, bytearray)) else str(dt)
     fields = dict(kv.split("=", 1) for kv in dt_s.split(" ") if "=" in kv)
-    # Per-session counters (Fable review #2): session_peak resets each
+    # Per-session counters: session_peak resets each
     # session_begin so it is ~flat across an ascending-N single-boot sweep;
     # in_use_at_begin is the persistent set and must stay constant (a leak
     # otherwise); boot_peak is the boot-monotone max.

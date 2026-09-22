@@ -330,7 +330,7 @@ fn corpus() -> Vec<Case> {
                 with_action(v, i)["spend"]["spend_auth_sig"] = signature;
             }),
         ),
-        // Streaming-core review finding 1: constructed, not bit-flipped.
+        // Constructed, not bit-flipped.
         case("dummy spend rk identity", identity_rk_dummy()),
         case(
             "dummy spend rerandomized to the basepoint",
@@ -1339,7 +1339,7 @@ fn dummy_signature_is_verified_at_the_trailer() {
     assert!(run(&mut session, &bytes, WHOLE).unwrap().review.is_some());
 }
 
-/// Streaming-core review finding 1, beyond the corpus's class equality: the
+/// Beyond the corpus's class equality: the
 /// engine rejects the identity `rk` in `effects::sighash` (`extract_effects`
 /// fails) and the session rejects it at the dummy action itself, before the
 /// trailer, with nothing retained. The check is load-bearing: every other

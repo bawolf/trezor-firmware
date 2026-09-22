@@ -39,7 +39,7 @@ force_bootloader_upgrade = []
 frozen = ["upymod/frozen"]
 ironwood = ["trezor_lib/ironwood", "upymod/ironwood"]
 # MEASUREMENT-ONLY op-timing scaffolding (bench + region telemetry). Default-OFF;
-# production builds omit it (Fable review R1). Implies `ironwood`.
+# production builds omit it. Implies `ironwood`.
 ironwood-measurement = ["ironwood", "trezor_lib/ironwood-measurement", "upymod/ironwood-measurement"]
 log_stack_usage = ["upymod/log_stack_usage"]
 memperf = ["upymod/memperf"]

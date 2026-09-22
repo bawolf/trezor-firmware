@@ -56,7 +56,7 @@ CHUNK_TIMEOUT_MS = const(5_000)
 # Curated, non-secret native ValueError messages allowed to reach the host
 # verbatim. Any other ValueError (MicroPython unpack, parse_u32, format_amount,
 # address encode, ...) is collapsed to MALFORMED so incidental text never leaks
-# to the host (Fable review #S3). Must match `micropython/ironwood.rs::failure`.
+# to the host. Must match `micropython/ironwood.rs::failure`.
 _MALFORMED = "Malformed PCZT"
 _TOO_MANY_ACTIONS = "Too many transaction actions (max 32)"
 _AMOUNT_OUT_OF_RANGE = "Zcash amount out of range"
@@ -279,7 +279,7 @@ async def sign_pczt(msg: ZcashSignPczt) -> ZcashSpendAuthSignatures:
     except ValueError as exc:
         # Only the two curated native messages reach the host verbatim; any other
         # ValueError is collapsed to the generic malformed string so incidental
-        # MicroPython/parse text never leaks (Fable review #S3).
+        # MicroPython/parse text never leaks.
         msg = str(exc)
         raise wire.DataError(
             msg
@@ -337,7 +337,7 @@ async def _stream_and_sign(
     # exposes the native bench / region-telemetry bindings); a PRODUCTION build
     # freezes no such module, so this takes the ImportError path and `timings`
     # stays None — the signing loop below then runs with no timing hooks at all
-    # and no `utime.ticks_ms` in the hot path (Fable review #M1 / R1).
+    # and no `utime.ticks_ms` in the hot path.
     try:
         from .ironwood_measurement import Timings
 
@@ -479,12 +479,12 @@ async def _stream_and_sign(
 
     # PRODUCTION (default): no measurement module, so return the signature
     # records with the proto `debug_timings` field unset, matching its
-    # documentation (Fable review #M1).
+    # documentation.
     if timings is None:
         return ZcashSpendAuthSignatures(transfer_id=transfer_id, records=records)
 
     # MEASUREMENT build only: attach the per-phase latency + region-counter
-    # trailer. `totals[8]` is the full bundle action count (Fable review #S5).
+    # trailer. `totals[8]` is the full bundle action count.
     return ZcashSpendAuthSignatures(
         transfer_id=transfer_id,
         records=records,

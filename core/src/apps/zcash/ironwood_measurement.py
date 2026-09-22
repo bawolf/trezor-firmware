@@ -9,8 +9,7 @@ paths and carry no timing code at all — no `utime.ticks_ms` in the signing
 loop, no bench body in the address app.
 
 Everything here times COMPUTE only (the native calls), never the UI / button
-waits, and changes no signing behavior. See
-docs/decisions/2026-09-18-signing-latency-*.
+waits, and changes no signing behavior.
 """
 
 import utime
@@ -76,7 +75,7 @@ class Timings:
         session_peak, in_use_at_begin, boot_peak = session_region_high_water()
         # `action_count` is the full bundle count (payments + change + padding)
         # from the review totals, NOT the payment count, so the trailer figure
-        # matches the 32-action guardrail cap (Fable review #S5).
+        # matches the 32-action guardrail cap.
         debug_timings = (
             "derive_ms=%d feed_ms=%d sign_ms=%d action_count=%d "
             "feed_seg_ms=%s session_peak_bytes=%d in_use_at_begin_bytes=%d "
@@ -115,7 +114,7 @@ def op_timing_bench() -> str:
     # region the signing path installs), so pass an EMPTY bytearray. A 96 KiB GC
     # bytearray here would be dead weight — a single contiguous allocation from
     # the now-138.7 KiB heap that can raise MemoryError under fragmentation for a
-    # reason unrelated to the bench (Fable review SHOULD-FIX #4).
+    # reason unrelated to the bench.
     region = bytearray()
     slow_iters = 6  # Sinsemilla ops cost seconds each under computed generators
     fast_iters = 200  # scalar mult is milliseconds

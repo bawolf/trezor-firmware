@@ -19,11 +19,7 @@
 //!
 //! The FVK is never retained: `begin` binds its encoding and every `feed`
 //! borrows the caller's key again, so the only key material this module owns
-//! is zeroized with the stream (finding 2 of the streaming-core review).
-
-// `lib.rs` exports `Session` unconditionally for the phase-2 retained link and
-// the allocator probe that drives it; the device wire handler is design §10
-// phase 4 and does not exist yet.
+//! is zeroized with the stream.
 
 use alloc::boxed::Box;
 use alloc::collections::BTreeMap;
@@ -155,7 +151,7 @@ struct Pending {
 /// own copy. The slot is only ever cleared in place, never moved out, so
 /// `Token` and `Records` zeroize on drop in the storage they occupied.
 struct Slot {
-    /// Boxed (MUST-FIX #1): the CAP-sized `Records` inside `Pending` stay in
+    /// Boxed: the CAP-sized `Records` inside `Pending` stay in
     /// the region so `review_stream` never builds `Pending` by value on the
     /// stack.
     pending: Option<Box<Pending>>,
@@ -190,7 +186,7 @@ impl Slot {
     }
 }
 
-/// MUST-FIX #3: secret-bearing wrapper around the session-cached
+/// Secret-bearing wrapper around the session-cached
 /// [`ScopeClassifier`] (the device FVK's external+internal `ivk` scalars).
 /// `ScopeClassifier` implements no `Zeroize`, so without this its bytes would
 /// linger in the freed region block (and then in the GC heap) on every
@@ -236,9 +232,9 @@ struct Body {
     /// `Commit^ivk` Sinsemilla evaluations are paid once per bundle instead of
     /// per action. Applied by `verify_nullifier_with_classifier` only to spends
     /// validated under the device FVK (real spends); dummy spends fall back to
-    /// `fvk.scope_for_address` inside orchard (MUST-FIX #3). Derived from the
+    /// `fvk.scope_for_address` inside orchard. Derived from the
     /// FVK, which the stream already retains as bytes. Wiped on every teardown
-    /// path via [`IvkCache`] (MUST-FIX #3).
+    /// path via [`IvkCache`].
     scope_classifier: Option<IvkCache>,
 }
 
@@ -258,7 +254,7 @@ struct Stream {
     /// any `zip32_derivation` on the wire must name: a claim is admitted
     /// only when it names this seed and the consented account path.
     own: OwnDerivation,
-    /// Present once the header has been verified. Boxed (MUST-FIX #1) so the
+    /// Present once the header has been verified. Boxed so the
     /// CAP-sized `Body` is never moved by value on the stack; it lives in the
     /// region and is only ever reached through this pointer.
     body: Option<Box<Body>>,
@@ -278,7 +274,7 @@ pub struct Session<R> {
     policy: Policy,
     session: [u8; 32],
     counter: u64,
-    /// Boxed (MUST-FIX #1): the CAP-sized `Stream`/`Body` live in the region
+    /// Boxed: the CAP-sized `Stream`/`Body` live in the region
     /// and are reached through this pointer, so
     /// `session_begin`/`session_feed` never stage them by value on the 32
     /// KB device stack.
@@ -404,7 +400,7 @@ impl<R: RngCore + CryptoRng> Session<R> {
                         return Err(Error::internal());
                     }
                     // `Body::new` returns a `Box<Body>` built in the region, so the
-                    // CAP-sized `Body` never materialises on this frame (MUST-FIX #1).
+                    // CAP-sized `Body` never materialises on this frame.
                     stream.body = Some(Body::new(header, &self.policy)?);
                     continue;
                 }
@@ -438,7 +434,7 @@ impl<R: RngCore + CryptoRng> Session<R> {
         result
     }
 
-    // MUST-FIX #1: kept out of line so its (cold, once-per-stream) records /
+    // Kept out of line so its (cold, once-per-stream) records /
     // pending temporaries are NOT reserved in the always-live `session_feed`
     // frame that the per-action verify runs under.
     #[inline(never)]
@@ -455,7 +451,7 @@ impl<R: RngCore + CryptoRng> Session<R> {
         // are out and their source zeroized, what stays behind is the digest
         // states, the projection and the nullifiers, all host-known.
         let records = body.records.take_zeroizing();
-        // MUST-FIX #3: volatile-zero the cached external+internal `ivk` scalars
+        // Volatile-zero the cached external+internal `ivk` scalars
         // in place BEFORE the `Body` is released, mirroring
         // `Records::take_zeroizing`. Dropping the box below re-wipes via
         // `IvkCache::drop`; wiping here covers the classifier on the review
@@ -466,7 +462,7 @@ impl<R: RngCore + CryptoRng> Session<R> {
         // Move only the small, host-known projection state out of the boxed
         // `Body`. The CAP-sized fields (`nullifiers`, the emptied `records`,
         // the wiped classifier) stay in the region and drop in place when the
-        // box is freed, so nothing CAP-sized lands on the stack (MUST-FIX #1).
+        // box is freed, so nothing CAP-sized lands on the stack.
         let Body {
             digest,
             mut projection,
@@ -677,7 +673,7 @@ impl<R: RngCore + CryptoRng> Session<R> {
 
 impl Body {
     /// Header checks of [`crate::validate`], then the digest. Returns a
-    /// `Box<Body>` built in the region and stays out of line (MUST-FIX #1) so
+    /// `Box<Body>` built in the region and stays out of line so
     /// the CAP-sized `Body` value never materialises in the caller's
     /// `session_feed` frame.
     #[inline(never)]
@@ -825,7 +821,7 @@ impl Body {
             .spend()
             .verify_rk(Some(fvk))
             .map_err(|_| Error::malformed())?;
-        // MUST-FIX #4/#2: reuse the cmx-validated note for output recovery.
+        // Reuse the cmx-validated note for output recovery.
         let note = parsed
             .output()
             .verify_note_commitment(parsed.spend())

@@ -93,9 +93,8 @@ class TestIronwoodSignPcztProgress(unittest.TestCase):
 
     `_stream_and_sign` no longer calls `workflow.idle_timer.touch()` itself: it
     relies on `ProgressLayout.report`, which touches the timer before it paints
-    (trezor/ui/__init__.py). Two properties carry that argument, and neither
-    was pinned by a test before -- the device-level autolock test is deferred.
-    So assert them here, where they cost nothing:
+    (trezor/ui/__init__.py). Two properties carry that argument, so assert them
+    here, where they cost nothing:
 
       1. A report precedes every `session_feed`, so at least one fires per host
          chunk -- strictly more often than the per-chunk touch it replaced, and

@@ -89,7 +89,7 @@ class TestIronwoodAccount(unittest.TestCase):
                 )
 
     def test_weak_backup_predicate_is_memoized(self):
-        # Fable R2/V1: the mnemonic secret must not be re-copied onto the GC heap
+        # The mnemonic secret must not be re-copied onto the GC heap
         # on every receive/export/sign. The predicate is computed once and cached
         # in the sessionless cache; only clearing that cache re-reads the secret.
         from storage import cache as storage_cache

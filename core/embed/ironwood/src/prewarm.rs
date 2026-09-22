@@ -1,20 +1,19 @@
-//! Session-start pre-warm of the Pasta square-root table (SHOULD-FIX #4).
+//! Session-start pre-warm of the Pasta square-root table.
 //!
 //! Pasta keeps its `SqrtTables<Fp>` (~29.8 KB) behind a lazy Rust `static` that
 //! the MicroPython GC never scans. On the device the signing scratch lives in a
 //! per-session region; if that table is first built mid-stream (interleaved
 //! with ~KBs of transient per-action verify scratch), it is left at a high
 //! region offset when the scratch frees and splits the region — the
-//! fragmentation that faulted the 8-action run (RAM-RETENTION-ANALYSIS.md,
-//! lever R2).
+//! fragmentation that faulted the 8-action run.
 //!
 //! [`prewarm`] forces that table to build ONCE at session start, right after
 //! the region is installed and before any per-action scratch, by decompressing
 //! a single fixed public point. Point decompression recovers `y` from `x` via
 //! an `Fp` square root, which is exactly what allocates the table.
 //!
-//! It also warms orchard's two `OnceBox<CommitDomain>` caches (SHOULD-FIX #3,
-//! Fable review 2026-09-19). Those caches (NoteCommit and CommitIvk) live
+//! It also warms orchard's two `OnceBox<CommitDomain>` caches. Those caches
+//! (NoteCommit and CommitIvk) live
 //! behind Rust statics the GC never scans and allocate through this region on
 //! first use. Left to fill mid-action-0, their two ~200 B blocks land at
 //! arbitrary offsets interleaved with transient verify scratch and then survive
@@ -41,7 +40,7 @@ use orchard::value::NoteValue;
 /// no-op thereafter), so the Pasta sqrt table and orchard `OnceBox` caches this
 /// builds survive every later session. Re-running the ~1.4 s of constant-input
 /// Sinsemilla / `commit_ivk` work on every `session_begin` is therefore pure
-/// waste; run it once per boot (Fable review #S1).
+/// waste; run it once per boot.
 static WARMED: AtomicBool = AtomicBool::new(false);
 
 /// Roots the persistent Pasta square-root table AND orchard's two

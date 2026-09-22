@@ -26,7 +26,7 @@ use alloc::vec::Vec;
 /// scalar mult). Reached only through the reserved diversifier-index bench path
 /// in `get_address`; changes no signing behavior. Gated behind the
 /// `ironwood-measurement` feature (default-OFF): production builds exclude it
-/// entirely (Fable review R1).
+/// entirely.
 #[cfg(feature = "ironwood-measurement")]
 pub mod bench;
 mod digest;
@@ -40,7 +40,7 @@ mod session;
 mod stream;
 mod wire;
 
-/// Session-start Pasta square-root table pre-warm (SHOULD-FIX #4); the device
+/// Session-start Pasta square-root table pre-warm; the device
 /// signing handler calls it once after installing the region and before the
 /// per-action loop.
 pub use prewarm::prewarm;
@@ -972,7 +972,7 @@ fn verify_bundle(
     // DEDUP LEVER 3: derive external+internal ivk (Commit^ivk) once per bundle.
     // Keyed on the DEVICE fvk; `verify_nullifier_with_classifier` only applies it
     // to spends validated under this same fvk (real spends), and falls back to
-    // `fvk.scope_for_address` for dummy spends (MUST-FIX #3).
+    // `fvk.scope_for_address` for dummy spends.
     let scope_classifier = fvk.scope_classifier();
     for (index, action) in bundle.actions().iter().enumerate() {
         let spend = action.spend();
@@ -1000,7 +1000,7 @@ fn verify_bundle(
             .verify_nullifier_with_classifier(Some(fvk), Some(&scope_classifier))
             .map_err(|_| Error::malformed())?;
         spend.verify_rk(Some(fvk)).map_err(|_| Error::malformed())?;
-        // MUST-FIX #4/#2: capture the validated output note (cmx already checked
+        // Capture the validated output note (cmx already checked
         // equal to `output.cmx()` inside `verify_note_commitment`) and thread it
         // into `verify_encryption`, so recovery reuses this exact object instead
         // of recomputing a second `cmx`.
@@ -1070,7 +1070,7 @@ fn verify_encryption(
     action: &orchard::pczt::Action,
     fvk: &FullViewingKey,
     outgoing_scope: Scope,
-    // MUST-FIX #4/#2: the already-validated output note, whose commitment
+    // The already-validated output note, whose commitment
     // `verify_note_commitment` checked equal to `action.output().cmx()`. Binding
     // is therefore self-contained: recovery is bound to the cmx-validated note,
     // not to a separately rebuilt one.
@@ -1078,7 +1078,7 @@ fn verify_encryption(
 ) -> Result<Memo> {
     let output = action.output();
     let domain = IronwoodDomain::for_pczt_action(action);
-    // MUST-FIX #1: device-local recovery bound to `note` by field comparison.
+    // Device-local recovery bound to `note` by field comparison.
     // `recover_output_bound_with_*` take the concrete `IronwoodDomain` and check
     // `domain.rho == note.rho()` and the domain version policy internally, so the
     // binding no longer relies on the caller having built `note` from this action.

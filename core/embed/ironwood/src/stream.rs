@@ -1,5 +1,5 @@
 //! Incremental, chunk-fed scanner for the exact v2 Ironwood-only PCZT grammar
-//! that `wire::scan` admits (phase 1 of the streaming design). The encoding is
+//! that `wire::scan` admits. The encoding is
 //! consumed one section at a time (header, each action, trailer) in a fixed
 //! buffer, so the device never holds more than one action's bytes; see
 //! docs/common/zcash-ironwood-signing.md §3-4.

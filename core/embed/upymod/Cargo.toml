@@ -47,7 +47,7 @@ haptic = ["io/haptic"]
 ironwood = []
 # Freezes the MEASUREMENT-ONLY `apps/zcash/ironwood_measurement.py` module
 # (op-timing bench + latency trailer). Default-OFF; production builds omit it so
-# no measurement Python is frozen (Fable review R1). Implies `ironwood`.
+# no measurement Python is frozen. Implies `ironwood`.
 ironwood-measurement = ["ironwood"]
 layout_bolt = []
 layout_caesar = []

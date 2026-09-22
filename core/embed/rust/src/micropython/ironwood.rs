@@ -200,7 +200,7 @@ extern "C" fn session_begin(n_args: usize, args: *const Obj) -> Obj {
         // `.buf` static, not a Python object, so nothing needs to be kept
         // referenced across the session and it survives every session for the
         // whole boot (fixes cross-session staleness of the Pasta table / orchard
-        // OnceBox caches; docs/decisions/2026-09-18-cross-session-region-lifetime.md).
+        // OnceBox caches; see `ironwood::allocator`).
         crate::ironwood::allocator::install_region();
         // Measurement bookkeeping: reset the per-session region peak and sample
         // the bytes already in use (the persistent Pasta table + orchard OnceBox
@@ -314,7 +314,7 @@ extern "C" fn session_cancel() -> Obj {
 
 /// MEASUREMENT-ONLY region telemetry. Gated behind `ironwood-measurement`
 /// (default-OFF): the returned high-water marks are internal region layout
-/// information and are excluded from production builds (Fable review R1/#2).
+/// information and are excluded from production builds.
 #[cfg(feature = "ironwood-measurement")]
 extern "C" fn session_region_high_water() -> Obj {
     let block = || {
@@ -341,7 +341,7 @@ extern "C" fn session_region_high_water() -> Obj {
 /// 4 commit_ivk. Changes no signing behavior; reached only through the reserved
 /// all-`0xff` diversifier-index bench path in `get_address`. Gated behind
 /// `ironwood-measurement` (default-OFF): production builds link no bench symbol
-/// and expose no bench binding (Fable review R1).
+/// and expose no bench binding.
 #[cfg(feature = "ironwood-measurement")]
 extern "C" fn bench(n_args: usize, args: *const Obj) -> Obj {
     let block = |args: &[Obj], _kwargs: &Map| {
@@ -376,7 +376,7 @@ extern "C" fn bench(n_args: usize, args: *const Obj) -> Obj {
 // The module is defined twice under mutually-exclusive cfgs. The PRODUCTION
 // variant (default) omits the MEASUREMENT-ONLY `session_region_high_water` and
 // `bench` bindings so no bench symbol links and no region telemetry is
-// reachable (Fable review R1). The MEASUREMENT variant (`ironwood-measurement`)
+// reachable. The MEASUREMENT variant (`ironwood-measurement`)
 // adds those two bindings for on-device op-timing sweeps. The `obj_module!`
 // macro cannot cfg individual entries, so the two shared-plus-extra variants
 // are spelled out; keep the shared entries below in sync between the two. Only

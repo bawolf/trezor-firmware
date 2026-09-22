@@ -1270,7 +1270,7 @@ impl<'a> MpyBuilder<'a> {
             if !cfg!(feature = "ironwood-measurement") {
                 // MEASUREMENT-ONLY op-timing / latency module: frozen only in
                 // `--ironwood-measurement` builds so production carries no
-                // measurement Python at all (Fable review R1).
+                // measurement Python at all.
                 files.remove(src, "apps/zcash/ironwood_measurement.py");
             }
 

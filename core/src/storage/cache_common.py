@@ -25,7 +25,7 @@ APP_RECOVERY_REPEATED_BACKUP_UNLOCKED = const(6 | SESSIONLESS_FLAG)
 # computed. Sessionless: the backup type is device-wide and this cache is
 # cleared on wipe/recovery, so it is recomputed whenever the mnemonic can
 # change. Lets `has_weak_backup()` avoid re-copying the mnemonic secret onto
-# the GC heap on every receive/export/sign (Fable review R2/V1).
+# the GC heap on every receive/export/sign.
 APP_ZCASH_WEAK_BACKUP = const(7 | SESSIONLESS_FLAG)
 
 
