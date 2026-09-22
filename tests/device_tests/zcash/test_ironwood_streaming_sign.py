@@ -19,6 +19,7 @@ from mnemonic import Mnemonic
 
 from trezorlib import messages, zcash
 from trezorlib.debuglink import DebugSession as Session
+from trezorlib.debuglink import LayoutType
 from trezorlib.exceptions import Cancelled, TrezorFailure
 
 B = messages.ButtonRequestType
@@ -182,6 +183,26 @@ def test_stock_sdk_view_signs(
 MEMO_TEXT_BUDGET = 256
 
 
+def _memo_screen_text(session: Session) -> str:
+    """Everything the memo screen shows, paging where the model needs it.
+
+    On Safe 3 (caesar, 128x64) a page holds about 40 characters, so a memo at
+    the display budget -- and even the hash label on its own -- spills onto
+    later pages, and the right press that advances a page is the same press
+    that confirms on the last one. So on caesar read every page and stop on
+    the last, leaving the caller's `press_yes` to confirm. delizia and
+    eckhart show the value on the first page and are left alone.
+    """
+    debug = session.debug
+    layout = debug.read_layout()
+    shown = layout.text_content()
+    if debug.layout_type is LayoutType.Caesar:
+        for _ in range(layout.page_count() - 1):
+            debug.press_right()
+            shown += " " + debug.read_layout().text_content()
+    return shown
+
+
 def _accept_outputs_with_memos(session: Session, payments: int, expected: str):
     # Address, amount, then the memo screen, which must show `expected`.
     for _ in range(payments):
@@ -189,7 +210,7 @@ def _accept_outputs_with_memos(session: Session, payments: int, expected: str):
         br = yield
         assert br.code == B.ConfirmOutput
         assert br.name == "confirm_memo"
-        shown = session.debug.read_layout().text_content()
+        shown = _memo_screen_text(session)
         assert expected in shown.replace(" ", "").replace("\n", "") or expected in shown
         session.debug.press_yes()
 
