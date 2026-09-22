@@ -76,6 +76,19 @@ async def get_viewing_key(msg: ZcashGetViewingKey) -> ZcashViewingKey:
     )
     ironwood_account.require_session(session)
 
+    # The viewing key is per account; the ZIP-32 seed fingerprint is not. It
+    # is the same value for every account index and for both networks, so it
+    # links everything this seed ever signs. The screen above promises account
+    # scope, so the fingerprint needs its own opt-in and its own warning.
+    include_fingerprint = bool(msg.include_seed_fingerprint)
+    if include_fingerprint:
+        await show_warning(
+            br_name="ironwood_seed_fingerprint",
+            content=TR.zcash__seed_fingerprint_warning,
+            br_code=ButtonRequestType.Warning,
+        )
+        ironwood_account.require_session(session)
+
     if ironwood_account.has_weak_backup():
         await show_warning(
             br_name="ironwood_weak_backup",
@@ -87,14 +100,16 @@ async def get_viewing_key(msg: ZcashGetViewingKey) -> ZcashViewingKey:
     wallet_seed = await seed.get_seed()
     raw_fvk = bytearray(96)
     # The ZIP-32 seed fingerprint is a public identifier of the seed (a
-    # one-way hash), released behind the same confirmation as the key.
-    fingerprint = bytearray(32)
+    # one-way hash), derived only when the request asked for it and the user
+    # acknowledged the extra warning above.
+    fingerprint = bytearray(32) if include_fingerprint else None
     try:
         ironwood_account.require_session(session)
         try:
             _derive_viewing_key(wallet_seed, network, account, raw_fvk)
             key = unified_addresses.encode_fvk(raw_fvk, coininfo.by_name(coin_name))
-            _derive_seed_fingerprint(wallet_seed, fingerprint)
+            if fingerprint is not None:
+                _derive_seed_fingerprint(wallet_seed, fingerprint)
         except (KeyError, ValueError, RuntimeError):
             raise wire.ProcessError("Zcash viewing key derivation failed")
     finally:
@@ -102,4 +117,7 @@ async def get_viewing_key(msg: ZcashGetViewingKey) -> ZcashViewingKey:
         del wallet_seed
 
     ironwood_account.require_session(session)
-    return ZcashViewingKey(key=key, seed_fingerprint=bytes(fingerprint))
+    return ZcashViewingKey(
+        key=key,
+        seed_fingerprint=None if fingerprint is None else bytes(fingerprint),
+    )

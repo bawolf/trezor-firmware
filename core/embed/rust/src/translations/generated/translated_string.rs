@@ -1685,6 +1685,8 @@ pub enum TranslatedString {
     zcash__export_viewing_key = 1298,  // "Export Zcash viewing key?"
     #[cfg(feature = "universal_fw")]
     zcash__viewing_key_warning = 1299,  // "The connected app will be able to see and link all activity for this account, but cannot spend."
+    #[cfg(feature = "universal_fw")]
+    zcash__seed_fingerprint_warning = 1300,  // "This also reveals a fingerprint of your recovery seed, which links all of your Zcash accounts."
 }
 
 impl TranslatedString {
@@ -2992,6 +2994,7 @@ impl TranslatedString {
                 "This wallet uses a weaker backup. Move funds to a new wallet with a stronger backup.",
                 "Export Zcash viewing key?",
                 "The connected app will be able to see and link all activity for this account, but cannot spend.",
+                "This also reveals a fingerprint of your recovery seed, which links all of your Zcash accounts.",
             );
 
             #[cfg(all(feature = "debug", feature = "universal_fw"))]
@@ -4297,6 +4300,7 @@ impl TranslatedString {
                 19194,
                 19219,
                 19314,
+                19408,
             ];
 
             #[cfg(all(feature = "debug", not(feature = "universal_fw")))]
@@ -5601,6 +5605,7 @@ impl TranslatedString {
                 "This wallet uses a weaker backup. Move funds to a new wallet with a stronger backup.",
                 "Export Zcash viewing key?",
                 "The connected app will be able to see and link all activity for this account, but cannot spend.",
+                "This also reveals a fingerprint of your recovery seed, which links all of your Zcash accounts.",
             );
 
             #[cfg(all(feature = "debug", not(feature = "universal_fw")))]
@@ -6906,6 +6911,7 @@ impl TranslatedString {
                 19194,
                 19219,
                 19314,
+                19408,
             ];
 
             #[cfg(all(not(feature = "debug"), feature = "universal_fw"))]
@@ -8210,6 +8216,7 @@ impl TranslatedString {
                 "This wallet uses a weaker backup. Move funds to a new wallet with a stronger backup.",
                 "Export Zcash viewing key?",
                 "The connected app will be able to see and link all activity for this account, but cannot spend.",
+                "This also reveals a fingerprint of your recovery seed, which links all of your Zcash accounts.",
             );
 
             #[cfg(all(not(feature = "debug"), feature = "universal_fw"))]
@@ -9515,6 +9522,7 @@ impl TranslatedString {
                 19194,
                 19219,
                 19314,
+                19408,
             ];
 
             #[cfg(all(not(feature = "debug"), not(feature = "universal_fw")))]
@@ -10819,6 +10827,7 @@ impl TranslatedString {
                 "This wallet uses a weaker backup. Move funds to a new wallet with a stronger backup.",
                 "Export Zcash viewing key?",
                 "The connected app will be able to see and link all activity for this account, but cannot spend.",
+                "This also reveals a fingerprint of your recovery seed, which links all of your Zcash accounts.",
             );
 
             #[cfg(all(not(feature = "debug"), not(feature = "universal_fw")))]
@@ -12124,6 +12133,7 @@ impl TranslatedString {
                 19194,
                 19219,
                 19314,
+                19408,
             ];
 
         } else if #[cfg(feature = "layout_caesar")] {
@@ -13429,6 +13439,7 @@ impl TranslatedString {
                 "This wallet uses a weaker backup. Move funds to a new wallet with a stronger backup.",
                 "Export Zcash viewing key?",
                 "The connected app will be able to see and link all activity for this account, but cannot spend.",
+                "This also reveals a fingerprint of your recovery seed, which links all of your Zcash accounts.",
             );
 
             #[cfg(all(feature = "debug", feature = "universal_fw"))]
@@ -14734,6 +14745,7 @@ impl TranslatedString {
                 17055,
                 17080,
                 17175,
+                17269,
             ];
 
             #[cfg(all(feature = "debug", not(feature = "universal_fw")))]
@@ -16038,6 +16050,7 @@ impl TranslatedString {
                 "This wallet uses a weaker backup. Move funds to a new wallet with a stronger backup.",
                 "Export Zcash viewing key?",
                 "The connected app will be able to see and link all activity for this account, but cannot spend.",
+                "This also reveals a fingerprint of your recovery seed, which links all of your Zcash accounts.",
             );
 
             #[cfg(all(feature = "debug", not(feature = "universal_fw")))]
@@ -17343,6 +17356,7 @@ impl TranslatedString {
                 17055,
                 17080,
                 17175,
+                17269,
             ];
 
             #[cfg(all(not(feature = "debug"), feature = "universal_fw"))]
@@ -18647,6 +18661,7 @@ impl TranslatedString {
                 "This wallet uses a weaker backup. Move funds to a new wallet with a stronger backup.",
                 "Export Zcash viewing key?",
                 "The connected app will be able to see and link all activity for this account, but cannot spend.",
+                "This also reveals a fingerprint of your recovery seed, which links all of your Zcash accounts.",
             );
 
             #[cfg(all(not(feature = "debug"), feature = "universal_fw"))]
@@ -19952,6 +19967,7 @@ impl TranslatedString {
                 17055,
                 17080,
                 17175,
+                17269,
             ];
 
             #[cfg(all(not(feature = "debug"), not(feature = "universal_fw")))]
@@ -21256,6 +21272,7 @@ impl TranslatedString {
                 "This wallet uses a weaker backup. Move funds to a new wallet with a stronger backup.",
                 "Export Zcash viewing key?",
                 "The connected app will be able to see and link all activity for this account, but cannot spend.",
+                "This also reveals a fingerprint of your recovery seed, which links all of your Zcash accounts.",
             );
 
             #[cfg(all(not(feature = "debug"), not(feature = "universal_fw")))]
@@ -22561,6 +22578,7 @@ impl TranslatedString {
                 17055,
                 17080,
                 17175,
+                17269,
             ];
 
         } else if #[cfg(feature = "layout_delizia")] {
@@ -23866,6 +23884,7 @@ impl TranslatedString {
                 "This wallet uses a weaker backup. Move funds to a new wallet with a stronger backup.",
                 "Export Zcash viewing key?",
                 "The connected app will be able to see and link all activity for this account, but cannot spend.",
+                "This also reveals a fingerprint of your recovery seed, which links all of your Zcash accounts.",
             );
 
             #[cfg(all(feature = "debug", feature = "universal_fw"))]
@@ -25171,6 +25190,7 @@ impl TranslatedString {
                 19137,
                 19162,
                 19257,
+                19351,
             ];
 
             #[cfg(all(feature = "debug", not(feature = "universal_fw")))]
@@ -26475,6 +26495,7 @@ impl TranslatedString {
                 "This wallet uses a weaker backup. Move funds to a new wallet with a stronger backup.",
                 "Export Zcash viewing key?",
                 "The connected app will be able to see and link all activity for this account, but cannot spend.",
+                "This also reveals a fingerprint of your recovery seed, which links all of your Zcash accounts.",
             );
 
             #[cfg(all(feature = "debug", not(feature = "universal_fw")))]
@@ -27780,6 +27801,7 @@ impl TranslatedString {
                 19137,
                 19162,
                 19257,
+                19351,
             ];
 
             #[cfg(all(not(feature = "debug"), feature = "universal_fw"))]
@@ -29084,6 +29106,7 @@ impl TranslatedString {
                 "This wallet uses a weaker backup. Move funds to a new wallet with a stronger backup.",
                 "Export Zcash viewing key?",
                 "The connected app will be able to see and link all activity for this account, but cannot spend.",
+                "This also reveals a fingerprint of your recovery seed, which links all of your Zcash accounts.",
             );
 
             #[cfg(all(not(feature = "debug"), feature = "universal_fw"))]
@@ -30389,6 +30412,7 @@ impl TranslatedString {
                 19137,
                 19162,
                 19257,
+                19351,
             ];
 
             #[cfg(all(not(feature = "debug"), not(feature = "universal_fw")))]
@@ -31693,6 +31717,7 @@ impl TranslatedString {
                 "This wallet uses a weaker backup. Move funds to a new wallet with a stronger backup.",
                 "Export Zcash viewing key?",
                 "The connected app will be able to see and link all activity for this account, but cannot spend.",
+                "This also reveals a fingerprint of your recovery seed, which links all of your Zcash accounts.",
             );
 
             #[cfg(all(not(feature = "debug"), not(feature = "universal_fw")))]
@@ -32998,6 +33023,7 @@ impl TranslatedString {
                 19137,
                 19162,
                 19257,
+                19351,
             ];
 
         } else if #[cfg(feature = "layout_eckhart")] {
@@ -34303,6 +34329,7 @@ impl TranslatedString {
                 "This wallet uses a weaker backup. Move funds to a new wallet with a stronger backup.",
                 "Export Zcash viewing key?",
                 "The connected app will be able to see and link all activity for this account, but cannot spend.",
+                "This also reveals a fingerprint of your recovery seed, which links all of your Zcash accounts.",
             );
 
             #[cfg(all(feature = "debug", feature = "universal_fw"))]
@@ -35608,6 +35635,7 @@ impl TranslatedString {
                 20590,
                 20615,
                 20710,
+                20804,
             ];
 
             #[cfg(all(feature = "debug", not(feature = "universal_fw")))]
@@ -36912,6 +36940,7 @@ impl TranslatedString {
                 "This wallet uses a weaker backup. Move funds to a new wallet with a stronger backup.",
                 "Export Zcash viewing key?",
                 "The connected app will be able to see and link all activity for this account, but cannot spend.",
+                "This also reveals a fingerprint of your recovery seed, which links all of your Zcash accounts.",
             );
 
             #[cfg(all(feature = "debug", not(feature = "universal_fw")))]
@@ -38217,6 +38246,7 @@ impl TranslatedString {
                 20590,
                 20615,
                 20710,
+                20804,
             ];
 
             #[cfg(all(not(feature = "debug"), feature = "universal_fw"))]
@@ -39521,6 +39551,7 @@ impl TranslatedString {
                 "This wallet uses a weaker backup. Move funds to a new wallet with a stronger backup.",
                 "Export Zcash viewing key?",
                 "The connected app will be able to see and link all activity for this account, but cannot spend.",
+                "This also reveals a fingerprint of your recovery seed, which links all of your Zcash accounts.",
             );
 
             #[cfg(all(not(feature = "debug"), feature = "universal_fw"))]
@@ -40826,6 +40857,7 @@ impl TranslatedString {
                 20590,
                 20615,
                 20710,
+                20804,
             ];
 
             #[cfg(all(not(feature = "debug"), not(feature = "universal_fw")))]
@@ -42130,6 +42162,7 @@ impl TranslatedString {
                 "This wallet uses a weaker backup. Move funds to a new wallet with a stronger backup.",
                 "Export Zcash viewing key?",
                 "The connected app will be able to see and link all activity for this account, but cannot spend.",
+                "This also reveals a fingerprint of your recovery seed, which links all of your Zcash accounts.",
             );
 
             #[cfg(all(not(feature = "debug"), not(feature = "universal_fw")))]
@@ -43435,6 +43468,7 @@ impl TranslatedString {
                 20590,
                 20615,
                 20710,
+                20804,
             ];
 
         }
@@ -45113,6 +45147,8 @@ impl TranslatedString {
         (Qstr::MP_QSTR_words__yes, Self::words__yes),
         #[cfg(feature = "universal_fw")]
         (Qstr::MP_QSTR_zcash__export_viewing_key, Self::zcash__export_viewing_key),
+        #[cfg(feature = "universal_fw")]
+        (Qstr::MP_QSTR_zcash__seed_fingerprint_warning, Self::zcash__seed_fingerprint_warning),
         #[cfg(feature = "universal_fw")]
         (Qstr::MP_QSTR_zcash__viewing_key_warning, Self::zcash__viewing_key_warning),
         #[cfg(feature = "universal_fw")]

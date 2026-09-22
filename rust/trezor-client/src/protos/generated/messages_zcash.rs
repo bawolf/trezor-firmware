@@ -437,6 +437,8 @@ pub struct ZcashGetViewingKey {
     pub network: ::std::option::Option<::protobuf::EnumOrUnknown<ZcashNetwork>>,
     // @@protoc_insertion_point(field:hw.trezor.messages.zcash.ZcashGetViewingKey.account)
     pub account: ::std::option::Option<u32>,
+    // @@protoc_insertion_point(field:hw.trezor.messages.zcash.ZcashGetViewingKey.include_seed_fingerprint)
+    pub include_seed_fingerprint: ::std::option::Option<bool>,
     // special fields
     // @@protoc_insertion_point(special_field:hw.trezor.messages.zcash.ZcashGetViewingKey.special_fields)
     pub special_fields: ::protobuf::SpecialFields,
@@ -494,8 +496,27 @@ impl ZcashGetViewingKey {
         self.account = ::std::option::Option::Some(v);
     }
 
+    // optional bool include_seed_fingerprint = 3;
+
+    pub fn include_seed_fingerprint(&self) -> bool {
+        self.include_seed_fingerprint.unwrap_or(false)
+    }
+
+    pub fn clear_include_seed_fingerprint(&mut self) {
+        self.include_seed_fingerprint = ::std::option::Option::None;
+    }
+
+    pub fn has_include_seed_fingerprint(&self) -> bool {
+        self.include_seed_fingerprint.is_some()
+    }
+
+    // Param is passed by value, moved
+    pub fn set_include_seed_fingerprint(&mut self, v: bool) {
+        self.include_seed_fingerprint = ::std::option::Option::Some(v);
+    }
+
     fn generated_message_descriptor_data() -> ::protobuf::reflect::GeneratedMessageDescriptorData {
-        let mut fields = ::std::vec::Vec::with_capacity(2);
+        let mut fields = ::std::vec::Vec::with_capacity(3);
         let mut oneofs = ::std::vec::Vec::with_capacity(0);
         fields.push(::protobuf::reflect::rt::v2::make_option_accessor::<_, _>(
             "network",
@@ -506,6 +527,11 @@ impl ZcashGetViewingKey {
             "account",
             |m: &ZcashGetViewingKey| { &m.account },
             |m: &mut ZcashGetViewingKey| { &mut m.account },
+        ));
+        fields.push(::protobuf::reflect::rt::v2::make_option_accessor::<_, _>(
+            "include_seed_fingerprint",
+            |m: &ZcashGetViewingKey| { &m.include_seed_fingerprint },
+            |m: &mut ZcashGetViewingKey| { &mut m.include_seed_fingerprint },
         ));
         ::protobuf::reflect::GeneratedMessageDescriptorData::new_2::<ZcashGetViewingKey>(
             "ZcashGetViewingKey",
@@ -537,6 +563,9 @@ impl ::protobuf::Message for ZcashGetViewingKey {
                 16 => {
                     self.account = ::std::option::Option::Some(is.read_uint32()?);
                 },
+                24 => {
+                    self.include_seed_fingerprint = ::std::option::Option::Some(is.read_bool()?);
+                },
                 tag => {
                     ::protobuf::rt::read_unknown_or_skip_group(tag, is, self.special_fields.mut_unknown_fields())?;
                 },
@@ -555,6 +584,9 @@ impl ::protobuf::Message for ZcashGetViewingKey {
         if let Some(v) = self.account {
             my_size += ::protobuf::rt::uint32_size(2, v);
         }
+        if let Some(v) = self.include_seed_fingerprint {
+            my_size += 1 + 1;
+        }
         my_size += ::protobuf::rt::unknown_fields_size(self.special_fields.unknown_fields());
         self.special_fields.cached_size().set(my_size as u32);
         my_size
@@ -566,6 +598,9 @@ impl ::protobuf::Message for ZcashGetViewingKey {
         }
         if let Some(v) = self.account {
             os.write_uint32(2, v)?;
+        }
+        if let Some(v) = self.include_seed_fingerprint {
+            os.write_bool(3, v)?;
         }
         os.write_unknown_fields(self.special_fields.unknown_fields())?;
         ::std::result::Result::Ok(())
@@ -586,6 +621,7 @@ impl ::protobuf::Message for ZcashGetViewingKey {
     fn clear(&mut self) {
         self.network = ::std::option::Option::None;
         self.account = ::std::option::Option::None;
+        self.include_seed_fingerprint = ::std::option::Option::None;
         self.special_fields.clear();
     }
 
@@ -593,6 +629,7 @@ impl ::protobuf::Message for ZcashGetViewingKey {
         static instance: ZcashGetViewingKey = ZcashGetViewingKey {
             network: ::std::option::Option::None,
             account: ::std::option::Option::None,
+            include_seed_fingerprint: ::std::option::Option::None,
             special_fields: ::protobuf::SpecialFields::new(),
         };
         &instance
@@ -676,7 +713,7 @@ impl ZcashViewingKey {
         self.key.take().unwrap_or_else(|| ::std::string::String::new())
     }
 
-    // required bytes seed_fingerprint = 2;
+    // optional bytes seed_fingerprint = 2;
 
     pub fn seed_fingerprint(&self) -> &[u8] {
         match self.seed_fingerprint.as_ref() {
@@ -738,9 +775,6 @@ impl ::protobuf::Message for ZcashViewingKey {
 
     fn is_initialized(&self) -> bool {
         if self.key.is_none() {
-            return false;
-        }
-        if self.seed_fingerprint.is_none() {
             return false;
         }
         true
@@ -1940,26 +1974,27 @@ static file_descriptor_proto_data: &'static [u8] = b"\
     essages.zcash.ZcashNetworkR\x07network\x12\x18\n\x07account\x18\x02\x20\
     \x02(\rR\x07account\x12+\n\x11diversifier_index\x18\x03\x20\x02(\x0cR\
     \x10diversifierIndex\"(\n\x0cZcashAddress\x12\x18\n\x07address\x18\x01\
-    \x20\x02(\tR\x07address\"p\n\x12ZcashGetViewingKey\x12@\n\x07network\x18\
-    \x01\x20\x02(\x0e2&.hw.trezor.messages.zcash.ZcashNetworkR\x07network\
-    \x12\x18\n\x07account\x18\x02\x20\x02(\rR\x07account\"N\n\x0fZcashViewin\
-    gKey\x12\x10\n\x03key\x18\x01\x20\x02(\tR\x03key\x12)\n\x10seed_fingerpr\
-    int\x18\x02\x20\x02(\x0cR\x0fseedFingerprint\"\xc0\x01\n\rZcashSignPczt\
-    \x12@\n\x07network\x18\x01\x20\x02(\x0e2&.hw.trezor.messages.zcash.Zcash\
-    NetworkR\x07network\x12\x18\n\x07account\x18\x02\x20\x02(\rR\x07account\
-    \x12\x1f\n\x0bpczt_length\x18\x03\x20\x02(\rR\npcztLength\x122\n\x15host\
-    _reference_height\x18\x04\x20\x02(\rR\x13hostReferenceHeight\"c\n\x10Zca\
-    shPcztRequest\x12\x1f\n\x0btransfer_id\x18\x01\x20\x02(\x0cR\ntransferId\
-    \x12\x16\n\x06offset\x18\x02\x20\x02(\rR\x06offset\x12\x16\n\x06length\
-    \x18\x03\x20\x02(\rR\x06length\"[\n\x0cZcashPcztAck\x12\x1f\n\x0btransfe\
-    r_id\x18\x01\x20\x02(\x0cR\ntransferId\x12\x16\n\x06offset\x18\x02\x20\
-    \x02(\rR\x06offset\x12\x12\n\x04data\x18\x03\x20\x02(\x0cR\x04data\"z\n\
-    \x18ZcashSpendAuthSignatures\x12\x1f\n\x0btransfer_id\x18\x01\x20\x02(\
-    \x0cR\ntransferId\x12\x18\n\x07records\x18\x02\x20\x02(\x0cR\x07records\
-    \x12#\n\rdebug_timings\x18\x03\x20\x01(\x0cR\x0cdebugTimings*B\n\x0cZcas\
-    hNetwork\x12\x18\n\x14ZcashNetwork_Mainnet\x10\0\x12\x18\n\x14ZcashNetwo\
-    rk_Testnet\x10\x01B9\n#com.satoshilabs.trezor.lib.protobufB\x12TrezorMes\
-    sageZcash\
+    \x20\x02(\tR\x07address\"\xb1\x01\n\x12ZcashGetViewingKey\x12@\n\x07netw\
+    ork\x18\x01\x20\x02(\x0e2&.hw.trezor.messages.zcash.ZcashNetworkR\x07net\
+    work\x12\x18\n\x07account\x18\x02\x20\x02(\rR\x07account\x12?\n\x18inclu\
+    de_seed_fingerprint\x18\x03\x20\x01(\x08:\x05falseR\x16includeSeedFinger\
+    print\"N\n\x0fZcashViewingKey\x12\x10\n\x03key\x18\x01\x20\x02(\tR\x03ke\
+    y\x12)\n\x10seed_fingerprint\x18\x02\x20\x01(\x0cR\x0fseedFingerprint\"\
+    \xc0\x01\n\rZcashSignPczt\x12@\n\x07network\x18\x01\x20\x02(\x0e2&.hw.tr\
+    ezor.messages.zcash.ZcashNetworkR\x07network\x12\x18\n\x07account\x18\
+    \x02\x20\x02(\rR\x07account\x12\x1f\n\x0bpczt_length\x18\x03\x20\x02(\rR\
+    \npcztLength\x122\n\x15host_reference_height\x18\x04\x20\x02(\rR\x13host\
+    ReferenceHeight\"c\n\x10ZcashPcztRequest\x12\x1f\n\x0btransfer_id\x18\
+    \x01\x20\x02(\x0cR\ntransferId\x12\x16\n\x06offset\x18\x02\x20\x02(\rR\
+    \x06offset\x12\x16\n\x06length\x18\x03\x20\x02(\rR\x06length\"[\n\x0cZca\
+    shPcztAck\x12\x1f\n\x0btransfer_id\x18\x01\x20\x02(\x0cR\ntransferId\x12\
+    \x16\n\x06offset\x18\x02\x20\x02(\rR\x06offset\x12\x12\n\x04data\x18\x03\
+    \x20\x02(\x0cR\x04data\"z\n\x18ZcashSpendAuthSignatures\x12\x1f\n\x0btra\
+    nsfer_id\x18\x01\x20\x02(\x0cR\ntransferId\x12\x18\n\x07records\x18\x02\
+    \x20\x02(\x0cR\x07records\x12#\n\rdebug_timings\x18\x03\x20\x01(\x0cR\
+    \x0cdebugTimings*B\n\x0cZcashNetwork\x12\x18\n\x14ZcashNetwork_Mainnet\
+    \x10\0\x12\x18\n\x14ZcashNetwork_Testnet\x10\x01B9\n#com.satoshilabs.tre\
+    zor.lib.protobufB\x12TrezorMessageZcash\
 ";
 
 /// `FileDescriptorProto` object which was a source for this generated file

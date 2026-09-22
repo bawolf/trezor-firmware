@@ -1587,6 +1587,7 @@ static void _librust_qstrs(void) {
   MP_QSTR_u2f__title_get;
   MP_QSTR_u2f__title_set;
   MP_QSTR_zcash__export_viewing_key;
+  MP_QSTR_zcash__seed_fingerprint_warning;
   MP_QSTR_zcash__viewing_key_warning;
   MP_QSTR_zcash__weak_backup_warning;
 #endif

@@ -301,16 +301,20 @@ def test_zip32_derivation_not_the_device_own_is_rejected(
 def test_device_fvk_matches_fixture(
     session: Session, fixture_tool: Path, tmp_path: Path
 ) -> None:
-    """The signing derivation (orchard zip32) and the viewing export (receive crate) agree,
-    and the exported seed fingerprint is the canonical ZIP-32 one (zip32 crate)."""
+    """The signing derivation (orchard zip32) and the viewing export (receive
+    crate) agree, and the default export releases no seed fingerprint."""
     _pczt, summary = _build_fixture(fixture_tool, tmp_path, 2)
 
     def accept(session: Session):
         br = yield
         assert br.code == B.SignTx
+        assert br.name == "ironwood_export_viewing_key"
         session.debug.press_yes()
+        # The weak-backup warning; there is no seed-fingerprint screen
+        # because the host did not ask for the fingerprint.
         br = yield
         assert br.code == B.Warning
+        assert br.name == "ironwood_weak_backup"
         session.debug.press_yes()
 
     with session.test_ctx as client:
@@ -321,6 +325,44 @@ def test_device_fvk_matches_fixture(
     jumbled = bytearray(zcash._convert_bits(data, 5, 8, pad=False))
     zcash._f4jumble(jumbled, inverse=True)
     assert jumbled[2:98].hex() == summary["fvk"]
+    assert export.seed_fingerprint is None
+
+
+def test_seed_fingerprint_export_is_opt_in(
+    session: Session, fixture_tool: Path, tmp_path: Path
+) -> None:
+    """Asking for the seed fingerprint inserts a screen that says what it links.
+
+    The account viewing key's own screen promises account scope; the
+    fingerprint is the same value for every account and both networks, so it
+    gets its own warning between that screen and any use of the seed.
+    """
+    _pczt, summary = _build_fixture(fixture_tool, tmp_path, 2)
+    shown = []
+
+    def accept(session: Session):
+        br = yield
+        assert br.code == B.SignTx
+        assert br.name == "ironwood_export_viewing_key"
+        session.debug.press_yes()
+        br = yield
+        assert br.code == B.Warning
+        assert br.name == "ironwood_seed_fingerprint"
+        shown.append(session.debug.read_layout().text_content())
+        session.debug.press_yes()
+        br = yield
+        assert br.code == B.Warning
+        assert br.name == "ironwood_weak_backup"
+        session.debug.press_yes()
+
+    with session.test_ctx as client:
+        client.set_input_flow(accept(session))
+        export = zcash.export_viewing_key(
+            session, NETWORK, ACCOUNT, include_seed_fingerprint=True
+        )
+
+    # The first page of the warning names the seed; caesar paginates the rest.
+    assert "recovery seed" in " ".join(shown[0].split())
     # The fixture tool derives it with zip32::fingerprint::SeedFingerprint from
     # the same seed; the device computes it natively (trezor_ironwood).
     assert export.seed_fingerprint.hex() == summary["seed_fingerprint"]

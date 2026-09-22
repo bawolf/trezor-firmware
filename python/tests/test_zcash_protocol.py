@@ -291,6 +291,34 @@ def test_viewing_key_response_has_fixed_small_wire_size(
         ),
     )
     assert len(buf.getvalue()) == encoded_size
+    without = BytesIO()
+    protobuf.dump_message(without, messages.ZcashViewingKey(key=VIEWING_KEYS[network]))
+    # The default response, and the only shape older firmware can send.
+    assert len(without.getvalue()) == encoded_size - 34
+
+
+@pytest.mark.parametrize("network", NETWORKS)
+def test_seed_fingerprint_is_optional_in_both_directions(
+    network: messages.ZcashNetwork,
+) -> None:
+    """Neither side may require the seed fingerprint (M1/M2).
+
+    The response field is `optional`, so a device image older than it still
+    parses; the request field is `optional` with default false, so an older
+    host asks for the viewing key alone and the device exports the
+    fingerprint only when a host opts in.
+    """
+    request = messages.ZcashGetViewingKey(network=network, account=7)
+    assert request.include_seed_fingerprint is False
+    assert _roundtrip(request) == request
+    asked = messages.ZcashGetViewingKey(
+        network=network, account=7, include_seed_fingerprint=True
+    )
+    assert _roundtrip(asked) == asked
+
+    bare = messages.ZcashViewingKey(key=VIEWING_KEYS[network])
+    assert bare.seed_fingerprint is None
+    assert _roundtrip(bare) == bare
 
 
 @pytest.mark.parametrize(

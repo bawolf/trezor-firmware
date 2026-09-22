@@ -79,8 +79,14 @@ class TestIronwoodGetViewingKey(unittest.TestCase):
         self.calls.append(("warning", args, kwargs))
 
     @staticmethod
-    def _message(network=ZcashNetwork.Mainnet, account=0):
-        return ZcashGetViewingKey(network=network, account=account)
+    def _message(
+        network=ZcashNetwork.Mainnet, account=0, include_seed_fingerprint=False
+    ):
+        return ZcashGetViewingKey(
+            network=network,
+            account=account,
+            include_seed_fingerprint=include_seed_fingerprint,
+        )
 
     def test_network_account_consent_and_exact_key(self):
         vectors = (
@@ -117,6 +123,46 @@ class TestIronwoodGetViewingKey(unittest.TestCase):
             self.assertEqual(confirmation[2]["br_code"], ButtonRequestType.SignTx)
             self.assertTrue(confirmation[2]["prompt_screen"])
             self.assertEqual(self.output, bytearray(96))
+            # The seed fingerprint is opt-in: not asked for, not derived,
+            # not exported, and no second screen.
+            self.assertIsNone(response.seed_fingerprint)
+
+    def test_seed_fingerprint_is_exported_only_behind_its_own_warning(self):
+        """The fingerprint identifies the seed, not the account.
+
+        The first screen promises account scope, so requesting the
+        fingerprint inserts a warning that names what it links, before the
+        seed is touched.
+        """
+        response = await_result(
+            get_viewing_key.get_viewing_key(
+                self._message(include_seed_fingerprint=True)
+            )
+        )
+        self.assertEqual(
+            [call[0] for call in self.calls],
+            ["confirm", "warning", "seed", "native", "stack_clear", "stack_clear"],
+        )
+        warning = self.calls[1][2]
+        self.assertEqual(warning["br_name"], "ironwood_seed_fingerprint")
+        self.assertEqual(warning["content"], TR.zcash__seed_fingerprint_warning)
+        self.assertEqual(warning["br_code"], ButtonRequestType.Warning)
+        self.assertEqual(len(response.seed_fingerprint), 32)
+        self.assertNotEqual(response.seed_fingerprint, bytes(32))
+
+    def test_seed_fingerprint_warning_cancellation_derives_nothing(self):
+        async def reject(*args, **kwargs):
+            self.calls.append(("warning", args, kwargs))
+            raise wire.ActionCancelled()
+
+        self._patch(layouts, "show_warning", reject)
+        with self.assertRaises(wire.ActionCancelled):
+            await_result(
+                get_viewing_key.get_viewing_key(
+                    self._message(include_seed_fingerprint=True)
+                )
+            )
+        self.assertEqual([call[0] for call in self.calls], ["confirm", "warning"])
 
     def test_consent_rejection_accesses_no_seed_or_native(self):
         async def reject(*args, **kwargs):

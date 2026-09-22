@@ -1298,5 +1298,6 @@
   "1296": "address__title_multisig_xpub_template",
   "1297": "zcash__weak_backup_warning",
   "1298": "zcash__export_viewing_key",
-  "1299": "zcash__viewing_key_warning"
+  "1299": "zcash__viewing_key_warning",
+  "1300": "zcash__seed_fingerprint_warning"
 }

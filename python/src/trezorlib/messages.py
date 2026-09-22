@@ -10223,6 +10223,7 @@ class ZcashGetViewingKey(protobuf.MessageType):
     FIELDS = {
         1: protobuf.Field("network", "ZcashNetwork", repeated=False, required=True),
         2: protobuf.Field("account", "uint32", repeated=False, required=True),
+        3: protobuf.Field("include_seed_fingerprint", "bool", repeated=False, required=False, default=False),
     }
 
     def __init__(
@@ -10230,23 +10231,25 @@ class ZcashGetViewingKey(protobuf.MessageType):
         *,
         network: "ZcashNetwork",
         account: "int",
+        include_seed_fingerprint: Optional["bool"] = False,
     ) -> None:
         self.network = network
         self.account = account
+        self.include_seed_fingerprint = include_seed_fingerprint
 
 
 class ZcashViewingKey(protobuf.MessageType):
     MESSAGE_WIRE_TYPE = 32103
     FIELDS = {
         1: protobuf.Field("key", "string", repeated=False, required=True),
-        2: protobuf.Field("seed_fingerprint", "bytes", repeated=False, required=True),
+        2: protobuf.Field("seed_fingerprint", "bytes", repeated=False, required=False, default=None),
     }
 
     def __init__(
         self,
         *,
         key: "str",
-        seed_fingerprint: "bytes",
+        seed_fingerprint: Optional["bytes"] = None,
     ) -> None:
         self.key = key
         self.seed_fingerprint = seed_fingerprint

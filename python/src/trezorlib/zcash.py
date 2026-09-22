@@ -96,7 +96,11 @@ class ViewingKeyExport(t.NamedTuple):
     #: identifier of the seed, not key material. A wallet stores it next to the
     #: account index; the device admits a PCZT `zip32_derivation` only when it
     #: names this fingerprint and the requested account path.
-    seed_fingerprint: bytes
+    #:
+    #: `None` unless `include_seed_fingerprint=True` was requested, and also
+    #: `None` against firmware that predates the field: it is an optional
+    #: response field, so an older device's reply still loads.
+    seed_fingerprint: bytes | None
 
 
 # ZIP-32 account index bound. The device derives m/32'/coin_type'/account'
@@ -184,27 +188,48 @@ def export_viewing_key(
     session: "Session",
     network: messages.ZcashNetwork,
     account: int,
+    include_seed_fingerprint: bool = False,
 ) -> ViewingKeyExport:
-    """Return the Orchard-only Unified Full Viewing Key for `account` and the
-    wallet's ZIP-32 seed fingerprint.
+    """Return the Orchard-only Unified Full Viewing Key for `account`, and the
+    wallet's ZIP-32 seed fingerprint if it was requested.
 
     The device requires an explicit privacy confirmation for every export. The
     UFVK can reveal and link wallet activity and can derive the account's
-    viewing material and addresses, but it cannot confer spend authority. The
-    seed fingerprint is a public identifier of the seed.
+    viewing material and addresses, but it cannot confer spend authority.
+
+    The seed fingerprint is a public identifier of the *seed*, not of the
+    account: the same value for every account index and for both networks. Ask
+    for it only if the host will stamp a PCZT `zip32_derivation` with it; the
+    device shows a second warning saying what it links, and refuses nothing if
+    it is never requested. `seed_fingerprint` is `None` when it was not asked
+    for, and also when the device is older than the field.
     """
     _check_network(network)
     _check_account(account)
+    if type(include_seed_fingerprint) is not bool:
+        raise ValueError("Invalid seed fingerprint request")
 
     response = _call(
-        session, messages.ZcashGetViewingKey(network=network, account=account)
+        session,
+        messages.ZcashGetViewingKey(
+            network=network,
+            account=account,
+            include_seed_fingerprint=include_seed_fingerprint,
+        ),
     )
     response = _expect(session, response, messages.ZcashViewingKey)
     if not _has_canonical_orchard_ufvk_envelope(response.key, network):
         _cancel_and_fail(session, "Invalid Zcash viewing key")
     fingerprint = response.seed_fingerprint
-    if type(fingerprint) is not bytes or len(fingerprint) != SEED_FINGERPRINT_BYTES:
+    # Absent is the contract when it was not requested, and the only thing
+    # firmware without the field can say. Present is checked; a device that
+    # volunteers one unasked is still held to the 32-byte shape.
+    if fingerprint is not None and (
+        type(fingerprint) is not bytes or len(fingerprint) != SEED_FINGERPRINT_BYTES
+    ):
         _cancel_and_fail(session, "Invalid Zcash seed fingerprint")
+    if include_seed_fingerprint and fingerprint is None:
+        _cancel_and_fail(session, "Missing Zcash seed fingerprint")
     return ViewingKeyExport(response.key, fingerprint)
 
 

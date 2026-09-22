@@ -8153,12 +8153,14 @@ if TYPE_CHECKING:
     class ZcashGetViewingKey(protobuf.MessageType):
         network: "ZcashNetwork"
         account: "int"
+        include_seed_fingerprint: "bool"
 
         def __init__(
             self,
             *,
             network: "ZcashNetwork",
             account: "int",
+            include_seed_fingerprint: "bool | None" = None,
         ) -> None:
             pass
 
@@ -8168,13 +8170,13 @@ if TYPE_CHECKING:
 
     class ZcashViewingKey(protobuf.MessageType):
         key: "str"
-        seed_fingerprint: "AnyBytes"
+        seed_fingerprint: "AnyBytes | None"
 
         def __init__(
             self,
             *,
             key: "str",
-            seed_fingerprint: "AnyBytes",
+            seed_fingerprint: "AnyBytes | None" = None,
         ) -> None:
             pass
 

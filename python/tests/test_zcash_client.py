@@ -31,11 +31,12 @@ from __future__ import annotations
 import json
 import typing as t
 from hashlib import sha256
+from io import BytesIO
 from pathlib import Path
 
 import pytest
 
-from trezorlib import exceptions, messages, zcash
+from trezorlib import exceptions, messages, protobuf, zcash
 from trezorlib.client import AppManifest, Session, TrezorClient
 from trezorlib.protobuf import MessageType
 
@@ -328,12 +329,12 @@ def test_get_address_rejects_bad_diversifier(diversifier: object) -> None:
 @pytest.mark.parametrize("account", ACCOUNTS)
 def test_get_viewing_key(network: messages.ZcashNetwork, account: int) -> None:
     key = VIEWING_KEYS[network]
-    session = scripted(
-        messages.ZcashViewingKey(seed_fingerprint=SEED_FINGERPRINT, key=key)
-    )
+    session = scripted(messages.ZcashViewingKey(key=key))
     assert zcash.get_viewing_key(session, network, account) == key
     assert sent(session) == [
-        messages.ZcashGetViewingKey(network=network, account=account)
+        messages.ZcashGetViewingKey(
+            network=network, account=account, include_seed_fingerprint=False
+        )
     ]
     assert not remaining(session)
 
@@ -346,11 +347,86 @@ def test_export_viewing_key_returns_key_and_seed_fingerprint(
     session = scripted(
         messages.ZcashViewingKey(seed_fingerprint=SEED_FINGERPRINT, key=key)
     )
-    export = zcash.export_viewing_key(session, network, 3)
+    export = zcash.export_viewing_key(
+        session, network, 3, include_seed_fingerprint=True
+    )
     assert export == zcash.ViewingKeyExport(key, SEED_FINGERPRINT)
     assert export.seed_fingerprint == SEED_FINGERPRINT
-    assert sent(session) == [messages.ZcashGetViewingKey(network=network, account=3)]
+    assert sent(session) == [
+        messages.ZcashGetViewingKey(
+            network=network, account=3, include_seed_fingerprint=True
+        )
+    ]
     assert not remaining(session)
+
+
+@pytest.mark.parametrize("network", NETWORKS)
+def test_export_viewing_key_does_not_ask_for_the_fingerprint_by_default(
+    network: messages.ZcashNetwork,
+) -> None:
+    """The seed fingerprint identifies the seed, so it is opt-in (M2).
+
+    A host that does not ask gets a response without field 2 and a `None`
+    fingerprint, and the device shows only the account-scoped warning.
+    """
+    key = VIEWING_KEYS[network]
+    session = scripted(messages.ZcashViewingKey(key=key))
+    export = zcash.export_viewing_key(session, network, 3)
+    assert export == zcash.ViewingKeyExport(key, None)
+    request = sent(session)[0]
+    assert isinstance(request, messages.ZcashGetViewingKey)
+    assert request.include_seed_fingerprint is False
+    assert not remaining(session)
+
+
+def test_export_viewing_key_loads_a_response_without_the_fingerprint_field() -> None:
+    """M1: firmware older than the field omits it; the response must still load.
+
+    The wire bytes below are the whole `ZcashViewingKey` an image without
+    `seed_fingerprint` emits: field 1 only. With the field `required` this
+    raised `ValueError("Did not receive value for field seed_fingerprint")`
+    and no such device could be talked to at all.
+    """
+    key = VIEWING_KEYS[MAINNET]
+    buf = BytesIO()
+    protobuf.dump_message(
+        buf, messages.ZcashViewingKey(key=key, seed_fingerprint=SEED_FINGERPRINT)
+    )
+    new_style = buf.getvalue()
+    # field 2, wire type 2 (0x12), length 32 (0x20), then the fingerprint.
+    assert new_style.endswith(b"\x12\x20" + SEED_FINGERPRINT)
+    encoded = new_style[: -(2 + len(SEED_FINGERPRINT))]
+    loaded = protobuf.load_message(BytesIO(encoded), messages.ZcashViewingKey)
+    assert loaded == messages.ZcashViewingKey(key=key)
+    assert loaded.seed_fingerprint is None
+
+    session = scripted(loaded)
+    assert zcash.export_viewing_key(session, MAINNET, 0) == zcash.ViewingKeyExport(
+        key, None
+    )
+    assert zcash.get_viewing_key(session := scripted(loaded), MAINNET, 0) == key
+    assert not remaining(session)
+
+
+def test_export_viewing_key_rejects_a_missing_fingerprint_it_asked_for() -> None:
+    """Asking and not being answered is a device violation, not a `None`."""
+    session = scripted(
+        messages.ZcashViewingKey(key=VIEWING_KEYS[MAINNET]),
+        messages.Failure(code=messages.FailureType.ActionCancelled),
+    )
+    with pytest.raises(exceptions.ProtocolError, match="seed fingerprint"):
+        zcash.export_viewing_key(session, MAINNET, 0, include_seed_fingerprint=True)
+    assert_cancelled(session)
+
+
+@pytest.mark.parametrize("include", [0, 1, None, "yes"])
+def test_export_viewing_key_rejects_a_non_bool_request_flag(include: object) -> None:
+    session = scripted()
+    with pytest.raises(ValueError):
+        zcash.export_viewing_key(
+            session, MAINNET, 0, include_seed_fingerprint=t.cast(bool, include)
+        )
+    assert sent(session) == []
 
 
 @pytest.mark.parametrize("fingerprint", [b"", b"\x00" * 31, b"\x00" * 33])
@@ -365,20 +441,43 @@ def test_export_viewing_key_rejects_wrong_fingerprint_length(
         messages.Failure(code=messages.FailureType.ActionCancelled),
     )
     with pytest.raises(exceptions.ProtocolError, match="seed fingerprint"):
+        zcash.export_viewing_key(session, MAINNET, 0, include_seed_fingerprint=True)
+    assert_cancelled(session)
+
+
+def test_export_viewing_key_checks_an_unasked_fingerprint_too() -> None:
+    """Not asking does not license a malformed one."""
+    session = scripted(
+        messages.ZcashViewingKey(
+            seed_fingerprint=b"\x00" * 31, key=VIEWING_KEYS[MAINNET]
+        ),
+        messages.Failure(code=messages.FailureType.ActionCancelled),
+    )
+    with pytest.raises(exceptions.ProtocolError, match="seed fingerprint"):
         zcash.export_viewing_key(session, MAINNET, 0)
     assert_cancelled(session)
 
 
 def test_viewing_key_export_has_no_full_selector() -> None:
-    """v1 has exactly one product shape: the Orchard-only UFVK."""
+    """v1 has exactly one product shape: the Orchard-only UFVK.
+
+    `include_seed_fingerprint` is not a second shape: it adds a public seed
+    identifier to the same key, behind its own warning.
+    """
     assert set(f.name for f in messages.ZcashGetViewingKey.FIELDS.values()) == {
         "network",
         "account",
+        "include_seed_fingerprint",
     }
     assert set(f.name for f in messages.ZcashViewingKey.FIELDS.values()) == {
         "key",
         "seed_fingerprint",
     }
+    # Both new fields are optional: an older device omits the response field,
+    # and an older host omits the request field (default off).
+    assert not messages.ZcashGetViewingKey.FIELDS[3].required
+    assert messages.ZcashGetViewingKey.FIELDS[3].default is False
+    assert not messages.ZcashViewingKey.FIELDS[2].required
 
 
 @pytest.mark.parametrize(
