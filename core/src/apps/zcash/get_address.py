@@ -95,8 +95,11 @@ async def get_address(msg: ZcashGetAddress) -> ZcashAddress:
     wallet_seed = await seed.get_seed()
     # The native Pallas derivation runs for seconds behind a single blocking
     # call; show the generic progress layout rather than a blank screen, the
-    # way every other app does. The address screen below starts its own layout,
-    # which stops this one, so the consent screen appears exactly as before.
+    # way every other app does. A *static* "Please wait" ring, not an animated
+    # spinner -- see the note in get_viewing_key.py for why nothing can move it
+    # while the native code holds the VM. The address screen below starts its
+    # own layout, which stops this one, so the consent screen appears exactly
+    # as before.
     progress_layout = progress(indeterminate=True)
     progress_layout.report(0)
     try:

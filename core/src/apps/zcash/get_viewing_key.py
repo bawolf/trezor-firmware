@@ -108,7 +108,15 @@ async def get_viewing_key(msg: ZcashGetViewingKey) -> ZcashViewingKey:
     # call. Trezor never leaves the screen blank while it works: show the same
     # generic progress layout Bitcoin (`bitcoin_progress`) and Monero
     # (`monero_*_progress`) use. Indeterminate because one native call has no
-    # intermediate steps to report — it is a spinner, not a lie about a bar.
+    # intermediate steps to report.
+    #
+    # Be precise about what this is: a *static* "Please wait" ring, not an
+    # animated spinner. `ProgressLayout` runs no background tasks and answers
+    # no timers (trezor/ui/__init__.py), so the indeterminate arc only moves
+    # when something calls `report()` with a new value — and there is nothing
+    # to call it while the native code holds the VM. Animating it would mean
+    # chunking the derivation natively. A frozen ring under a caption still
+    # beats a dark screen, which is all this claims to fix.
     progress_layout = progress(indeterminate=True)
     progress_layout.report(0)
     try:

@@ -125,6 +125,15 @@ async def _confirm_output(
         address,
         _amount(value, coin.coin_shortcut),
         output_index=number,
+        # Deliberately unconditional, where Bitcoin makes it host-selectable
+        # (`bool(tx.chunkify)` from `SignTx.chunkify`, apps/bitcoin/sign_tx/
+        # approvers.py). A unified address is 106 characters: unbroken on a
+        # consent screen it is not realistically comparable against the one in
+        # the wallet, so there is no version of this screen worth offering
+        # without grouping. `ZcashSignPczt` therefore carries no `chunkify`
+        # field, and the asymmetry with `ZcashGetAddress` — where the flag is
+        # opt-in, because that screen shipped unchunked and must not change
+        # under an existing host — is on purpose.
         chunkify=True,
         source_account=account_label,
         source_account_path=path,
@@ -377,6 +386,30 @@ async def _stream_and_sign(
         del reply
         fed = 0
         while fed < length:
+            # Report BEFORE the blocking call, never after, and that ordering is
+            # the whole point rather than a detail. Finishing a confirmation runs
+            # `Layout.stop()`, which fades the backlight out because no layout is
+            # running; the very next thing this loop does is verify the next
+            # action, ~3 s of blocking native work. Reporting first is what
+            # brings the screen back (`report` -> `start` -> `repaint` ->
+            # `backlight_fade(NORMAL)`), so the action after every payment and
+            # every memo is covered too — that gap was the live-session symptom.
+            # It also removes a bar that used to animate for a few frames and be
+            # replaced by the consent screen immediately.
+            #
+            # `offset + fed` is the bytes actually verified so far, so the bar
+            # reads "this much is done, now working on the next action".
+            #
+            # This is also what keeps the idle timer alive: it is
+            # `ProgressLayout.report` (trezor/ui/__init__.py) that calls
+            # `workflow.idle_timer.touch()`, which is why `_stream_and_sign` no
+            # longer touches the timer itself. A report still precedes every
+            # feed and `length >= 1`, so this runs at least once per chunk —
+            # strictly more often than the per-chunk touch it replaces. The
+            # guarantee in the CHUNK_TIMEOUT_MS note above is unchanged: an
+            # actively progressing sign never autolocks, and a sign parked at a
+            # ButtonRequest — where no report fires — still does.
+            progress_layout.report(1000 * (offset + fed) // pczt_length)
             # One chunk may complete several outputs; each returns separately
             # and the remainder is fed again after its confirmation.
             if timings is not None:
@@ -386,18 +419,6 @@ async def _stream_and_sign(
                 timings.feed_done()
             utils.zero_unused_stack()
             fed += consumed
-            # One report per verified step — in practice one per action, since
-            # an action is what a `session_feed` call consumes before it
-            # returns. This is the only thing on screen during the silent
-            # phase, and it is also what keeps the idle timer alive: it is
-            # `ProgressLayout.report` (trezor/ui/__init__.py) that calls
-            # `workflow.idle_timer.touch()`, which is why `_stream_and_sign` no
-            # longer touches the timer itself. Reporting per step is strictly
-            # more often than the per-chunk touch it replaces, so the guarantee
-            # in the CHUNK_TIMEOUT_MS note above is unchanged: an actively
-            # progressing sign never autolocks, and a sign parked at a
-            # ButtonRequest — where no report fires — still does.
-            progress_layout.report(1000 * (offset + fed) // pczt_length)
             if kind == _STEP_OUTPUT:
                 _action_index, receiver, value, is_change, memo_kind, memo = payload
                 if is_change:

@@ -1,0 +1,274 @@
+# flake8: noqa: F403,F405
+from common import *  # isort:skip
+
+import sys
+
+from mock import patch
+from trezor import TR, utils
+
+if not utils.BITCOIN_ONLY:
+    from trezor.messages import ZcashPcztAck
+    from trezor.ui.layouts import progress as progress_module
+
+    from apps.zcash import ironwood_account, sign_pczt
+
+# Event kinds recorded on one shared timeline, in the order they happen.
+REPORT = "report"
+FEED = "feed"
+PARK_IN = "park_in"
+PARK_OUT = "park_out"
+
+CHUNK = 1024
+FEEDS_PER_CHUNK = 2
+CONSUMED = CHUNK // FEEDS_PER_CHUNK
+CHUNKS = 4
+PCZT_LENGTH = CHUNK * CHUNKS
+
+_RECEIVER = bytes(range(43))
+# The review payload: `_confirm_totals` is patched out, but `Timings.trailer`
+# reads `totals[8]` (the action count) in a measurement build, and the unit
+# test tree is exactly such a build -- `ironwood_measurement` is on disk.
+_TOTALS = (10_000_040, 40, 500_000, 300_000, 180_000, 20_000, 2, 2, 8)
+
+
+class _FakeIronwood:
+    """Stands in for the native `trezorironwood` module.
+
+    `_stream_and_sign` does `from trezorironwood import ...` at call time, so
+    putting this in `sys.modules` is enough; nothing here computes anything.
+    Each `session_feed` consumes a fixed slice so the loop is fully scripted.
+    """
+
+    def __init__(self, events, steps) -> None:
+        self.events = events
+        self.steps = list(steps)
+        self.begun = False
+        self.approved = False
+
+    def session_begin(self, *args) -> None:
+        self.begun = True
+
+    def session_feed(self, view):
+        self.events.append((FEED, len(self.steps)))
+        return self.steps.pop(0)
+
+    def session_approve(self) -> None:
+        self.approved = True
+
+    def session_sign(self, seed) -> bytes:
+        return bytes(sign_pczt.RECORD_LEN)
+
+    def session_cancel(self) -> None:
+        pass
+
+    def session_region_high_water(self):
+        return (1, 2, 3)
+
+
+class _RecordingProgress:
+    """Stands in for `ui.ProgressLayout`, recording every `report()`."""
+
+    def __init__(self, events, description) -> None:
+        self.events = events
+        self.description = description
+
+    def report(self, value: int, description=None) -> None:
+        self.events.append((REPORT, value))
+
+
+@unittest.skipUnless(not utils.BITCOIN_ONLY, "altcoin")
+class TestIronwoodSignPcztProgress(unittest.TestCase):
+    """The progress layout is what keeps a long sign alive and visible.
+
+    `_stream_and_sign` no longer calls `workflow.idle_timer.touch()` itself: it
+    relies on `ProgressLayout.report`, which touches the timer before it paints
+    (trezor/ui/__init__.py). Two properties carry that argument, and neither
+    was pinned by a test before -- the device-level autolock test is deferred.
+    So assert them here, where they cost nothing:
+
+      1. A report precedes every `session_feed`, so at least one fires per host
+         chunk -- strictly more often than the per-chunk touch it replaced, and
+         it is also what lights the screen back up after a confirmation.
+      2. No report fires while the workflow is parked on a ButtonRequest, so an
+         abandoned sign still reaches autolock.
+    """
+
+    def setUp(self):
+        self.patchers = []
+        self.events = []
+        self.layouts = []
+        self.wallet_seed = bytes(range(32))
+
+        self.native = _FakeIronwood(self.events, self._steps())
+        self.real_module = sys.modules.get("trezorironwood")
+        sys.modules["trezorironwood"] = self.native
+
+        self._patch(progress_module, "progress", self._progress)
+        self._patch(sign_pczt, "_call", self._call)
+        self._patch(sign_pczt, "_confirm_output", self._confirm_output)
+        self._patch(sign_pczt, "_confirm_memo", self._confirm_memo)
+        self._patch(sign_pczt, "_confirm_totals", self._confirm_totals)
+        self._patch(ironwood_account, "require_session", lambda session: None)
+
+    def tearDown(self):
+        for patcher in reversed(self.patchers):
+            patcher.__exit__(None, None, None)
+        if self.real_module is None:
+            del sys.modules["trezorironwood"]
+        else:
+            sys.modules["trezorironwood"] = self.real_module
+
+    def _patch(self, obj, attr, value):
+        patcher = patch(obj, attr, value)
+        patcher.__enter__()
+        self.patchers.append(patcher)
+
+    @staticmethod
+    def _steps():
+        """Eight feeds over four chunks: outputs at 2 and 5, review last.
+
+        One of the outputs carries a memo, so the run covers the two-screen
+        case as well as the one-screen one.
+        """
+        plain = (
+            CONSUMED,
+            sign_pczt._STEP_OUTPUT,
+            (0, _RECEIVER, 30_000, False, 0, b""),
+        )
+        with_memo = (
+            CONSUMED,
+            sign_pczt._STEP_OUTPUT,
+            (1, _RECEIVER, 40_000, False, sign_pczt._MEMO_TEXT, b"hi"),
+        )
+        silent = (CONSUMED, 0, None)
+        review = (CONSUMED, sign_pczt._STEP_REVIEW, _TOTALS)
+        return [silent, plain, silent, silent, with_memo, silent, silent, review]
+
+    def _progress(
+        self, description=None, title=None, indeterminate=False, danger=False
+    ):
+        layout = _RecordingProgress(self.events, description)
+        self.layouts.append(layout)
+        return layout
+
+    async def _call(self, msg, expected_type):
+        return ZcashPcztAck(
+            transfer_id=msg.transfer_id,
+            offset=msg.offset,
+            data=bytes(msg.length),
+        )
+
+    async def _park(self, name):
+        self.events.append((PARK_IN, name))
+        self.events.append((PARK_OUT, name))
+
+    async def _confirm_output(self, *args, **kwargs):
+        await self._park("output")
+
+    async def _confirm_memo(self, *args, **kwargs):
+        await self._park("memo")
+
+    async def _confirm_totals(self, *args, **kwargs):
+        await self._park("totals")
+
+    def _run(self):
+        return await_result(
+            sign_pczt._stream_and_sign(
+                self.wallet_seed,
+                0,  # ZcashNetwork.Mainnet
+                0,
+                10_000_000,
+                PCZT_LENGTH,
+                object(),  # session identity; require_session is patched out
+                "Zcash",
+                "Mainnet",
+                "ZEC #1",
+                "m/32'/133'/0'",
+            )
+        )
+
+    def test_a_report_precedes_every_feed(self):
+        """Report first, verify second -- the screen is lit for the work.
+
+        Reporting after the feed would leave the ~3 s verification that
+        follows each confirmation running on a screen whose backlight
+        `Layout.stop()` just faded out.
+        """
+        self._run()
+
+        feeds = [i for i, event in enumerate(self.events) if event[0] == FEED]
+        self.assertEqual(len(feeds), len(self._steps()))
+        for i in feeds:
+            self.assertTrue(i > 0)
+            self.assertEqual(self.events[i - 1][0], REPORT)
+
+    def test_at_least_one_report_per_host_chunk(self):
+        """The property that replaced the per-chunk `idle_timer.touch()`."""
+        self._run()
+
+        reports = [event for event in self.events if event[0] == REPORT]
+        # One per feed, plus the report(0) that raises the layout before
+        # `session_begin`, plus the signing layout's 0 and 1000.
+        self.assertTrue(len(reports) >= CHUNKS)
+        self.assertEqual(len(reports), len(self._steps()) + 3)
+
+    def test_no_report_while_parked_on_a_button_request(self):
+        """An abandoned sign must still reach autolock."""
+        self._run()
+
+        parked = False
+        for kind, _payload in self.events:
+            if kind == PARK_IN:
+                parked = True
+            elif kind == PARK_OUT:
+                parked = False
+            elif kind == REPORT:
+                self.assertFalse(parked)
+
+    def test_reported_values_are_monotonic_and_in_range(self):
+        """The streaming bar tracks bytes verified and never goes backwards."""
+        self._run()
+
+        # The streaming layout is the first one built; the signing layout is
+        # the second and restarts at zero, which is why they are read apart.
+        streaming, signing = self.layouts
+        self.assertEqual(streaming.description, TR.progress__loading_transaction)
+        self.assertEqual(signing.description, TR.progress__signing_transaction)
+
+        values = [
+            value
+            for index, (kind, value) in enumerate(self.events)
+            if kind == REPORT and index < self._signing_starts_at()
+        ]
+        self.assertEqual(values, sorted(values))
+        for value in values:
+            self.assertTrue(0 <= value <= 1000)
+        # Bytes verified, not actions: the first feed is reported at zero and
+        # the last at (PCZT_LENGTH - CONSUMED) / PCZT_LENGTH.
+        self.assertEqual(values[0], 0)
+        self.assertEqual(values[-1], 1000 * (PCZT_LENGTH - CONSUMED) // PCZT_LENGTH)
+
+    def _signing_starts_at(self):
+        # Everything after the totals confirmation belongs to the signing
+        # layout, which starts its own count at zero.
+        for index, (kind, payload) in enumerate(self.events):
+            if kind == PARK_OUT and payload == "totals":
+                return index
+        raise AssertionError("the totals screen never ran")
+
+    def test_the_streaming_layout_is_up_before_any_native_work(self):
+        """`session_begin` prewarms Pasta/Sinsemilla -- seconds, blocking.
+
+        So the very first thing that happens is a report, which raises the
+        layout; the loop's own first report follows (same value, before the
+        first feed), and only then does any native call run.
+        """
+        self._run()
+
+        self.assertEqual(self.events[0], (REPORT, 0))
+        self.assertEqual(self.events[1], (REPORT, 0))
+        self.assertEqual(self.events[2][0], FEED)
+
+
+if __name__ == "__main__":
+    unittest.main()
