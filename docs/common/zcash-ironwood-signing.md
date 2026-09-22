@@ -160,9 +160,11 @@ are not consent (§4).
 
 **Memos.** Nonempty memos are displayed within a byte budget.
 
-- A memo of a hidden output (change or padding) must be empty: `Policy`
-  otherwise.
-- The canonical `0xF6` marker, or an all-zero memo, shows no memo screen.
+- A memo of a hidden output must be empty: `Policy` otherwise. "Empty" is
+  the canonical `0xF6` marker for change; zero-value padding outputs also
+  admit an all-zero memo (the empty text memo).
+- On a payment, the canonical `0xF6` marker or an all-zero memo shows no
+  memo screen.
 - A ZIP-302 text memo -- leading byte `<= 0xF4`, valid UTF-8, no NUL, at most
   `MEMO_TEXT_BUDGET` = 256 bytes after NUL trimming -- is shown verbatim,
   provided every character is one the device draws as itself. Characters
