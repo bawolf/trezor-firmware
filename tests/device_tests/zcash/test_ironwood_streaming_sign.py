@@ -19,7 +19,7 @@ from mnemonic import Mnemonic
 
 from trezorlib import messages, zcash
 from trezorlib.debuglink import DebugSession as Session
-from trezorlib.exceptions import Cancelled
+from trezorlib.exceptions import Cancelled, TrezorFailure
 
 B = messages.ButtonRequestType
 
@@ -177,6 +177,49 @@ def test_stock_sdk_view_signs(
 
     assert len(signatures) == 1
     assert "verified 1 signature(s)" in _verify(fixture_tool, tmp_path, 4, signatures)
+
+
+def _accept_everything(session: Session):
+    # Presses through whatever the device shows until it answers; used where
+    # the rejection may land before or after the payment screens (the builder
+    # shuffles the real spend's action index).
+    while True:
+        yield
+        session.debug.press_yes()
+
+
+def test_zip32_derivation_matching_device_is_accepted(
+    session: Session, fixture_tool: Path, tmp_path: Path
+) -> None:
+    """A spend claiming the device's own seed fingerprint and account path signs.
+
+    This is what the standard SDK attaches for an account imported as
+    `Spending { seed_fingerprint, index }`; the claim changes nothing about
+    the review or the signature.
+    """
+    pczt, summary = _build_fixture(fixture_tool, tmp_path, 2, "zip32=own")
+    payments = len(summary["payments"])
+
+    with session.test_ctx as client:
+        client.set_input_flow(_accept_flow(session, payments))
+        signatures = zcash.sign_pczt(session, pczt, NETWORK, ACCOUNT, HOST_HEIGHT)
+
+    assert len(signatures) == 1
+    assert "verified 1 signature(s)" in _verify(fixture_tool, tmp_path, 2, signatures)
+
+
+@pytest.mark.parametrize("claim", ["other-seed", "other-account"])
+def test_zip32_derivation_not_the_device_own_is_rejected(
+    session: Session, fixture_tool: Path, tmp_path: Path, claim: str
+) -> None:
+    """A claim naming another seed or another account is refused as policy."""
+    pczt, _summary = _build_fixture(fixture_tool, tmp_path, 2, f"zip32={claim}")
+
+    with session.test_ctx as client, pytest.raises(
+        TrezorFailure, match="Zcash PCZT rejected"
+    ):
+        client.set_input_flow(_accept_everything(session))
+        zcash.sign_pczt(session, pczt, NETWORK, ACCOUNT, HOST_HEIGHT)
 
 
 def test_device_fvk_matches_fixture(

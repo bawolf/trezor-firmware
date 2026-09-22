@@ -42,3 +42,4 @@ rand_chacha.workspace = true
 rand_core = { workspace = true, features = ["getrandom"] }
 serde_json.workspace = true
 zcash_protocol = { workspace = true, features = ["local-consensus"] }
+zip32.workspace = true

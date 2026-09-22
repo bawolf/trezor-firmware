@@ -14,7 +14,7 @@ use zcash_note_encryption::{ENC_CIPHERTEXT_SIZE, OUT_CIPHERTEXT_SIZE};
 use zcash_protocol::value::MAX_MONEY;
 use zeroize::Zeroize;
 
-use crate::{Error, MAX_ACTIONS, MAX_PCZT_BYTES, Result, USER_ADDRESS_BUDGET};
+use crate::{Error, MAX_ACTIONS, MAX_PCZT_BYTES, Result, USER_ADDRESS_BUDGET, ZIP32_HARDENED};
 
 const MAGIC: [u8; 8] = *b"PCZT\x02\0\0\0";
 /// Longest encoding the canonical varint reader consumes before deciding.
@@ -29,15 +29,17 @@ pub const HEADER_BUDGET: usize =
     MAGIC.len() + 6 * VARINT + TAG + 1 + VARINT + 4 * TAG + 3 * VARINT + 2 * (TAG + 32) + VARINT;
 
 /// Action bytes: nine tagged 32-byte fields, the optional signature, two
-/// recipients, two values, the FVK, three absent tags, two proprietary
-/// counts, the ephemeral key, the ciphertext variant, both length-prefixed
+/// recipients, two values, the FVK, two absent tags, two optional ZIP-32
+/// derivations (fingerprint, count, three indices), two proprietary counts,
+/// the ephemeral key, the ciphertext variant, both length-prefixed
 /// ciphertexts, the optional OCK and the optional bounded `user_address`.
 pub const ACTION_BUDGET: usize = 9 * (TAG + 32)
     + (TAG + 64)
     + 2 * (TAG + 43)
     + 2 * (TAG + VARINT)
     + (TAG + 96)
-    + 3 * TAG
+    + 2 * TAG
+    + 2 * (TAG + 32 + 4 * VARINT)
     + 2 * VARINT
     + 32
     + VARINT
@@ -53,7 +55,7 @@ pub const TRAILER_BUDGET: usize = 1 + VARINT + TAG + (TAG + 32) + VARINT + TAG +
 /// The largest single section; the scanner's only buffer.
 pub const SECTION_BUDGET: usize = ACTION_BUDGET;
 
-const _: () = assert!(HEADER_BUDGET == 190 && ACTION_BUDGET == 1870 && TRAILER_BUDGET == 89);
+const _: () = assert!(HEADER_BUDGET == 190 && ACTION_BUDGET == 2015 && TRAILER_BUDGET == 89);
 const _: () = assert!(HEADER_BUDGET <= SECTION_BUDGET && TRAILER_BUDGET <= SECTION_BUDGET);
 
 /// The global fields `wire::scan` returns plus the admitted action count.
@@ -77,6 +79,16 @@ pub struct Action<'a> {
     pub rcv: &'a [u8; 32],
 }
 
+/// A host's claim of the ZIP-32 derivation behind a spend or an output:
+/// the seed fingerprint and an account-level path of three hardened indices,
+/// the only shape the device's own `m/32'/coin_type'/account'` can take.
+/// Checked against the session's own derivation by the caller.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Zip32Derivation<'a> {
+    pub seed_fingerprint: &'a [u8; 32],
+    pub path: [u32; 3],
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Spend<'a> {
     pub nullifier: &'a [u8; 32],
@@ -89,6 +101,7 @@ pub struct Spend<'a> {
     pub rseed: &'a [u8; 32],
     pub fvk: &'a [u8; 96],
     pub alpha: &'a [u8; 32],
+    pub zip32_derivation: Option<Zip32Derivation<'a>>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -101,6 +114,7 @@ pub struct Output<'a> {
     pub value: u64,
     pub rseed: &'a [u8; 32],
     pub ock: Option<&'a [u8; 32]>,
+    pub zip32_derivation: Option<Zip32Derivation<'a>>,
 }
 
 /// Bundle fields after the actions. Yielded only once the last declared byte
@@ -252,6 +266,28 @@ impl<'a> Reader<'a> {
         Ok(())
     }
 
+    /// `Option<Zip32Derivation>`: the fingerprint, then a path whose length
+    /// must be three, the only length the device's own derivation can have.
+    /// Any other length can never match and is refused before the path is
+    /// read, so the budget stays fixed; a non-hardened index is what
+    /// `orchard::pczt::Zip32Derivation::parse` refuses, hence `Malformed`.
+    fn zip32_derivation(&mut self) -> Parse<Option<Zip32Derivation<'a>>> {
+        if !self.tag()? {
+            return Ok(None);
+        }
+        let seed_fingerprint = self.fixed::<32>()?;
+        policy(self.varint()? == 3)?;
+        let mut path = [0; 3];
+        for index in &mut path {
+            *index = self.u32()?;
+            malformed(*index & ZIP32_HARDENED != 0)?;
+        }
+        Ok(Some(Zip32Derivation {
+            seed_fingerprint,
+            path,
+        }))
+    }
+
     /// `Option<String>`: the recipient string the wallet showed its user, which
     /// the stock SDK sets on every payment output. Untrusted metadata outside
     /// the sighash: admitted within [`USER_ADDRESS_BUDGET`], required to be
@@ -314,7 +350,7 @@ fn action<'a>(r: &mut Reader<'a>) -> Parse<Action<'a>> {
     let fvk = r.required::<96>()?;
     r.absent()?; // witness
     let alpha = r.required::<32>()?;
-    r.absent()?; // zip32_derivation
+    let spend_zip32_derivation = r.zip32_derivation()?;
     r.absent()?; // dummy_sk
     r.empty_map()?; // proprietary
 
@@ -327,7 +363,7 @@ fn action<'a>(r: &mut Reader<'a>) -> Parse<Action<'a>> {
     let output_value = r.value()?;
     let output_rseed = r.required::<32>()?;
     let ock = r.optional::<32>()?;
-    r.absent()?; // zip32_derivation
+    let output_zip32_derivation = r.zip32_derivation()?;
     r.user_address()?;
     r.empty_map()?; // proprietary
 
@@ -344,6 +380,7 @@ fn action<'a>(r: &mut Reader<'a>) -> Parse<Action<'a>> {
             rseed: spend_rseed,
             fvk,
             alpha,
+            zip32_derivation: spend_zip32_derivation,
         },
         output: Output {
             cmx,
@@ -354,6 +391,7 @@ fn action<'a>(r: &mut Reader<'a>) -> Parse<Action<'a>> {
             value: output_value,
             rseed: output_rseed,
             ock,
+            zip32_derivation: output_zip32_derivation,
         },
         rcv,
     })

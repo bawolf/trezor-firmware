@@ -334,6 +334,69 @@ fn stock_sdk_full_view_is_accepted_and_signs() {
     assert_eq!(signatures(&signed).len(), 1);
 }
 
+/// A `zip32_derivation` naming the device's own seed fingerprint and the
+/// consented `m/32'/coin_type'/account'` is admitted on spends and outputs
+/// and changes nothing; absent stays admitted. Zodl-style accounts imported
+/// as `Spending { seed_fingerprint, index }` put it on every real spend.
+#[test]
+fn zip32_derivation_matching_the_device_is_accepted() {
+    let plain = engine().begin_test(&fixture()).unwrap();
+    for on_change in [false, true] {
+        let review = engine()
+            .begin_test(&with_own_derivation(on_change))
+            .unwrap();
+        assert_eq!(review.projection(), plain.projection(), "{on_change}");
+        assert_eq!(review.sighash(), plain.sighash(), "{on_change}");
+    }
+}
+
+/// Any other derivation claim is refused: a host cannot make the device sign
+/// under a seed or an account the user did not consent to. A non-hardened
+/// index is what the orchard parser refuses, so it is `Malformed` like any
+/// other unparseable field.
+#[test]
+fn zip32_derivation_not_the_device_own_is_rejected() {
+    let own = own_path(Network::Testnet);
+    let other_seed = [0x5f; 32];
+    let mut other_account = own;
+    other_account[2] += 1;
+    let mut other_coin = own;
+    other_coin[1] += 1;
+    let mut other_purpose = own;
+    other_purpose[0] += 1;
+    let mut non_hardened = own;
+    non_hardened[2] = ACCOUNT;
+    let cases: [(&str, [u8; 32], &[u32], ErrorCode); 8] = [
+        ("other seed", other_seed, &own, ErrorCode::Policy),
+        ("other account", SEED_FINGERPRINT, &other_account, ErrorCode::Policy),
+        ("other coin type", SEED_FINGERPRINT, &other_coin, ErrorCode::Policy),
+        ("other purpose", SEED_FINGERPRINT, &other_purpose, ErrorCode::Policy),
+        ("short path", SEED_FINGERPRINT, &own[..2], ErrorCode::Policy),
+        ("empty path", SEED_FINGERPRINT, &[], ErrorCode::Policy),
+        (
+            "long path",
+            SEED_FINGERPRINT,
+            &[own[0], own[1], own[2], own[2]],
+            ErrorCode::Policy,
+        ),
+        ("non-hardened account", SEED_FINGERPRINT, &non_hardened, ErrorCode::Malformed),
+    ];
+    for (name, fingerprint, path, code) in cases {
+        for part in ["spend", "output"] {
+            let bytes = mutate(|v| {
+                let i = real(v);
+                v["ironwood"]["actions"][i][part]["zip32_derivation"] =
+                    derivation_json(&fingerprint, path);
+            });
+            assert_error(
+                engine().begin_test(&bytes).unwrap_err(),
+                code,
+            );
+            let _ = name;
+        }
+    }
+}
+
 /// The Ironwood `bsk` the Full view keeps is ignored: same projection, same
 /// sighash, same signatures as without it.
 #[test]

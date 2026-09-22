@@ -44,8 +44,9 @@ use zeroize::{Zeroize, ZeroizeOnDrop, Zeroizing};
 use crate::digest::{ActionEffects, Digest};
 use crate::stream::{self, Item, Scanner};
 use crate::{
-    Error, MAX_ACTIONS, OutputKind, Policy, Projection, Result, Review, ReviewedOutput, Token, add,
-    ensure_malformed, ensure_policy, ensure_state, verify_encryption, wire,
+    Error, MAX_ACTIONS, OutputKind, OwnDerivation, Policy, Projection, Result, Review,
+    ReviewedOutput, Token, add, ensure_malformed, ensure_policy, ensure_state, verify_encryption,
+    wire,
 };
 
 /// Inner personalization of the consent token's byte commitment (design §6).
@@ -250,6 +251,9 @@ struct Stream {
     /// key object itself is only ever borrowed for one call.
     fvk: Zeroizing<[u8; 96]>,
     expected_ak: SpendValidatingKey,
+    /// The device's seed fingerprint with the consented account path: what
+    /// any `zip32_derivation` on the wire must name (design gap (a)).
+    own: OwnDerivation,
     /// Present once the header has been verified. Boxed (MUST-FIX #1) so the
     /// CAP-sized `Body` is never moved by value on the stack; it lives in the
     /// region and is only ever reached through this pointer.
@@ -332,10 +336,16 @@ impl<R: RngCore + CryptoRng> Session<R> {
     }
 
     /// Starts a request of exactly `declared_len` bytes for the device-derived
-    /// FVK. As `Engine::begin` (lib.rs:428-429) the pending consent is cleared
-    /// and the counter advances before anything is read; the length bound is
+    /// FVK and seed fingerprint ([`crate::seed_fingerprint`]). As
+    /// `Engine::begin` (lib.rs:428-429) the pending consent is cleared and the
+    /// counter advances before anything is read; the length bound is
     /// `wire::scan`'s (lib.rs:139-141).
-    pub fn begin(&mut self, declared_len: usize, fvk: &FullViewingKey) -> Result<()> {
+    pub fn begin(
+        &mut self,
+        declared_len: usize,
+        fvk: &FullViewingKey,
+        seed_fingerprint: &[u8; 32],
+    ) -> Result<()> {
         self.reset();
         self.counter = self.counter.checked_add(1).ok_or(Error::state())?;
         let scanner = Scanner::new(declared_len)?;
@@ -350,6 +360,7 @@ impl<R: RngCore + CryptoRng> Session<R> {
             declared_len,
             fvk: Zeroizing::new(fvk.to_bytes()),
             expected_ak: SpendValidatingKey::from(fvk.clone()),
+            own: OwnDerivation::new(seed_fingerprint, self.policy.request),
             body: None,
         }));
         Ok(())
@@ -394,7 +405,7 @@ impl<R: RngCore + CryptoRng> Session<R> {
                 }
                 Some(Item::Action(action)) => {
                     let body = stream.body.as_deref_mut().ok_or(Error::internal())?;
-                    match body.action(&action, fvk, &stream.fvk)? {
+                    match body.action(&action, fvk, &stream.fvk, &stream.own)? {
                         Some(output) => return Ok((consumed, Event::ConfirmOutput(output))),
                         None => continue,
                     }
@@ -725,6 +736,7 @@ impl Body {
         action: &stream::Action<'_>,
         fvk: &FullViewingKey,
         fvk_bytes: &[u8; 96],
+        own: &OwnDerivation,
     ) -> Result<Option<ReviewedOutput>> {
         let index = self.seen;
         if index >= self.count {
@@ -734,6 +746,14 @@ impl Body {
         let output = &action.output;
         let input_value = spend.value;
         let output_value = output.value;
+
+        // lib.rs `verify_bundle`: a derivation claim must be the device's own.
+        for claim in [spend.zip32_derivation, output.zip32_derivation]
+            .into_iter()
+            .flatten()
+        {
+            own.admit(claim.seed_fingerprint, claim.path.into_iter())?;
+        }
 
         // Design §4 step 3. For a real spend `Spend::parse` would derive the
         // wire FVK (two Sinsemilla IVK derivations) only for

@@ -2052,6 +2052,7 @@ dependencies = [
  "zcash_protocol",
  "zcash_transparent",
  "zeroize",
+ "zip32",
 ]
 
 [[package]]

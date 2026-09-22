@@ -76,6 +76,39 @@ const EMPTY_MEMO: [u8; 512] = {
 };
 const PADDING_MEMO: [u8; 512] = [0; 512];
 
+/// The hardened bit of a ZIP-32 child index.
+pub const ZIP32_HARDENED: u32 = 1 << 31;
+/// ZIP-32 purpose of shielded account derivation (`m/32'/...`).
+const ZIP32_PURPOSE: u32 = 32;
+
+/// ZIP-32 seed fingerprint: `BLAKE2b-256("Zcash_HD_Seed_FP", I2LEOSP_8(len) ‖ seed)`
+/// (ZIP 32 §"Seed Fingerprints"), computed over exactly the bytes the device
+/// feeds into ZIP-32 master derivation. It equals
+/// `zip32::fingerprint::SeedFingerprint::from_seed` for every seed length ZIP
+/// 32 admits (32..=252) and extends the same construction to the 16-byte
+/// restored SLIP-39 secret the device also derives from; `None` for an empty
+/// seed and above ZIP 32's 252-byte maximum. A public identifier of the seed,
+/// not key material: hosts attach it as the `seed_fingerprint` of a
+/// `zip32_derivation` and wallets store it next to the account index.
+pub fn seed_fingerprint(seed: &[u8]) -> Option<[u8; 32]> {
+    if seed.is_empty() || seed.len() > 252 {
+        return None;
+    }
+    let length = seed.len() as u8;
+    let mut fingerprint = [0; 32];
+    fingerprint.copy_from_slice(
+        blake2b_simd::Params::new()
+            .hash_length(32)
+            .personal(b"Zcash_HD_Seed_FP")
+            .to_state()
+            .update(&[length])
+            .update(seed)
+            .finalize()
+            .as_bytes(),
+    );
+    Some(fingerprint)
+}
+
 fn ensure_malformed(ok: bool) -> Result<()> {
     if ok { Ok(()) } else { Err(Error::malformed()) }
 }
@@ -167,6 +200,50 @@ impl RequestContext {
     /// state.
     pub const fn host_reference_height(self) -> u32 {
         self.host_reference_height
+    }
+
+    /// The account derivation the device signs under, `m/32'/coin_type'/
+    /// account'`, as hardened ZIP-32 child indices.
+    pub fn zip32_path(self) -> [u32; 3] {
+        [
+            ZIP32_PURPOSE | ZIP32_HARDENED,
+            self.network.coin_type() | ZIP32_HARDENED,
+            self.account.value() | ZIP32_HARDENED,
+        ]
+    }
+}
+
+/// The derivation the device signs under: its seed fingerprint and the
+/// consented account path. A `zip32_derivation` a host attaches to a spend or
+/// an output (what the standard SDK does for an account imported as
+/// `Spending { seed_fingerprint, index }`) is admitted only when it names
+/// exactly this derivation; an absent claim is admitted because the request
+/// already selected the account, and any other claim is `Policy`: a host
+/// cannot make the device sign under a derivation it did not consent to.
+#[derive(Clone, Copy)]
+pub(crate) struct OwnDerivation {
+    seed_fingerprint: [u8; 32],
+    path: [u32; 3],
+}
+
+impl OwnDerivation {
+    pub(crate) fn new(seed_fingerprint: &[u8; 32], request: RequestContext) -> Self {
+        Self {
+            seed_fingerprint: *seed_fingerprint,
+            path: request.zip32_path(),
+        }
+    }
+
+    pub(crate) fn admit(
+        &self,
+        seed_fingerprint: &[u8; 32],
+        path: impl ExactSizeIterator<Item = u32>,
+    ) -> Result<()> {
+        ensure_policy(
+            *seed_fingerprint == self.seed_fingerprint
+                && path.len() == self.path.len()
+                && path.zip(self.path).all(|(claimed, own)| claimed == own),
+        )
     }
 }
 
@@ -436,10 +513,18 @@ impl<R: RngCore + CryptoRng> Engine<R> {
     }
 
     /// Validates and retains the exact PCZT while borrowing the device-derived
-    /// FVK.
-    pub fn begin(&mut self, bytes: &[u8], fvk: &FullViewingKey) -> Result<Review> {
+    /// FVK. `seed_fingerprint` is the device's own ([`seed_fingerprint`]):
+    /// with the consented account it is what any `zip32_derivation` on the
+    /// wire must name.
+    pub fn begin(
+        &mut self,
+        bytes: &[u8],
+        fvk: &FullViewingKey,
+        seed_fingerprint: &[u8; 32],
+    ) -> Result<Review> {
         self.slot.clear();
         self.counter = self.counter.checked_add(1).ok_or(Error::state())?;
+        let own = OwnDerivation::new(seed_fingerprint, self.policy.request);
         let Validated {
             pczt,
             projection,
@@ -447,7 +532,7 @@ impl<R: RngCore + CryptoRng> Engine<R> {
             sighash,
             header,
             expected_ak,
-        } = validate(bytes, &self.policy, fvk)?;
+        } = validate(bytes, &self.policy, fvk, &own)?;
 
         let request = self.policy.request;
         let limits = self.policy.limits;
@@ -578,7 +663,12 @@ struct Validated {
     expected_ak: SpendValidatingKey,
 }
 
-fn validate(bytes: &[u8], policy: &Policy, fvk: &FullViewingKey) -> Result<Validated> {
+fn validate(
+    bytes: &[u8],
+    policy: &Policy,
+    fvk: &FullViewingKey,
+    own: &OwnDerivation,
+) -> Result<Validated> {
     let header = wire::scan(bytes)?;
     ensure_policy(header.version == V6_TX_VERSION && header.group == V6_VERSION_GROUP_ID)?;
     let request = policy.request;
@@ -623,6 +713,7 @@ fn validate(bytes: &[u8], policy: &Policy, fvk: &FullViewingKey) -> Result<Valid
                 bundle,
                 fvk,
                 policy,
+                own,
                 &digest,
                 &mut projection,
                 &mut signing_indices,
@@ -650,10 +741,12 @@ fn validate(bytes: &[u8], policy: &Policy, fvk: &FullViewingKey) -> Result<Valid
 }
 
 #[inline(never)]
+#[allow(clippy::too_many_arguments)]
 fn verify_bundle(
     bundle: &orchard::pczt::Bundle,
     fvk: &FullViewingKey,
     policy: &Policy,
+    own: &OwnDerivation,
     sighash: &[u8; 32],
     projection: &mut Projection,
     signing_indices: &mut Vec<usize>,
@@ -684,6 +777,16 @@ fn verify_bundle(
         let output = action.output();
         let input_value = spend.value().ok_or(Error::malformed())?.inner();
         let output_value = output.value().ok_or(Error::malformed())?.inner();
+        // A derivation claim must be the device's own (design gap (a)).
+        for claim in [spend.zip32_derivation(), output.zip32_derivation()]
+            .into_iter()
+            .flatten()
+        {
+            own.admit(
+                claim.seed_fingerprint(),
+                claim.derivation_path().iter().map(|index| index.index()),
+            )?;
+        }
         projection.input_total = add(projection.input_total, input_value)?;
         output_total = add(output_total, output_value)?;
         let nullifier = spend.nullifier().to_bytes();

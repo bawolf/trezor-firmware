@@ -4,7 +4,7 @@
 use zcash_note_encryption::{ENC_CIPHERTEXT_SIZE, OUT_CIPHERTEXT_SIZE};
 use zcash_protocol::value::MAX_MONEY;
 
-use crate::{Error, Result};
+use crate::{Error, Result, ZIP32_HARDENED};
 
 pub const MAX_PCZT_BYTES: usize = 65_536;
 // Raised 8 -> 32 to admit 16- and 32-action bundles. The cross-action state is
@@ -123,6 +123,19 @@ impl<'a> Reader<'a> {
         Ok(())
     }
 
+    /// Fingerprint and a three-index hardened path (`stream.rs::zip32_derivation`).
+    fn zip32_derivation(&mut self) -> Result<()> {
+        if !self.tag()? {
+            return Ok(());
+        }
+        self.take(32)?; // seed_fingerprint
+        policy(self.varint()? == 3)?;
+        for _ in 0..3 {
+            malformed(self.u32()? & ZIP32_HARDENED != 0)?;
+        }
+        Ok(())
+    }
+
     /// Bounded UTF-8 string, ignored (`stream.rs::user_address`).
     fn user_address(&mut self) -> Result<()> {
         if !self.tag()? {
@@ -145,10 +158,10 @@ impl<'a> Reader<'a> {
         self.required(32)?; // spend.rho
         self.required(32)?; // spend.rseed
         self.required(96)?; // spend.fvk
-        self.absent()?;
+        self.absent()?; // spend.witness
         self.required(32)?; // spend.alpha
-        self.absent()?;
-        self.absent()?;
+        self.zip32_derivation()?; // spend.zip32_derivation
+        self.absent()?; // spend.dummy_sk
         self.empty_map()?;
 
         self.required(32)?; // output.cmx
@@ -160,7 +173,7 @@ impl<'a> Reader<'a> {
         self.value()?; // output.value
         self.required(32)?; // output.rseed
         self.optional(32)?; // output.ock
-        self.absent()?; // output.zip32_derivation
+        self.zip32_derivation()?; // output.zip32_derivation
         self.user_address()?;
         self.empty_map()?;
 

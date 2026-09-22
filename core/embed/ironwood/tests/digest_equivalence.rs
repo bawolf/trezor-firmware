@@ -36,7 +36,7 @@ use pczt::roles::verifier::{OrchardError, Verifier};
 use rand_chacha::ChaCha20Rng;
 use rand_chacha::rand_core::SeedableRng;
 use serde_json::{Value, json};
-use trezor_ironwood::{Engine, Network};
+use trezor_ironwood::{Engine, Network, ZIP32_HARDENED};
 use zcash_primitives::transaction::sighash::SignableInput;
 use zcash_primitives::transaction::sighash_v6::v6_signature_hash;
 use zcash_primitives::transaction::txid::TxIdDigester;

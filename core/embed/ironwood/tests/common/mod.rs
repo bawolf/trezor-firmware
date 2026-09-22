@@ -27,6 +27,9 @@ use zcash_protocol::value::Zatoshis;
 
 pub const HEIGHT: u32 = 10_000_000;
 pub const ACCOUNT: u32 = 9;
+/// The corpus keys are raw spending keys, not seed-derived, so the device's
+/// seed fingerprint is a fixed PUBLIC TEST VALUE the host claims must match.
+pub const SEED_FINGERPRINT: [u8; 32] = [0x5e; 32];
 
 pub fn keys() -> (FullViewingKey, SpendAuthorizingKey) {
     let sk = SpendingKey::from_bytes([0; 32]).unwrap(); // PUBLIC TEST SEED ONLY
@@ -63,8 +66,39 @@ pub trait TestEngineExt {
 
 impl<R: RngCore + CryptoRng> TestEngineExt for Engine<R> {
     fn begin_test(&mut self, bytes: &[u8]) -> Result<Review> {
-        self.begin(bytes, &keys().0)
+        self.begin(bytes, &keys().0, &SEED_FINGERPRINT)
     }
+}
+
+/// `m/32'/coin_type'/account'` of the corpus policy: the derivation the
+/// device signs under, so the only claim it admits.
+pub fn own_path(network: Network) -> [u32; 3] {
+    policy(network, 100_000).request().zip32_path()
+}
+
+/// A `zip32_derivation` value in the v2 JSON view.
+pub fn derivation_json(seed_fingerprint: &[u8; 32], path: &[u32]) -> Value {
+    serde_json::json!({
+        "seed_fingerprint": seed_fingerprint.to_vec(),
+        "derivation_path": path,
+    })
+}
+
+/// The fixture with the device's own derivation claimed on the real spend
+/// (where the standard SDK puts it) and, when `on_change`, on the change
+/// output too.
+pub fn with_own_derivation(on_change: bool) -> Vec<u8> {
+    let path = own_path(Network::Testnet);
+    mutate(|v| {
+        let i = real(v);
+        v["ironwood"]["actions"][i]["spend"]["zip32_derivation"] =
+            derivation_json(&SEED_FINGERPRINT, &path);
+        if on_change {
+            let i = 1 - payment(v);
+            v["ironwood"]["actions"][i]["output"]["zip32_derivation"] =
+                derivation_json(&SEED_FINGERPRINT, &path);
+        }
+    })
 }
 
 fn local_network() -> LocalNetwork {

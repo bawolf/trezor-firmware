@@ -10,7 +10,8 @@
 //! host-computed sighash: the same check a wallet performs.
 //!
 //! ```text
-//! ironwood_fixture build <seed-hex> <mainnet|testnet> <account> <height> <outputs> <out> [view=device|full|sdk]
+//! ironwood_fixture build <seed-hex> <mainnet|testnet> <account> <height> <outputs> <out> \
+//!     [view=device|full|sdk] [zip32=none|own|other-seed|other-account]
 //! ironwood_fixture verify <pczt-file> <records-file>
 //! ```
 //!
@@ -22,7 +23,14 @@
 //! encrypted with no OVK) and the recipient string stamped on every payment
 //! as `user_address`.
 //!
-//! `build` prints a JSON summary (fvk, payments, fee, expiry) on stdout.
+//! `zip32` puts a `zip32_derivation` claim on every real spend, as the SDK
+//! does for an account imported as `Spending { seed_fingerprint, index }`:
+//! `own` is the wallet's own seed fingerprint (`zip32::fingerprint`, the
+//! canonical implementation) and `m/32'/coin_type'/account'`; `other-seed`
+//! and `other-account` are claims the device must refuse.
+//!
+//! `build` prints a JSON summary (fvk, seed fingerprint, payments, fee,
+//! expiry, shape) on stdout.
 
 use std::fs;
 use std::process::ExitCode;
@@ -46,6 +54,7 @@ use zcash_primitives::transaction::fees::zip317;
 use zcash_protocol::consensus::{MAIN_NETWORK, Parameters, TEST_NETWORK};
 use zcash_protocol::memo::MemoBytes;
 use zcash_protocol::value::Zatoshis;
+use zip32::fingerprint::SeedFingerprint;
 
 const RECORD_LEN: usize = 66;
 const POOL_IRONWOOD: u8 = 0x03;
@@ -55,7 +64,7 @@ fn main() -> ExitCode {
     let result = match args.get(1).map(String::as_str) {
         Some("build") if args.len() >= 8 => build(&args[2..]),
         Some("verify") if args.len() == 4 => verify(&args[2], &args[3]),
-        _ => Err("usage: build <seed-hex> <mainnet|testnet> <account> <height> <outputs> <out> [view=device|full|sdk] | verify <pczt> <records>".into()),
+        _ => Err("usage: build <seed-hex> <mainnet|testnet> <account> <height> <outputs> <out> [view=device|full|sdk] [zip32=none|own|other-seed|other-account] | verify <pczt> <records>".into()),
     };
     match result {
         Ok(()) => ExitCode::SUCCESS,
@@ -88,22 +97,41 @@ enum View {
     Sdk,
 }
 
+/// The `zip32_derivation` claim put on every real spend (see the module docs).
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Zip32Claim {
+    None,
+    Own,
+    OtherSeed,
+    OtherAccount,
+}
+
 struct Options {
     view: View,
+    zip32: Zip32Claim,
 }
 
 fn parse_options(args: &[String]) -> Result<Options, String> {
-    let mut options = Options { view: View::Device };
+    let mut options = Options {
+        view: View::Device,
+        zip32: Zip32Claim::None,
+    };
     for arg in args {
         match arg.split_once('=') {
             Some(("view", "device")) => options.view = View::Device,
             Some(("view", "full")) => options.view = View::Full,
             Some(("view", "sdk")) => options.view = View::Sdk,
+            Some(("zip32", "none")) => options.zip32 = Zip32Claim::None,
+            Some(("zip32", "own")) => options.zip32 = Zip32Claim::Own,
+            Some(("zip32", "other-seed")) => options.zip32 = Zip32Claim::OtherSeed,
+            Some(("zip32", "other-account")) => options.zip32 = Zip32Claim::OtherAccount,
             _ => return Err(format!("unknown option {arg}")),
         }
     }
     Ok(options)
 }
+
+const ZIP32_HARDENED: u32 = 1 << 31;
 
 fn build(args: &[String]) -> Result<(), String> {
     let seed = hex_decode(&args[0])?;
@@ -263,6 +291,43 @@ fn build_with<P: Parameters>(
             .map_err(|e| e.to_string())?
             .serialize();
     }
+    let seed_fingerprint = SeedFingerprint::from_seed(seed)
+        .ok_or("seed must be 32..=252 bytes")?
+        .to_bytes();
+    if options.zip32 != Zip32Claim::None {
+        let (fingerprint, account_index) = match options.zip32 {
+            Zip32Claim::OtherSeed => {
+                let mut other = seed.to_vec();
+                other[0] ^= 0xff;
+                (
+                    SeedFingerprint::from_seed(&other).unwrap().to_bytes(),
+                    account,
+                )
+            }
+            Zip32Claim::OtherAccount => (seed_fingerprint, account + 1),
+            _ => (seed_fingerprint, account),
+        };
+        let path = [
+            32 | ZIP32_HARDENED,
+            coin_type | ZIP32_HARDENED,
+            account_index | ZIP32_HARDENED,
+        ];
+        let mut view = v2_view(&bytes)?;
+        for action in view["ironwood"]["actions"]
+            .as_array_mut()
+            .ok_or("no ironwood actions")?
+        {
+            if action["spend"]["value"].as_u64().unwrap_or(0) > 0 {
+                action["spend"]["zip32_derivation"] = json!({
+                    "seed_fingerprint": fingerprint.to_vec(),
+                    "derivation_path": path,
+                });
+            }
+        }
+        bytes = serde_json::from_value::<PcztV2>(view)
+            .map_err(|e| e.to_string())?
+            .serialize();
+    }
     let view = v2_view(&bytes)?;
     let user_addresses = view["ironwood"]["actions"]
         .as_array()
@@ -280,6 +345,7 @@ fn build_with<P: Parameters>(
     let fee = outputs.max(2) as u64 * 5_000;
     let summary = json!({
         "fvk": hex_encode(&fvk.to_bytes()),
+        "seed_fingerprint": hex_encode(&seed_fingerprint),
         "actions": outputs,
         "payments": payments,
         "payment_total": payment_total,

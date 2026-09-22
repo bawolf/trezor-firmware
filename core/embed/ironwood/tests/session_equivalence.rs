@@ -28,7 +28,7 @@ use trezor_ironwood::{
     Engine, ErrorCode, Event, Network, OutputKind, Policy, Review, ReviewedOutput, Session,
     SignatureRecord,
 };
-pub use trezor_ironwood::{Error, MAX_ACTIONS, MAX_PCZT_BYTES, Result, USER_ADDRESS_BUDGET};
+pub use trezor_ironwood::{Error, MAX_ACTIONS, MAX_PCZT_BYTES, Result, USER_ADDRESS_BUDGET, ZIP32_HARDENED};
 use zcash_protocol::memo::MemoBytes;
 use zcash_protocol::value::MAX_MONEY;
 
@@ -106,6 +106,57 @@ fn corpus() -> Vec<Case> {
         case("discarded payment ovk", build_with_discarded_payment_ovk()),
         case("change without ovk", build_with_change_without_ovk()),
         case("stock sdk view", build_stock_sdk_view()),
+        case("own zip32 derivation on spend", with_own_derivation(false)),
+        case(
+            "own zip32 derivation on spend and change",
+            with_own_derivation(true),
+        ),
+        case(
+            "other seed zip32 derivation",
+            mutate(|v| {
+                let i = real(v);
+                with_action(v, i)["spend"]["zip32_derivation"] =
+                    derivation_json(&[0x5f; 32], &own_path(Network::Testnet));
+            }),
+        ),
+        case(
+            "other account zip32 derivation",
+            mutate(|v| {
+                let i = real(v);
+                let mut path = own_path(Network::Testnet);
+                path[2] += 1;
+                with_action(v, i)["spend"]["zip32_derivation"] =
+                    derivation_json(&SEED_FINGERPRINT, &path);
+            }),
+        ),
+        case(
+            "non-hardened zip32 derivation",
+            mutate(|v| {
+                let i = real(v);
+                let mut path = own_path(Network::Testnet);
+                path[2] = ACCOUNT;
+                with_action(v, i)["spend"]["zip32_derivation"] =
+                    derivation_json(&SEED_FINGERPRINT, &path);
+            }),
+        ),
+        Case {
+            name: "own zip32 derivation under mainnet policy".into(),
+            bytes: mutate_bytes(&network_fixture(Network::Mainnet), |v| {
+                let i = real(v);
+                with_action(v, i)["spend"]["zip32_derivation"] =
+                    derivation_json(&SEED_FINGERPRINT, &own_path(Network::Mainnet));
+            }),
+            policy: policy(Network::Mainnet, 100_000),
+        },
+        Case {
+            name: "testnet zip32 derivation under mainnet policy".into(),
+            bytes: mutate_bytes(&network_fixture(Network::Mainnet), |v| {
+                let i = real(v);
+                with_action(v, i)["spend"]["zip32_derivation"] =
+                    derivation_json(&SEED_FINGERPRINT, &own_path(Network::Testnet));
+            }),
+            policy: policy(Network::Mainnet, 100_000),
+        },
         case(
             "sapling full view",
             mutate(|v| {
@@ -827,7 +878,7 @@ fn stream_into(
     declared: usize,
     chunk: usize,
 ) -> Result<Run> {
-    session.begin(declared, &keys().0)?;
+    session.begin(declared, &keys().0, &SEED_FINGERPRINT)?;
     let mut run = Run {
         confirmed: Vec::new(),
         review: None,
@@ -908,7 +959,7 @@ struct Counts {
 fn check(case: &Case, n: u64, counts: &mut Counts) {
     let name = &case.name;
     let mut engine = engine_for(case.policy, seed(n));
-    let expected = engine.begin(&case.bytes, &keys().0);
+    let expected = engine.begin(&case.bytes, &keys().0, &SEED_FINGERPRINT);
     let mut contexts = BTreeSet::new();
     for chunk in CHUNKINGS {
         let mut session = session_for(case.policy, seed(n));
@@ -1040,7 +1091,7 @@ fn sampled_single_byte_mutations_match_engine() {
         let mut mutated = bytes.clone();
         mutated[i] ^= 0x01;
         let mut engine = engine_for(policy(Network::Testnet, 100_000), seed(1_000 + i as u64));
-        let expected = engine.begin(&mutated, &keys().0);
+        let expected = engine.begin(&mutated, &keys().0, &SEED_FINGERPRINT);
         let mut session = session_for(policy(Network::Testnet, 100_000), seed(1_000 + i as u64));
         match (expected, run(&mut session, &mutated, WHOLE)) {
             (Ok(expected), Ok(run)) => {
@@ -1159,7 +1210,7 @@ fn trailer_rejection_after_confirmations_leaves_nothing() {
         let mutated = mutate_bytes(&bytes, |v| mutation(v));
         assert_eq!(
             engine_for(policy(Network::Testnet, 100_000), seed(2))
-                .begin(&mutated, &keys().0)
+                .begin(&mutated, &keys().0, &SEED_FINGERPRINT)
                 .err(),
             Some(code),
             "{name}: oracle"
@@ -1167,7 +1218,7 @@ fn trailer_rejection_after_confirmations_leaves_nothing() {
         for chunk in CHUNKINGS {
             let mut session = fresh_session();
             let mut confirmed = 0;
-            session.begin(mutated.len(), &keys().0).unwrap();
+            session.begin(mutated.len(), &keys().0, &SEED_FINGERPRINT).unwrap();
             let mut rest = &mutated[..];
             let verdict = loop {
                 match session.feed(&rest[..rest.len().min(chunk)], &keys().0) {
@@ -1200,12 +1251,12 @@ fn dummy_signature_is_verified_at_the_trailer() {
     });
     assert_error(
         engine_for(policy(Network::Testnet, 100_000), seed(3))
-            .begin(&bad, &keys().0)
+            .begin(&bad, &keys().0, &SEED_FINGERPRINT)
             .unwrap_err(),
         ErrorCode::Malformed,
     );
     let mut session = fresh_session();
-    session.begin(bad.len(), &keys().0).unwrap();
+    session.begin(bad.len(), &keys().0, &SEED_FINGERPRINT).unwrap();
     let mut confirmed = 0;
     let mut failed_at = None;
     for (offset, byte) in bad.iter().enumerate() {
@@ -1242,7 +1293,7 @@ fn identity_rk_dummy_spend_is_rejected_by_engine_and_session_alike() {
     let bytes = identity_rk_dummy();
     assert_eq!(
         engine_for(policy(Network::Testnet, 100_000), seed(6))
-            .begin(&bytes, &keys().0)
+            .begin(&bytes, &keys().0, &SEED_FINGERPRINT)
             .err(),
         Some(ErrorCode::Malformed)
     );
@@ -1281,7 +1332,7 @@ fn identity_rk_dummy_spend_is_rejected_by_engine_and_session_alike() {
     // Byte by byte, the rejection lands on the last byte of the dummy action.
     let ends = section_ends(&bytes);
     let mut session = fresh_session();
-    session.begin(bytes.len(), &keys().0).unwrap();
+    session.begin(bytes.len(), &keys().0, &SEED_FINGERPRINT).unwrap();
     let failed_at = bytes
         .iter()
         .enumerate()
@@ -1293,7 +1344,7 @@ fn identity_rk_dummy_spend_is_rejected_by_engine_and_session_alike() {
 
     let control = basepoint_rk_dummy();
     let expected = engine_for(policy(Network::Testnet, 100_000), seed(7))
-        .begin(&control, &keys().0)
+        .begin(&control, &keys().0, &SEED_FINGERPRINT)
         .unwrap();
     let review = run(&mut fresh_session(), &control, 7)
         .unwrap()
@@ -1365,7 +1416,7 @@ fn feeding_after_review_and_signing_before_review_are_state_errors() {
     assert!(!session.test_is_streaming());
     // Too many bytes for the declared length.
     let mut session = fresh_session();
-    session.begin(bytes.len(), &keys().0).unwrap();
+    session.begin(bytes.len(), &keys().0, &SEED_FINGERPRINT).unwrap();
     let mut extra = bytes.clone();
     extra.push(0);
     assert_eq!(
@@ -1398,13 +1449,13 @@ fn feeding_with_a_different_key_is_a_state_error_and_resets() {
 
     assert_eq!(
         engine_for(policy(Network::Testnet, 100_000), seed(5))
-            .begin(&bytes, &other)
+            .begin(&bytes, &other, &SEED_FINGERPRINT)
             .err(),
         Some(ErrorCode::Malformed)
     );
     for chunk in CHUNKINGS {
         let mut session = fresh_session();
-        session.begin(bytes.len(), &other).unwrap();
+        session.begin(bytes.len(), &other, &SEED_FINGERPRINT).unwrap();
         let mut rest = &bytes[..];
         let verdict = loop {
             match session.feed(&rest[..rest.len().min(chunk)], &other) {

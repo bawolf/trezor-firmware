@@ -244,8 +244,11 @@ pub fn begin(
     let keys = AccountKeys::derive(seed, coin_type, account).ok_or(Failure::State)?;
     let fvk = keys.full_viewing_key();
     drop(keys);
+    // The device's own seed fingerprint: with the consented account it is the
+    // only `zip32_derivation` the session admits on the wire.
+    let seed_fingerprint = trezor_ironwood::seed_fingerprint(seed).ok_or(Failure::State)?;
     let mut session = Session::with_rng(policy, DeviceRng)?;
-    session.begin(declared_len, &fvk)?;
+    session.begin(declared_len, &fvk, &seed_fingerprint)?;
     *active() = Some(Box::new(Signing {
         session,
         fvk,

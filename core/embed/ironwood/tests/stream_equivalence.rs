@@ -15,10 +15,13 @@ use common::*;
 use pczt::Pczt;
 use pczt::roles::verifier::{OrchardError, Verifier};
 use serde_json::{Value, json};
-use stream::{ACTION_BUDGET, HEADER_BUDGET, Header, Item, SECTION_BUDGET, Scanner, TRAILER_BUDGET};
+use stream::{
+    ACTION_BUDGET, HEADER_BUDGET, Header, Item, SECTION_BUDGET, Scanner, TRAILER_BUDGET,
+    Zip32Derivation,
+};
 use trezor_ironwood::testing::preflight;
 use trezor_ironwood::{
-    Error, ErrorCode, MAX_ACTIONS, MAX_PCZT_BYTES, Network, Result, USER_ADDRESS_BUDGET,
+    Error, ErrorCode, MAX_ACTIONS, MAX_PCZT_BYTES, Network, Result, USER_ADDRESS_BUDGET, ZIP32_HARDENED,
 };
 use zcash_protocol::memo::MemoBytes;
 use zcash_protocol::value::MAX_MONEY;
@@ -37,7 +40,8 @@ const ACTION_ACCEPTED_MAX: usize = 9 * 33
     + 2 * 44
     + 2 * 9
     + 97
-    + 4
+    + 2
+    + 2 * (1 + 32 + 1 + 3 * 5)
     + 2
     + 32
     + 1
@@ -63,6 +67,7 @@ struct OwnedAction {
     spend_rseed: [u8; 32],
     fvk: [u8; 96],
     alpha: [u8; 32],
+    spend_zip32_derivation: Option<([u8; 32], [u32; 3])>,
     cmx: [u8; 32],
     ephemeral_key: [u8; 32],
     enc_ciphertext: [u8; 580],
@@ -71,7 +76,12 @@ struct OwnedAction {
     output_value: u64,
     output_rseed: [u8; 32],
     ock: Option<[u8; 32]>,
+    output_zip32_derivation: Option<([u8; 32], [u32; 3])>,
     rcv: [u8; 32],
+}
+
+fn owned_derivation(claim: Option<Zip32Derivation<'_>>) -> Option<([u8; 32], [u32; 3])> {
+    claim.map(|claim| (*claim.seed_fingerprint, claim.path))
 }
 
 impl OwnedAction {
@@ -89,6 +99,7 @@ impl OwnedAction {
             spend_rseed: *spend.rseed,
             fvk: *spend.fvk,
             alpha: *spend.alpha,
+            spend_zip32_derivation: owned_derivation(spend.zip32_derivation),
             cmx: *output.cmx,
             ephemeral_key: *output.ephemeral_key,
             enc_ciphertext: *output.enc_ciphertext,
@@ -97,6 +108,7 @@ impl OwnedAction {
             output_value: output.value,
             output_rseed: *output.rseed,
             ock: output.ock.copied(),
+            output_zip32_derivation: owned_derivation(output.zip32_derivation),
             rcv: *action.rcv,
         }
     }
@@ -201,6 +213,20 @@ fn optional_octets(value: &Value) -> Option<Vec<u8>> {
     }
 }
 
+fn optional_derivation(value: &Value) -> Option<([u8; 32], [u32; 3])> {
+    if value.is_null() {
+        return None;
+    }
+    let fingerprint: [u8; 32] = octets(&value["seed_fingerprint"]).try_into().unwrap();
+    let path: Vec<u32> = value["derivation_path"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|i| i.as_u64().unwrap() as u32)
+        .collect();
+    Some((fingerprint, path.try_into().unwrap()))
+}
+
 fn upstream_json(bytes: &[u8]) -> Option<Value> {
     let v2 = pczt::v2::Pczt::try_from(Pczt::parse(bytes).ok()?).ok()?;
     Some(serde_json::to_value(v2).unwrap())
@@ -244,6 +270,11 @@ fn assert_matches_upstream_json(name: &str, scanned: &Scanned, upstream: &Value)
         assert_eq!(action.spend_rseed.to_vec(), octets(&spend["rseed"]));
         assert_eq!(action.fvk.to_vec(), octets(&spend["fvk"]));
         assert_eq!(action.alpha.to_vec(), octets(&spend["alpha"]));
+        assert_eq!(
+            action.spend_zip32_derivation,
+            optional_derivation(&spend["zip32_derivation"]),
+            "{name}: {i} spend zip32_derivation"
+        );
         assert_eq!(action.cmx.to_vec(), octets(&output["cmx"]));
         assert_eq!(
             action.ephemeral_key.to_vec(),
@@ -266,6 +297,11 @@ fn assert_matches_upstream_json(name: &str, scanned: &Scanned, upstream: &Value)
         assert_eq!(
             action.ock.map(|o| o.to_vec()),
             optional_octets(&output["ock"])
+        );
+        assert_eq!(
+            action.output_zip32_derivation,
+            optional_derivation(&output["zip32_derivation"]),
+            "{name}: {i} output zip32_derivation"
         );
         assert_eq!(action.rcv.to_vec(), octets(&a["rcv"]), "{name}: {i} rcv");
     }
@@ -470,6 +506,17 @@ fn accepted_corpus() -> Vec<(String, Vec<u8>)> {
         ),
         ("change without ovk".into(), build_with_change_without_ovk()),
         ("stock sdk view".into(), build_stock_sdk_view()),
+        ("own zip32 derivation".into(), with_own_derivation(true)),
+        (
+            "other zip32 derivation".into(),
+            mutate(|v| {
+                let path = [0x8000_0020, 0x8000_0085, 0xffff_ffff];
+                with_action(v, 0)["spend"]["zip32_derivation"] =
+                    derivation_json(&[7; 32], &path);
+                with_action(v, 1)["output"]["zip32_derivation"] =
+                    derivation_json(&[8; 32], &path);
+            }),
+        ),
         (
             "absent dummy signature".into(),
             mutate(|v| {
@@ -632,12 +679,28 @@ fn rejected_corpus() -> Vec<(String, Vec<u8>, ErrorCode)> {
             Policy,
         ),
         (
-            "spend zip32 derivation".into(),
+            "spend zip32 derivation, one index".into(),
             mutate(|v| {
                 with_action(v, 0)["spend"]["zip32_derivation"] =
                     json!({"seed_fingerprint": vec![0u8; 32], "derivation_path": [1u32]})
             }),
             Policy,
+        ),
+        (
+            "spend zip32 derivation, four indices".into(),
+            mutate(|v| {
+                with_action(v, 0)["spend"]["zip32_derivation"] =
+                    derivation_json(&[0; 32], &[0x8000_0020; 4])
+            }),
+            Policy,
+        ),
+        (
+            "spend zip32 derivation, non-hardened".into(),
+            mutate(|v| {
+                with_action(v, 0)["spend"]["zip32_derivation"] =
+                    derivation_json(&[0; 32], &[0x8000_0020, 0x8000_0001, 9])
+            }),
+            Malformed,
         ),
         (
             "dummy sk".into(),
@@ -676,12 +739,20 @@ fn rejected_corpus() -> Vec<(String, Vec<u8>, ErrorCode)> {
             Malformed,
         ),
         (
-            "output zip32 derivation".into(),
+            "output zip32 derivation, one index".into(),
             mutate(|v| {
                 with_action(v, 0)["output"]["zip32_derivation"] =
                     json!({"seed_fingerprint": vec![0u8; 32], "derivation_path": [1u32]})
             }),
             Policy,
+        ),
+        (
+            "output zip32 derivation, non-hardened".into(),
+            mutate(|v| {
+                with_action(v, 0)["output"]["zip32_derivation"] =
+                    derivation_json(&[0; 32], &[0, 0x8000_0001, 0x8000_0009])
+            }),
+            Malformed,
         ),
         (
             "user_address over budget".into(),
@@ -769,11 +840,11 @@ fn varint(mut value: u64) -> Vec<u8> {
 #[test]
 fn budgets_bound_the_grammar() {
     assert_eq!(HEADER_BUDGET, 190);
-    assert_eq!(ACTION_BUDGET, 1870);
+    assert_eq!(ACTION_BUDGET, 2015);
     assert_eq!(TRAILER_BUDGET, 89);
     assert_eq!(SECTION_BUDGET, ACTION_BUDGET);
     assert_eq!(HEADER_ACCEPTED_MAX, 115);
-    assert_eq!(ACTION_ACCEPTED_MAX, 1815);
+    assert_eq!(ACTION_ACCEPTED_MAX, 1911);
     assert_eq!(TRAILER_ACCEPTED_MAX, 78);
     for (name, bytes) in accepted_corpus() {
         let scanned = scan(&bytes, WHOLE).unwrap();
