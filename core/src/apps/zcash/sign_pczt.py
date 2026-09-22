@@ -364,7 +364,7 @@ async def _stream_and_sign(
     # host call of up to CHUNK_TIMEOUT_MS, a protobuf decode and one action's
     # verification later.
     try:
-        session_begin(
+        handle = session_begin(
             wallet_seed,
             network,
             account,
@@ -425,7 +425,7 @@ async def _stream_and_sign(
             # and the remainder is fed again after its confirmation.
             if timings is not None:
                 timings.feed_start()
-            consumed, kind, payload = session_feed(data[fed:])
+            consumed, kind, payload = session_feed(handle, data[fed:])
             if timings is not None:
                 timings.feed_done()
             utils.zero_unused_stack()
@@ -457,7 +457,7 @@ async def _stream_and_sign(
         raise wire.ProcessError("Zcash PCZT rejected")
     await _confirm_totals(totals, coin_name, network_label, account_label, path)
     ironwood_account.require_session(session)
-    session_approve()
+    session_approve(handle)
     # Post-consent signing is another multi-second blocking native call, one
     # RedPallas signature per real spend. Bitcoin switches its progress screen
     # from "Loading transaction..." to "Signing transaction..." at exactly this
@@ -467,7 +467,7 @@ async def _stream_and_sign(
     if timings is not None:
         timings.sign_start()
     try:
-        records = session_sign(wallet_seed)
+        records = session_sign(handle, wallet_seed)
     finally:
         utils.zero_unused_stack()
     progress_layout.report(1000)

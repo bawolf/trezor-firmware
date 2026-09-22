@@ -37,14 +37,17 @@ def session_begin(
     maximum_fee: int,
     expiry_window: int,
     pczt_length: int,
-) -> None:
+) -> int:
     """Start streaming one PCZT for the account derived from the wallet seed.
-    Allocations of the signing core are carved from a boot-lifetime native
-    region (no caller-provided buffer)."""
+    Returns the session handle, which `session_feed`, `session_approve` and
+    `session_sign` require: it binds the native request to the workflow that
+    began it, so a second request cannot adopt this one. Allocations of the
+    signing core are carved from a boot-lifetime native region (no
+    caller-provided buffer)."""
 
 
 # rust/src/micropython/ironwood.rs
-def session_feed(chunk: AnyBytes) -> tuple[int, int, tuple | None]:
+def session_feed(handle: int, chunk: AnyBytes) -> tuple[int, int, tuple | None]:
     """Consume PCZT bytes. Returns (consumed, kind, payload): kind 0 needs more
     bytes; kind 1 is a payment output to confirm, payload
     (action_index, receiver, value, is_change, memo_kind, memo) where
@@ -58,19 +61,22 @@ def session_feed(chunk: AnyBytes) -> tuple[int, int, tuple | None]:
 
 
 # rust/src/micropython/ironwood.rs
-def session_approve() -> None:
+def session_approve(handle: int) -> None:
     """Record consent for the reviewed PCZT; call only after the trusted totals screen."""
 
 
 # rust/src/micropython/ironwood.rs
-def session_sign(seed: bytes) -> bytes:
+def session_sign(handle: int, seed: bytes) -> bytes:
     """Sign every real spend and end the session. Returns concatenated
     66-byte records: pool (0x03) | action_index | signature[64]."""
 
 
 # rust/src/micropython/ironwood.rs
 def session_cancel() -> None:
-    """End the session, if any, and wipe its state."""
+    """End the session, if any, and wipe its state. Takes no handle: it is
+    teardown, it runs from a `finally` that may not have one (autolock
+    unwinds the workflow with a GeneratorExit), and cancelling is
+    fail-closed where adopting a session is not."""
 
 
 # rust/src/micropython/ironwood.rs

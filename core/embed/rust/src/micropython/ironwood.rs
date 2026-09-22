@@ -134,6 +134,16 @@ fn failure(failure: Failure) -> Error {
     }
 }
 
+/// The handle `session_begin` returned. Never 0, so a caller that lost it
+/// cannot pass a plausible default.
+fn parse_handle(value: Obj) -> Result<u32, Error> {
+    let handle = parse_u32(value, c"Invalid signing handle")?;
+    if handle == 0 {
+        return Err(Error::ValueError(c"Invalid signing handle"));
+    }
+    Ok(handle)
+}
+
 fn parse_network(value: Obj) -> Result<ironwood::Network, Error> {
     match parse_u32(value, c"Invalid network")? {
         0 => Ok(ironwood::Network::Mainnet),
@@ -172,7 +182,7 @@ extern "C" fn session_begin(n_args: usize, args: *const Obj) -> Obj {
         crate::ironwood::allocator::mark_session_begin();
         // SAFETY: the seed is borrowed for this call only and not mutated.
         let seed = unsafe { get_buffer(args[0])? };
-        signing::begin(
+        let handle = signing::begin(
             seed,
             network,
             account,
@@ -182,7 +192,7 @@ extern "C" fn session_begin(n_args: usize, args: *const Obj) -> Obj {
             declared_len,
         )
         .map_err(failure)?;
-        Ok(Obj::const_none())
+        Obj::try_from(handle)
     };
 
     unsafe { util::try_with_args_and_kwargs(n_args, args, &Map::EMPTY, block) }
@@ -190,12 +200,13 @@ extern "C" fn session_begin(n_args: usize, args: *const Obj) -> Obj {
 
 extern "C" fn session_feed(n_args: usize, args: *const Obj) -> Obj {
     let block = |args: &[Obj], _kwargs: &Map| {
-        if args.len() != 1 {
+        if args.len() != 2 {
             return Err(Error::TypeError);
         }
+        let handle = parse_handle(args[0])?;
         // SAFETY: the chunk is borrowed for the call only and not mutated.
-        let chunk = unsafe { get_buffer(args[0])? };
-        let (consumed, step) = signing::feed(chunk).map_err(failure)?;
+        let chunk = unsafe { get_buffer(args[1])? };
+        let (consumed, step) = signing::feed(handle, chunk).map_err(failure)?;
         let (kind, payload): (u8, Obj) = match step {
             Step::Continue => (0, Obj::const_none()),
             Step::Output(output) => {
@@ -245,16 +256,17 @@ extern "C" fn session_feed(n_args: usize, args: *const Obj) -> Obj {
     unsafe { util::try_with_args_and_kwargs(n_args, args, &Map::EMPTY, block) }
 }
 
-extern "C" fn session_approve() -> Obj {
+extern "C" fn session_approve(handle: Obj) -> Obj {
     let block = || {
-        signing::approve().map_err(failure)?;
+        signing::approve(parse_handle(handle)?).map_err(failure)?;
         Ok(Obj::const_none())
     };
     unsafe { util::try_or_raise(block) }
 }
 
-extern "C" fn session_sign(seed: Obj) -> Obj {
+extern "C" fn session_sign(handle: Obj, seed: Obj) -> Obj {
     let block = || {
+        let handle = parse_handle(handle)?;
         if !unsafe { ffi::mp_type_bytes.is_type_of(seed) } {
             return Err(Error::TypeError);
         }
@@ -262,7 +274,7 @@ extern "C" fn session_sign(seed: Obj) -> Obj {
         let count = {
             // SAFETY: the seed is borrowed for the derivation only.
             let seed = unsafe { get_buffer(seed)? };
-            signing::sign(seed, &mut records).map_err(failure)?
+            signing::sign(handle, seed, &mut records).map_err(failure)?
         };
         Obj::try_from(&records[..count * RECORD_LEN])
     };
@@ -379,12 +391,15 @@ pub static mp_module_trezorironwood: Module = obj_module! {
     ///     maximum_fee: int,
     ///     expiry_window: int,
     ///     pczt_length: int,
-    /// ) -> None:
+    /// ) -> int:
     ///     """Start streaming one PCZT for the account derived from the wallet seed.
-    ///     Allocations of the signing core are carved from a boot-lifetime native
-    ///     region (no caller-provided buffer)."""
+    ///     Returns the session handle, which `session_feed`, `session_approve` and
+    ///     `session_sign` require: it binds the native request to the workflow that
+    ///     began it, so a second request cannot adopt this one. Allocations of the
+    ///     signing core are carved from a boot-lifetime native region (no
+    ///     caller-provided buffer)."""
     Qstr::MP_QSTR_session_begin => obj_fn_var!(7, 7, session_begin).as_obj(),
-    /// def session_feed(chunk: AnyBytes) -> tuple[int, int, tuple | None]:
+    /// def session_feed(handle: int, chunk: AnyBytes) -> tuple[int, int, tuple | None]:
     ///     """Consume PCZT bytes. Returns (consumed, kind, payload): kind 0 needs more
     ///     bytes; kind 1 is a payment output to confirm, payload
     ///     (action_index, receiver, value, is_change, memo_kind, memo) where
@@ -395,16 +410,19 @@ pub static mp_module_trezorironwood: Module = obj_module! {
     ///     change_total, fee, padding_outputs, payment_outputs, action_count).
     ///     Unconsumed bytes must be fed again. ValueError: malformed / too many
     ///     actions; RuntimeError: rejected."""
-    Qstr::MP_QSTR_session_feed => obj_fn_var!(1, 1, session_feed).as_obj(),
-    /// def session_approve() -> None:
+    Qstr::MP_QSTR_session_feed => obj_fn_var!(2, 2, session_feed).as_obj(),
+    /// def session_approve(handle: int) -> None:
     ///     """Record consent for the reviewed PCZT; call only after the trusted totals screen."""
-    Qstr::MP_QSTR_session_approve => obj_fn_0!(session_approve).as_obj(),
-    /// def session_sign(seed: bytes) -> bytes:
+    Qstr::MP_QSTR_session_approve => obj_fn_1!(session_approve).as_obj(),
+    /// def session_sign(handle: int, seed: bytes) -> bytes:
     ///     """Sign every real spend and end the session. Returns concatenated
     ///     66-byte records: pool (0x03) | action_index | signature[64]."""
-    Qstr::MP_QSTR_session_sign => obj_fn_1!(session_sign).as_obj(),
+    Qstr::MP_QSTR_session_sign => obj_fn_2!(session_sign).as_obj(),
     /// def session_cancel() -> None:
-    ///     """End the session, if any, and wipe its state."""
+    ///     """End the session, if any, and wipe its state. Takes no handle: it is
+    ///     teardown, it runs from a `finally` that may not have one (autolock
+    ///     unwinds the workflow with a GeneratorExit), and cancelling is
+    ///     fail-closed where adopting a session is not."""
     Qstr::MP_QSTR_session_cancel => obj_fn_0!(session_cancel).as_obj(),
 };
 
@@ -442,12 +460,15 @@ pub static mp_module_trezorironwood: Module = obj_module! {
     //     maximum_fee: int,
     //     expiry_window: int,
     //     pczt_length: int,
-    // ) -> None:
+    // ) -> int:
     //     """Start streaming one PCZT for the account derived from the wallet seed.
-    //     Allocations of the signing core are carved from a boot-lifetime native
-    //     region (no caller-provided buffer)."""
+    //     Returns the session handle, which `session_feed`, `session_approve` and
+    //     `session_sign` require: it binds the native request to the workflow that
+    //     began it, so a second request cannot adopt this one. Allocations of the
+    //     signing core are carved from a boot-lifetime native region (no
+    //     caller-provided buffer)."""
     Qstr::MP_QSTR_session_begin => obj_fn_var!(7, 7, session_begin).as_obj(),
-    // def session_feed(chunk: AnyBytes) -> tuple[int, int, tuple | None]:
+    // def session_feed(handle: int, chunk: AnyBytes) -> tuple[int, int, tuple | None]:
     //     """Consume PCZT bytes. Returns (consumed, kind, payload): kind 0 needs more
     //     bytes; kind 1 is a payment output to confirm, payload
     //     (action_index, receiver, value, is_change, memo_kind, memo) where
@@ -458,16 +479,19 @@ pub static mp_module_trezorironwood: Module = obj_module! {
     //     change_total, fee, padding_outputs, payment_outputs, action_count).
     //     Unconsumed bytes must be fed again. ValueError: malformed / too many
     //     actions; RuntimeError: rejected."""
-    Qstr::MP_QSTR_session_feed => obj_fn_var!(1, 1, session_feed).as_obj(),
-    // def session_approve() -> None:
+    Qstr::MP_QSTR_session_feed => obj_fn_var!(2, 2, session_feed).as_obj(),
+    // def session_approve(handle: int) -> None:
     //     """Record consent for the reviewed PCZT; call only after the trusted totals screen."""
-    Qstr::MP_QSTR_session_approve => obj_fn_0!(session_approve).as_obj(),
-    // def session_sign(seed: bytes) -> bytes:
+    Qstr::MP_QSTR_session_approve => obj_fn_1!(session_approve).as_obj(),
+    // def session_sign(handle: int, seed: bytes) -> bytes:
     //     """Sign every real spend and end the session. Returns concatenated
     //     66-byte records: pool (0x03) | action_index | signature[64]."""
-    Qstr::MP_QSTR_session_sign => obj_fn_1!(session_sign).as_obj(),
+    Qstr::MP_QSTR_session_sign => obj_fn_2!(session_sign).as_obj(),
     // def session_cancel() -> None:
-    //     """End the session, if any, and wipe its state."""
+    //     """End the session, if any, and wipe its state. Takes no handle: it is
+    //     teardown, it runs from a `finally` that may not have one (autolock
+    //     unwinds the workflow with a GeneratorExit), and cancelling is
+    //     fail-closed where adopting a session is not."""
     Qstr::MP_QSTR_session_cancel => obj_fn_0!(session_cancel).as_obj(),
     /// def session_region_high_water() -> tuple[int, int, int]:
     ///     """MEASUREMENT-ONLY (ironwood-measurement). Region measurement counters,

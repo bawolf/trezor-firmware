@@ -25,8 +25,7 @@ use alloc::boxed::Box;
 use core::ptr;
 
 use ironwood::{
-    Account, Event, Hedged, Limits, Memo, Network, Policy, RequestContext, Result, Review,
-    Session,
+    Account, Event, Hedged, Limits, Memo, Network, Policy, RequestContext, Result, Review, Session,
 };
 use orchard::keys::{FullViewingKey, SpendAuthorizingKey, SpendingKey};
 use rand_core::{CryptoRng, Error as RngError, RngCore};
@@ -117,6 +116,8 @@ pub struct Totals {
 /// One request. Dropped (and so wiped) on `cancel`, on any error, after
 /// `sign`, and when a new request begins.
 pub struct Signing {
+    /// Identifies the request to the workflow that began it. See [`begin`].
+    handle: u32,
     session: Session<Hedged<DeviceRng>>,
     fvk: FullViewingKey,
     coin_type: u32,
@@ -210,6 +211,23 @@ fn coin_type(network: Network) -> u32 {
 
 static mut ACTIVE: Option<Box<Signing>> = None;
 
+/// Handle of the next request. Never 0, so a caller that lost its handle
+/// cannot pass a default and be believed; boot-monotone, so a handle is never
+/// reused within a boot except after 2^32 requests.
+static mut NEXT_HANDLE: u32 = 1;
+
+fn next_handle() -> u32 {
+    // SAFETY: single-threaded, same argument as `active()`.
+    unsafe {
+        let handle = NEXT_HANDLE;
+        NEXT_HANDLE = NEXT_HANDLE.wrapping_add(1);
+        if NEXT_HANDLE == 0 {
+            NEXT_HANDLE = 1;
+        }
+        handle
+    }
+}
+
 /// The one request slot.
 fn active() -> &'static mut Option<Box<Signing>> {
     // SAFETY: the firmware is single-threaded and every caller is a MicroPython
@@ -251,6 +269,15 @@ impl From<ironwood::ErrorCode> for Failure {
 /// Starts a request, replacing any earlier one. `seed` is borrowed for this
 /// call only. Region installation is the caller's business: it must happen
 /// before this allocates.
+/// Starts a request and returns its handle.
+///
+/// The handle is what binds the native request to the Python workflow that
+/// began it: `feed`, `approve` and `sign` refuse any other handle. The
+/// firmware serialises workflows today (the wire layer closes the running one
+/// before a new handler starts), so this changes nothing that happens now; it
+/// is what keeps a second `ZcashSignPczt` from adopting a live session if that
+/// ever weakens, which would otherwise show one workflow's transaction under
+/// another's labels.
 #[allow(clippy::too_many_arguments)]
 pub fn begin(
     seed: &[u8],
@@ -260,7 +287,7 @@ pub fn begin(
     maximum_fee: u64,
     expiry_window: u32,
     declared_len: usize,
-) -> core::result::Result<(), Failure> {
+) -> core::result::Result<u32, Failure> {
     // Drop the old request first so its blocks return to the region before
     // the new one is carved.
     *active() = None;
@@ -290,19 +317,37 @@ pub fn begin(
     // Hedge the signing nonces on the wallet secret, not on the TRNG alone.
     let mut session = Session::with_rng(policy, Hedged::from_seed(DeviceRng, seed))?;
     session.begin(declared_len, &fvk, &seed_fingerprint)?;
+    let handle = next_handle();
     *active() = Some(Box::new(Signing {
+        handle,
         session,
         fvk,
         coin_type,
         account,
         review: None,
     }));
-    Ok(())
+    Ok(handle)
 }
 
-fn with_active<T>(f: impl FnOnce(&mut Signing) -> Result<T>) -> core::result::Result<T, Failure> {
+/// Whether the live request, if there is one, belongs to `handle`.
+fn owns(handle: u32) -> bool {
+    active()
+        .as_deref()
+        .is_some_and(|signing| signing.handle == handle)
+}
+
+fn with_active<T>(
+    handle: u32,
+    f: impl FnOnce(&mut Signing) -> Result<T>,
+) -> core::result::Result<T, Failure> {
     let slot = active();
     let signing = slot.as_deref_mut().ok_or(Failure::State)?;
+    // A caller that does not own this request is refused without touching it.
+    // Destroying the live session here would turn a stray call from an already
+    // dead workflow into a way to cancel the running one.
+    if signing.handle != handle {
+        return Err(Failure::State);
+    }
     match f(signing) {
         Ok(value) => Ok(value),
         Err(code) => {
@@ -316,8 +361,8 @@ fn with_active<T>(f: impl FnOnce(&mut Signing) -> Result<T>) -> core::result::Re
 
 /// Feeds bytes; returns how many were consumed and what to do next. Bytes
 /// left over belong after the returned step and must be fed again.
-pub fn feed(chunk: &[u8]) -> core::result::Result<(usize, Step), Failure> {
-    with_active(|signing| {
+pub fn feed(handle: u32, chunk: &[u8]) -> core::result::Result<(usize, Step), Failure> {
+    with_active(handle, |signing| {
         if signing.review.is_some() {
             return Err(ironwood::ErrorCode::State);
         }
@@ -361,8 +406,8 @@ pub fn feed(chunk: &[u8]) -> core::result::Result<(usize, Step), Failure> {
 }
 
 /// Records consent after the trusted totals screen.
-pub fn approve() -> core::result::Result<(), Failure> {
-    with_active(|signing| {
+pub fn approve(handle: u32) -> core::result::Result<(), Failure> {
+    with_active(handle, |signing| {
         let review = signing.review.as_ref().ok_or(ironwood::ErrorCode::State)?;
         signing.session.approve(review.token())
     })
@@ -371,8 +416,13 @@ pub fn approve() -> core::result::Result<(), Failure> {
 /// Signs every real spend and ends the request. Writes `n * RECORD_LEN`
 /// bytes into `records` and returns `n`. The spend authorizing key is
 /// derived from `seed` for this call only and wiped before returning.
-pub fn sign(seed: &[u8], records: &mut [u8]) -> core::result::Result<usize, Failure> {
-    let result = with_active(|signing| {
+pub fn sign(handle: u32, seed: &[u8], records: &mut [u8]) -> core::result::Result<usize, Failure> {
+    // Not this workflow's request: refuse it without disturbing the one that
+    // is live, since nothing was consumed.
+    if !owns(handle) {
+        return Err(Failure::State);
+    }
+    let result = with_active(handle, |signing| {
         let review = signing.review.as_ref().ok_or(ironwood::ErrorCode::State)?;
         let keys = AccountKeys::derive(seed, signing.coin_type, signing.account)
             .ok_or(ironwood::ErrorCode::State)?;

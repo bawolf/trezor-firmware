@@ -47,19 +47,25 @@ class _FakeIronwood:
         self.steps = list(steps)
         self.begun = False
         self.approved = False
+        self.handle = 0
 
-    def session_begin(self, *args) -> None:
+    def session_begin(self, *args) -> int:
         self.begun = True
         self.events.append((BEGIN, None))
+        self.handle += 1
+        return self.handle
 
-    def session_feed(self, view):
+    def session_feed(self, handle, view):
+        assert handle == self.handle, "feed drove another workflow's session"
         self.events.append((FEED, len(self.steps)))
         return self.steps.pop(0)
 
-    def session_approve(self) -> None:
+    def session_approve(self, handle) -> None:
+        assert handle == self.handle, "approve consented to another workflow's session"
         self.approved = True
 
-    def session_sign(self, seed) -> bytes:
+    def session_sign(self, handle, seed) -> bytes:
+        assert handle == self.handle, "sign released another workflow's signatures"
         self.events.append((SIGN, None))
         return bytes(sign_pczt.RECORD_LEN)
 
