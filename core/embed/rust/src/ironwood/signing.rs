@@ -25,7 +25,8 @@ use alloc::boxed::Box;
 use core::ptr;
 
 use ironwood::{
-    Account, Event, Limits, Memo, Network, Policy, RequestContext, Result, Review, Session,
+    Account, Event, Hedged, Limits, Memo, Network, Policy, RequestContext, Result, Review,
+    Session,
 };
 use orchard::keys::{FullViewingKey, SpendAuthorizingKey, SpendingKey};
 use rand_core::{CryptoRng, Error as RngError, RngCore};
@@ -42,7 +43,11 @@ const RESTORED_SLIP39_SEED_BYTES: usize = 16;
 const MIN_ZIP32_SEED_BYTES: usize = 32;
 const MAX_SEED_BYTES: usize = 252;
 
-/// Thin adapter over the firmware CSPRNG for RedPallas signing nonces.
+/// Thin adapter over the firmware CSPRNG.
+///
+/// Never handed to a signing call directly: [`begin`] wraps it in
+/// [`Hedged`], so a nonce is a function of the wallet secret as well as the
+/// TRNG. See `ironwood/src/hedge.rs` for why.
 pub struct DeviceRng;
 
 impl RngCore for DeviceRng {
@@ -112,7 +117,7 @@ pub struct Totals {
 /// One request. Dropped (and so wiped) on `cancel`, on any error, after
 /// `sign`, and when a new request begins.
 pub struct Signing {
-    session: Session<DeviceRng>,
+    session: Session<Hedged<DeviceRng>>,
     fvk: FullViewingKey,
     coin_type: u32,
     account: u32,
@@ -282,7 +287,8 @@ pub fn begin(
     // The device's own seed fingerprint: with the consented account it is the
     // only `zip32_derivation` the session admits on the wire.
     let seed_fingerprint = ironwood::seed_fingerprint(seed).ok_or(Failure::State)?;
-    let mut session = Session::with_rng(policy, DeviceRng)?;
+    // Hedge the signing nonces on the wallet secret, not on the TRNG alone.
+    let mut session = Session::with_rng(policy, Hedged::from_seed(DeviceRng, seed))?;
     session.begin(declared_len, &fvk, &seed_fingerprint)?;
     *active() = Some(Box::new(Signing {
         session,

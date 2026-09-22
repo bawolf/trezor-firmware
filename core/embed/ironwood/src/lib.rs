@@ -33,6 +33,7 @@ mod digest;
 #[cfg(feature = "test")]
 mod effects;
 mod error;
+mod hedge;
 mod prewarm;
 pub mod receive;
 mod session;
@@ -51,6 +52,7 @@ pub mod testing {
 }
 
 pub use error::{Error, ErrorCode, Result};
+pub use hedge::Hedged;
 use orchard::Note;
 #[cfg(feature = "test")]
 use orchard::bundle::BundleVersion;
