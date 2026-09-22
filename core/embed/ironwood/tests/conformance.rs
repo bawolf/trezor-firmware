@@ -368,9 +368,24 @@ fn zip32_derivation_not_the_device_own_is_rejected() {
     non_hardened[2] = ACCOUNT;
     let cases: [(&str, [u8; 32], &[u32], ErrorCode); 8] = [
         ("other seed", other_seed, &own, ErrorCode::Policy),
-        ("other account", SEED_FINGERPRINT, &other_account, ErrorCode::Policy),
-        ("other coin type", SEED_FINGERPRINT, &other_coin, ErrorCode::Policy),
-        ("other purpose", SEED_FINGERPRINT, &other_purpose, ErrorCode::Policy),
+        (
+            "other account",
+            SEED_FINGERPRINT,
+            &other_account,
+            ErrorCode::Policy,
+        ),
+        (
+            "other coin type",
+            SEED_FINGERPRINT,
+            &other_coin,
+            ErrorCode::Policy,
+        ),
+        (
+            "other purpose",
+            SEED_FINGERPRINT,
+            &other_purpose,
+            ErrorCode::Policy,
+        ),
         ("short path", SEED_FINGERPRINT, &own[..2], ErrorCode::Policy),
         ("empty path", SEED_FINGERPRINT, &[], ErrorCode::Policy),
         (
@@ -379,7 +394,12 @@ fn zip32_derivation_not_the_device_own_is_rejected() {
             &[own[0], own[1], own[2], own[2]],
             ErrorCode::Policy,
         ),
-        ("non-hardened account", SEED_FINGERPRINT, &non_hardened, ErrorCode::Malformed),
+        (
+            "non-hardened account",
+            SEED_FINGERPRINT,
+            &non_hardened,
+            ErrorCode::Malformed,
+        ),
     ];
     for (name, fingerprint, path, code) in cases {
         for part in ["spend", "output"] {
@@ -388,10 +408,7 @@ fn zip32_derivation_not_the_device_own_is_rejected() {
                 v["ironwood"]["actions"][i][part]["zip32_derivation"] =
                     derivation_json(&fingerprint, path);
             });
-            assert_error(
-                engine().begin_test(&bytes).unwrap_err(),
-                code,
-            );
+            assert_error(engine().begin_test(&bytes).unwrap_err(), code);
             let _ = name;
         }
     }
@@ -578,7 +595,9 @@ fn memos_the_device_cannot_render_faithfully_are_hashed() {
 fn change_output_with_memo_is_rejected() {
     let memo = zcash_protocol::memo::MemoBytes::from_bytes(b"hidden").unwrap();
     assert_error(
-        engine().begin_test(&build_with_change_memo(memo)).unwrap_err(),
+        engine()
+            .begin_test(&build_with_change_memo(memo))
+            .unwrap_err(),
         ErrorCode::Policy,
     );
 }

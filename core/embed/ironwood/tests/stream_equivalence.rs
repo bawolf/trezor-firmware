@@ -21,7 +21,8 @@ use stream::{
 };
 use trezor_ironwood::testing::preflight;
 use trezor_ironwood::{
-    Error, ErrorCode, MAX_ACTIONS, MAX_PCZT_BYTES, Network, Result, USER_ADDRESS_BUDGET, ZIP32_HARDENED,
+    Error, ErrorCode, MAX_ACTIONS, MAX_PCZT_BYTES, Network, Result, USER_ADDRESS_BUDGET,
+    ZIP32_HARDENED,
 };
 use zcash_protocol::memo::MemoBytes;
 use zcash_protocol::value::MAX_MONEY;
@@ -511,10 +512,8 @@ fn accepted_corpus() -> Vec<(String, Vec<u8>)> {
             "other zip32 derivation".into(),
             mutate(|v| {
                 let path = [0x8000_0020, 0x8000_0085, 0xffff_ffff];
-                with_action(v, 0)["spend"]["zip32_derivation"] =
-                    derivation_json(&[7; 32], &path);
-                with_action(v, 1)["output"]["zip32_derivation"] =
-                    derivation_json(&[8; 32], &path);
+                with_action(v, 0)["spend"]["zip32_derivation"] = derivation_json(&[7; 32], &path);
+                with_action(v, 1)["output"]["zip32_derivation"] = derivation_json(&[8; 32], &path);
             }),
         ),
         (

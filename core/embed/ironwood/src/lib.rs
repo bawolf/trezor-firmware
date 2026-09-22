@@ -85,7 +85,14 @@ const PADDING_MEMO: [u8; 512] = [0; 512];
 pub const MEMO_TEXT_BUDGET: usize = 256;
 
 /// What the device shows for a payment output's memo (design §11).
+///
+/// The `Text` payload is inline by design, which is why the size difference
+/// between the variants is allowed: the signing core is `no_std` and every
+/// allocation comes out of the fixed boot-lifetime region, so boxing the memo
+/// would trade 258 bytes of enum size for a region allocation per reviewed
+/// output -- the one resource the streaming design is built to bound.
 #[derive(Clone, Debug, PartialEq, Eq)]
+#[allow(clippy::large_enum_variant)]
 pub enum Memo {
     /// No memo: the canonical `0xF6` marker or an all-zero (empty text) memo.
     Empty,
@@ -201,9 +208,9 @@ pub const ZIP32_HARDENED: u32 = 1 << 31;
 /// ZIP-32 purpose of shielded account derivation (`m/32'/...`).
 const ZIP32_PURPOSE: u32 = 32;
 
-/// ZIP-32 seed fingerprint: `BLAKE2b-256("Zcash_HD_Seed_FP", I2LEOSP_8(len) ‖ seed)`
-/// (ZIP 32 §"Seed Fingerprints"), computed over exactly the bytes the device
-/// feeds into ZIP-32 master derivation. It equals
+/// ZIP-32 seed fingerprint: `BLAKE2b-256("Zcash_HD_Seed_FP", I2LEOSP_8(len) ‖
+/// seed)` (ZIP 32 §"Seed Fingerprints"), computed over exactly the bytes the
+/// device feeds into ZIP-32 master derivation. It equals
 /// `zip32::fingerprint::SeedFingerprint::from_seed` for every seed length ZIP
 /// 32 admits (32..=252), pinned byte-for-byte by `tests/seed_fingerprint.rs`;
 /// `None` for an empty seed and above ZIP 32's 252-byte maximum. A public
@@ -1059,7 +1066,11 @@ fn verify_encryption(
     if let Some(ock) = output.ock() {
         ensure_malformed(
             orchard::note_encryption::recover_output_bound_with_ock(
-                &domain, ock, action, out_ciphertext, note,
+                &domain,
+                ock,
+                action,
+                out_ciphertext,
+                note,
             )
             .is_some_and(|m| m == memo),
         )?;

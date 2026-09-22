@@ -14,17 +14,18 @@
 //! an `Fp` square root, which is exactly what allocates the table.
 //!
 //! It also warms orchard's two `OnceBox<CommitDomain>` caches (SHOULD-FIX #3,
-//! Fable review 2026-09-19). Those caches (NoteCommit and CommitIvk) live behind
-//! Rust statics the GC never scans and allocate through this region on first
-//! use. Left to fill mid-action-0, their two ~200 B blocks land at arbitrary
-//! offsets interleaved with transient verify scratch and then survive for the
-//! whole boot, permanently splitting the region ([free][island][free]...) so
-//! session 2's layout (and its high-water) differ from session 1's. Warming them
-//! here places them contiguous+early next to the Pasta table. This costs one
-//! note commitment + one `commit_ivk` (well below the old `bench::warmup`, which
-//! ran four ops), and the domain builds themselves are the same two
-//! `hash_to_curve` per domain that action 0 would pay anyway. It touches no
-//! wallet material: the fixed throwaway key below is a constant, not a secret.
+//! Fable review 2026-09-19). Those caches (NoteCommit and CommitIvk) live
+//! behind Rust statics the GC never scans and allocate through this region on
+//! first use. Left to fill mid-action-0, their two ~200 B blocks land at
+//! arbitrary offsets interleaved with transient verify scratch and then survive
+//! for the whole boot, permanently splitting the region
+//! ([free][island][free]...) so session 2's layout (and its high-water) differ
+//! from session 1's. Warming them here places them contiguous+early next to the
+//! Pasta table. This costs one note commitment + one `commit_ivk` (well below
+//! the old `bench::warmup`, which ran four ops), and the domain builds
+//! themselves are the same two `hash_to_curve` per domain that action 0 would
+//! pay anyway. It touches no wallet material: the fixed throwaway key below is
+//! a constant, not a secret.
 
 use core::hint::black_box;
 use core::sync::atomic::{AtomicBool, Ordering};
@@ -63,8 +64,8 @@ pub fn prewarm() {
 }
 
 /// Forces orchard's `commit_ivk` and `note_commit` `OnceBox<CommitDomain>`
-/// caches to allocate now, at prewarm, so they sit low and contiguous instead of
-/// fragmenting the region mid-action-0. Best-effort and never panics: if a
+/// caches to allocate now, at prewarm, so they sit low and contiguous instead
+/// of fragmenting the region mid-action-0. Best-effort and never panics: if a
 /// constant somehow fails to yield a valid key/note the caches simply fill on
 /// first real use as before (correctness is unaffected either way).
 fn warm_orchard_domains() {
@@ -103,9 +104,13 @@ fn warm_orchard_domains() {
             Some(rseed) => rseed,
             None => continue,
         };
-        if let Some(note) =
-            Option::<Note>::from(Note::from_parts(address, value, rho, rseed, NoteVersion::V3))
-        {
+        if let Some(note) = Option::<Note>::from(Note::from_parts(
+            address,
+            value,
+            rho,
+            rseed,
+            NoteVersion::V3,
+        )) {
             let _ = black_box(note.commitment());
             return;
         }

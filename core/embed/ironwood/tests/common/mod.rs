@@ -347,7 +347,10 @@ fn build_with_network<P: Parameters>(
                     .map(|scope| fvk.to_ovk(scope)),
                 fvk.address_at(1u32, Scope::Internal),
                 Zatoshis::from_u64(change).unwrap(),
-                output_policy.change_memo.clone().unwrap_or_else(MemoBytes::empty),
+                output_policy
+                    .change_memo
+                    .clone()
+                    .unwrap_or_else(MemoBytes::empty),
             )
             .unwrap();
     }
@@ -460,10 +463,10 @@ pub fn flip(value: &mut Value) {
 /// Largest bundle the synthetic equivalence fixtures construct. Deliberately
 /// fixed and INDEPENDENT of `MAX_ACTIONS`: the Session↔Engine equivalence it
 /// proves is per-action logic that does not vary with the action count, so a
-/// 1..=CORPUS_MAX_ACTIONS sweep is representative. When `MAX_ACTIONS` was raised
-/// 8→32 for 16/32-action signing, this stayed 8 so the equivalence corpus keeps
-/// its 135-case size; 16/32-action parse+sign+verify is proven on the emulator
-/// (host-side pczt verify), not by this host corpus.
+/// 1..=CORPUS_MAX_ACTIONS sweep is representative. When `MAX_ACTIONS` was
+/// raised 8→32 for 16/32-action signing, this stayed 8 so the equivalence
+/// corpus keeps its 135-case size; 16/32-action parse+sign+verify is proven on
+/// the emulator (host-side pczt verify), not by this host corpus.
 pub const CORPUS_MAX_ACTIONS: usize = 8;
 
 /// Synthetic local-consensus fixture covering every admitted action count.

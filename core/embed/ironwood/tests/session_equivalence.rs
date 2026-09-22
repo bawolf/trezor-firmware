@@ -28,7 +28,9 @@ use trezor_ironwood::{
     Engine, ErrorCode, Event, Network, OutputKind, Policy, Review, ReviewedOutput, Session,
     SignatureRecord,
 };
-pub use trezor_ironwood::{Error, MAX_ACTIONS, MAX_PCZT_BYTES, Result, USER_ADDRESS_BUDGET, ZIP32_HARDENED};
+pub use trezor_ironwood::{
+    Error, MAX_ACTIONS, MAX_PCZT_BYTES, Result, USER_ADDRESS_BUDGET, ZIP32_HARDENED,
+};
 use zcash_protocol::memo::MemoBytes;
 use zcash_protocol::value::MAX_MONEY;
 
@@ -1273,7 +1275,9 @@ fn trailer_rejection_after_confirmations_leaves_nothing() {
         for chunk in CHUNKINGS {
             let mut session = fresh_session();
             let mut confirmed = 0;
-            session.begin(mutated.len(), &keys().0, &SEED_FINGERPRINT).unwrap();
+            session
+                .begin(mutated.len(), &keys().0, &SEED_FINGERPRINT)
+                .unwrap();
             let mut rest = &mutated[..];
             let verdict = loop {
                 match session.feed(&rest[..rest.len().min(chunk)], &keys().0) {
@@ -1311,7 +1315,9 @@ fn dummy_signature_is_verified_at_the_trailer() {
         ErrorCode::Malformed,
     );
     let mut session = fresh_session();
-    session.begin(bad.len(), &keys().0, &SEED_FINGERPRINT).unwrap();
+    session
+        .begin(bad.len(), &keys().0, &SEED_FINGERPRINT)
+        .unwrap();
     let mut confirmed = 0;
     let mut failed_at = None;
     for (offset, byte) in bad.iter().enumerate() {
@@ -1387,7 +1393,9 @@ fn identity_rk_dummy_spend_is_rejected_by_engine_and_session_alike() {
     // Byte by byte, the rejection lands on the last byte of the dummy action.
     let ends = section_ends(&bytes);
     let mut session = fresh_session();
-    session.begin(bytes.len(), &keys().0, &SEED_FINGERPRINT).unwrap();
+    session
+        .begin(bytes.len(), &keys().0, &SEED_FINGERPRINT)
+        .unwrap();
     let failed_at = bytes
         .iter()
         .enumerate()
@@ -1471,7 +1479,9 @@ fn feeding_after_review_and_signing_before_review_are_state_errors() {
     assert!(!session.test_is_streaming());
     // Too many bytes for the declared length.
     let mut session = fresh_session();
-    session.begin(bytes.len(), &keys().0, &SEED_FINGERPRINT).unwrap();
+    session
+        .begin(bytes.len(), &keys().0, &SEED_FINGERPRINT)
+        .unwrap();
     let mut extra = bytes.clone();
     extra.push(0);
     assert_eq!(
@@ -1510,7 +1520,9 @@ fn feeding_with_a_different_key_is_a_state_error_and_resets() {
     );
     for chunk in CHUNKINGS {
         let mut session = fresh_session();
-        session.begin(bytes.len(), &other, &SEED_FINGERPRINT).unwrap();
+        session
+            .begin(bytes.len(), &other, &SEED_FINGERPRINT)
+            .unwrap();
         let mut rest = &bytes[..];
         let verdict = loop {
             match session.feed(&rest[..rest.len().min(chunk)], &other) {

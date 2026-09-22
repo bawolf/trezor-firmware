@@ -32,7 +32,9 @@ use alloc::vec::Vec;
 use blake2b_simd::{Params, State};
 use orchard::Anchor;
 use orchard::bundle::{BundleVersion, Flags};
-use orchard::keys::{FullViewingKey, Scope, ScopeClassifier, SpendAuthorizingKey, SpendValidatingKey};
+use orchard::keys::{
+    FullViewingKey, Scope, ScopeClassifier, SpendAuthorizingKey, SpendValidatingKey,
+};
 use orchard::note::NoteVersion;
 use orchard::pczt::{Action, Output, Spend};
 use orchard::primitives::redpallas::{Signature, SpendAuth, VerificationKey};
@@ -153,8 +155,9 @@ struct Pending {
 /// own copy. The slot is only ever cleared in place, never moved out, so
 /// `Token` and `Records` zeroize on drop in the storage they occupied.
 struct Slot {
-    /// Boxed (MUST-FIX #1): the CAP-sized `Records` inside `Pending` stay in the
-    /// region so `review_stream` never builds `Pending` by value on the stack.
+    /// Boxed (MUST-FIX #1): the CAP-sized `Records` inside `Pending` stay in
+    /// the region so `review_stream` never builds `Pending` by value on the
+    /// stack.
     pending: Option<Box<Pending>>,
     token: Option<Token>,
 }
@@ -274,9 +277,10 @@ pub struct Session<R> {
     policy: Policy,
     session: [u8; 32],
     counter: u64,
-    /// Boxed (MUST-FIX #1): the CAP-sized `Stream`/`Body` live in the region and
-    /// are reached through this pointer, so `session_begin`/`session_feed` never
-    /// stage them by value on the 32 KB device stack.
+    /// Boxed (MUST-FIX #1): the CAP-sized `Stream`/`Body` live in the region
+    /// and are reached through this pointer, so
+    /// `session_begin`/`session_feed` never stage them by value on the 32
+    /// KB device stack.
     stream: Option<Box<Stream>>,
     slot: Slot,
 }

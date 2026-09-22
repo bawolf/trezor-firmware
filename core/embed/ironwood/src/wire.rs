@@ -8,10 +8,11 @@ use crate::{Error, Result, ZIP32_HARDENED};
 
 pub const MAX_PCZT_BYTES: usize = 65_536;
 // Raised 8 -> 32 to admit 16- and 32-action bundles. The cross-action state is
-// all fixed-capacity `[T; MAX_ACTIONS]` (records ~98 B, nullifiers 32 B, outputs
-// 64 B, signature records 66 B per action), so the retained base grows by only
-// ~+5 KB at CAP=32 and stays O(1) in N; peak RAM is dominated by the single live
-// action's transient working set, not this cap. NEW change pending Fable review.
+// all fixed-capacity `[T; MAX_ACTIONS]` (records ~98 B, nullifiers 32 B,
+// outputs 64 B, signature records 66 B per action), so the retained base grows
+// by only ~+5 KB at CAP=32 and stays O(1) in N; peak RAM is dominated by the
+// single live action's transient working set, not this cap. NEW change pending
+// Fable review.
 pub const MAX_ACTIONS: usize = 32;
 /// Longest `output.user_address` admitted, in bytes. The stock SDK stamps the
 /// ZIP-321 recipient string on every payment output; a unified address with
@@ -123,7 +124,8 @@ impl<'a> Reader<'a> {
         Ok(())
     }
 
-    /// Fingerprint and a three-index hardened path (`stream.rs::zip32_derivation`).
+    /// Fingerprint and a three-index hardened path
+    /// (`stream.rs::zip32_derivation`).
     fn zip32_derivation(&mut self) -> Result<()> {
         if !self.tag()? {
             return Ok(());
