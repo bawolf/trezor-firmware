@@ -205,11 +205,24 @@ const ZIP32_PURPOSE: u32 = 32;
 /// (ZIP 32 §"Seed Fingerprints"), computed over exactly the bytes the device
 /// feeds into ZIP-32 master derivation. It equals
 /// `zip32::fingerprint::SeedFingerprint::from_seed` for every seed length ZIP
-/// 32 admits (32..=252) and extends the same construction to the 16-byte
-/// restored SLIP-39 secret the device also derives from; `None` for an empty
-/// seed and above ZIP 32's 252-byte maximum. A public identifier of the seed,
-/// not key material: hosts attach it as the `seed_fingerprint` of a
-/// `zip32_derivation` and wallets store it next to the account index.
+/// 32 admits (32..=252), pinned byte-for-byte by `tests/seed_fingerprint.rs`;
+/// `None` for an empty seed and above ZIP 32's 252-byte maximum. A public
+/// identifier of the seed, not key material: hosts attach it as the
+/// `seed_fingerprint` of a `zip32_derivation` and wallets store it next to
+/// the account index.
+///
+/// **Trezor-only extension, 16-byte seeds.** ZIP 32 defines no fingerprint
+/// below 32 bytes and `zip32` returns `None` there, but the device also
+/// derives from the 16-byte secret of a restored SLIP-39 backup (itself
+/// already outside ZIP 32's master-derivation range). For those wallets this
+/// applies the identical construction with length byte 16 rather than
+/// refusing the export, so the exported value and the value the wire check
+/// compares against can never disagree. The consequence for hosts: for a
+/// 16-byte-seed wallet the device's value is authoritative and there is no
+/// second implementation to derive it from -- take it from
+/// `ZcashGetViewingKey(include_seed_fingerprint=true)`, do not recompute it.
+/// If ZIP 32 ever defines a rule for sub-32-byte seeds, this is the decision
+/// to revisit.
 pub fn seed_fingerprint(seed: &[u8]) -> Option<[u8; 32]> {
     if seed.is_empty() || seed.len() > 252 {
         return None;
@@ -227,6 +240,14 @@ pub fn seed_fingerprint(seed: &[u8]) -> Option<[u8; 32]> {
             .as_bytes(),
     );
     Some(fingerprint)
+}
+
+/// Branch-free equality of two byte strings: the OR-fold has no
+/// data-dependent exit, unlike the slice comparison's early return. Used for
+/// every host-supplied value compared against a device-derived one (the
+/// session FVK, the seed fingerprint).
+pub(crate) fn same_bytes(a: &[u8], b: &[u8]) -> bool {
+    a.len() == b.len() && a.iter().zip(b).fold(0u8, |acc, (x, y)| acc | (x ^ y)) == 0
 }
 
 fn ensure_malformed(ok: bool) -> Result<()> {
@@ -354,13 +375,27 @@ impl OwnDerivation {
         }
     }
 
+    /// A mismatch is `Policy` with no screen, by design.
+    ///
+    /// That makes the check an equality oracle: a host learns whether a
+    /// candidate fingerprint or account path is the device's without any
+    /// user interaction. It is acceptable because the oracle answers only
+    /// about values the host must already hold to have built an admissible
+    /// PCZT at all -- it received the fingerprint from a consented
+    /// `ZcashGetViewingKey(include_seed_fingerprint=true)`, and it chose the
+    /// account in `ZcashSignPczt` -- and because the same distinction is
+    /// already observable from the pre-existing `spend.fvk` equality check
+    /// (`Body::action`), which no attacker can avoid. Showing a screen
+    /// instead would train users to approve a malformed-host error. The
+    /// comparison is [`same_bytes`] so the answer costs the same time
+    /// whichever byte differs.
     pub(crate) fn admit(
         &self,
         seed_fingerprint: &[u8; 32],
         path: impl ExactSizeIterator<Item = u32>,
     ) -> Result<()> {
         ensure_policy(
-            *seed_fingerprint == self.seed_fingerprint
+            same_bytes(seed_fingerprint, &self.seed_fingerprint)
                 && path.len() == self.path.len()
                 && path.zip(self.path).all(|(claimed, own)| claimed == own),
         )

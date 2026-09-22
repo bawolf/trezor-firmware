@@ -45,8 +45,8 @@ use crate::digest::{ActionEffects, Digest};
 use crate::stream::{self, Item, Scanner};
 use crate::{
     Error, MAX_ACTIONS, OutputKind, OwnDerivation, Policy, Projection, Result, Review,
-    ReviewedOutput, Token, add, ensure_malformed, ensure_policy, ensure_state, verify_encryption,
-    wire,
+    ReviewedOutput, Token, add, ensure_malformed, ensure_policy, ensure_state, same_bytes,
+    verify_encryption, wire,
 };
 
 /// Inner personalization of the consent token's byte commitment (design §6).
@@ -385,7 +385,7 @@ impl<R: RngCore + CryptoRng> Session<R> {
     fn advance(&mut self, chunk: &[u8], fvk: &FullViewingKey) -> Result<(usize, Event)> {
         let bound = self.stream.as_deref().ok_or(Error::state())?;
         let offered = Zeroizing::new(fvk.to_bytes());
-        ensure_state(same_bytes(&offered, &bound.fvk))?;
+        ensure_state(same_bytes(offered.as_slice(), bound.fvk.as_slice()))?;
         let mut consumed = 0;
         while consumed < chunk.len() {
             let stream = self.stream.as_deref_mut().ok_or(Error::state())?;
@@ -881,12 +881,6 @@ impl Body {
         self.projection.outputs.push(reviewed.clone());
         Ok((kind == OutputKind::Payment).then_some(reviewed))
     }
-}
-
-/// Branch-free equality of two FVK encodings: the OR-fold has no data-dependent
-/// exit, unlike the slice comparison's early return.
-fn same_bytes(a: &[u8; 96], b: &[u8; 96]) -> bool {
-    a.iter().zip(b).fold(0u8, |acc, (x, y)| acc | (x ^ y)) == 0
 }
 
 /// `Spend::parse`, `Output::parse` and `Action::parse` with the arguments the

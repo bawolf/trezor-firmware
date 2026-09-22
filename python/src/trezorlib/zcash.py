@@ -100,6 +100,15 @@ class ViewingKeyExport(t.NamedTuple):
     #: `None` unless `include_seed_fingerprint=True` was requested, and also
     #: `None` against firmware that predates the field: it is an optional
     #: response field, so an older device's reply still loads.
+    #:
+    #: For a wallet restored from a SLIP-39 backup the device derives from a
+    #: 16-byte secret, below ZIP 32's 32-byte minimum. ZIP 32 defines no
+    #: fingerprint that short (`zip32::fingerprint::SeedFingerprint::from_seed`
+    #: returns `None`), so the device applies the same BLAKE2b-256
+    #: construction with length byte 16: a Trezor-only extension, and the
+    #: authoritative value for such a wallet. Store what the device returns;
+    #: do not recompute it. For seeds of 32..252 bytes it is byte-for-byte
+    #: the canonical ZIP-32 fingerprint.
     seed_fingerprint: bytes | None
 
 

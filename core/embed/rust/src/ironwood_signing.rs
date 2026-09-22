@@ -140,6 +140,11 @@ fn admissible_seed(seed: &[u8]) -> bool {
 /// The device's ZIP-32 seed fingerprint ([`trezor_ironwood::seed_fingerprint`])
 /// into `output`. A public identifier of the seed, not key material; `seed`
 /// is borrowed for this call only.
+///
+/// For a 16-byte restored SLIP-39 secret this is a Trezor-only extension of
+/// the ZIP-32 construction (see [`trezor_ironwood::seed_fingerprint`]): the
+/// standard defines no fingerprint that short, so the device's value is the
+/// authoritative one for such a wallet.
 pub fn seed_fingerprint(seed: &[u8], output: &mut [u8; 32]) -> core::result::Result<(), Failure> {
     if !admissible_seed(seed) {
         return Err(Failure::State);
