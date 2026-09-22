@@ -76,6 +76,79 @@ const EMPTY_MEMO: [u8; 512] = {
 };
 const PADDING_MEMO: [u8; 512] = [0; 512];
 
+/// Byte budget of a text memo the device shows verbatim (design §11: display
+/// nonempty memos with a byte budget; text shown, binary or over-budget
+/// memos shown as a hash). Half a ZIP-302 memo: enough for a wallet
+/// "Reply-To: u1…" memo (a single-receiver unified address is about 106
+/// characters) plus text, a few paginated screens, and 32 × 258 bytes of
+/// retained projection at the action cap.
+pub const MEMO_TEXT_BUDGET: usize = 256;
+
+/// What the device shows for a payment output's memo (design §11).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum Memo {
+    /// No memo: the canonical `0xF6` marker or an all-zero (empty text) memo.
+    Empty,
+    /// A ZIP-302 text memo within [`MEMO_TEXT_BUDGET`], shown verbatim.
+    Text(MemoText),
+    /// Anything else (arbitrary `0xFF` data, a reserved leading byte, text
+    /// that is not UTF-8 or contains NUL, or text over the budget): the
+    /// unkeyed BLAKE2b-256 of the full 512 memo bytes, shown as hex, which a
+    /// wallet can recompute from the memo it built.
+    Digest([u8; 32]),
+}
+
+/// The bytes of a text memo the device shows; valid UTF-8 by construction.
+#[derive(Clone, PartialEq, Eq)]
+pub struct MemoText {
+    len: u16,
+    bytes: [u8; MEMO_TEXT_BUDGET],
+}
+
+impl MemoText {
+    pub fn as_str(&self) -> &str {
+        // Validated in `classify_memo`; an invalid slice cannot be built.
+        core::str::from_utf8(&self.bytes[..usize::from(self.len)]).unwrap_or("")
+    }
+}
+
+impl core::fmt::Debug for MemoText {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        core::fmt::Debug::fmt(self.as_str(), f)
+    }
+}
+
+/// ZIP-302 classification of a payment output's memo for display.
+fn classify_memo(memo: &[u8; 512]) -> Memo {
+    if *memo == EMPTY_MEMO || *memo == PADDING_MEMO {
+        return Memo::Empty;
+    }
+    // A leading byte up to 0xF4 is UTF-8 text padded with NUL to 512 bytes.
+    if memo[0] <= 0xF4 {
+        let end = memo.iter().rposition(|&b| b != 0).map_or(0, |i| i + 1);
+        let text = &memo[..end];
+        if text.len() <= MEMO_TEXT_BUDGET
+            && !text.contains(&0)
+            && core::str::from_utf8(text).is_ok()
+        {
+            let mut bytes = [0; MEMO_TEXT_BUDGET];
+            bytes[..text.len()].copy_from_slice(text);
+            return Memo::Text(MemoText {
+                len: text.len() as u16,
+                bytes,
+            });
+        }
+    }
+    let mut digest = [0; 32];
+    digest.copy_from_slice(
+        blake2b_simd::Params::new()
+            .hash_length(32)
+            .hash(memo)
+            .as_bytes(),
+    );
+    Memo::Digest(digest)
+}
+
 /// The hardened bit of a ZIP-32 child index.
 pub const ZIP32_HARDENED: u32 = 1 << 31;
 /// ZIP-32 purpose of shielded account derivation (`m/32'/...`).
@@ -316,6 +389,9 @@ pub struct ReviewedOutput {
     pub receiver: [u8; 43],
     pub value: u64,
     pub kind: OutputKind,
+    /// Recovered from this action's `enc_ciphertext` under the device's own
+    /// derivation, so what is shown is what the signature covers.
+    pub memo: Memo,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -821,7 +897,7 @@ fn verify_bundle(
         } else {
             Scope::External
         };
-        verify_encryption(action, fvk, outgoing_scope, &note)?;
+        let memo = verify_encryption(action, fvk, outgoing_scope, &note)?;
         if output_value == 0 {
             projection.padding_outputs += 1;
             continue;
@@ -838,6 +914,7 @@ fn verify_bundle(
             receiver: recipient.to_raw_address_bytes(),
             value: output_value,
             kind,
+            memo,
         });
     }
     ensure_policy(!signing_indices.is_empty() && !projection.outputs.is_empty())?;
@@ -855,6 +932,13 @@ fn verify_bundle(
     )
 }
 
+/// Verifies the output's encryption under the device's own derivation and
+/// returns what the device shows for its memo. The memo is recovered from
+/// the `enc_ciphertext` that the digest hashes, so the displayed bytes are
+/// the signed bytes. Memo policy (design §11): a padding output carries the
+/// empty marker or the all-zero empty text; a change output (hidden) must
+/// carry the empty marker; a payment may carry any memo, classified for
+/// display by [`classify_memo`].
 fn verify_encryption(
     action: &orchard::pczt::Action,
     fvk: &FullViewingKey,
@@ -864,7 +948,7 @@ fn verify_encryption(
     // is therefore self-contained: recovery is bound to the cmx-validated note,
     // not to a separately rebuilt one.
     note: &Note,
-) -> Result<()> {
+) -> Result<Memo> {
     let output = action.output();
     let domain = IronwoodDomain::for_pczt_action(action);
     // MUST-FIX #1: device-local recovery bound to `note` by field comparison.
@@ -880,8 +964,15 @@ fn verify_encryption(
         note,
     )
     .ok_or(Error::malformed())?;
-    let empty_padding_memo = note.value().inner() == 0 && memo == PADDING_MEMO;
-    ensure_policy(memo == EMPTY_MEMO || empty_padding_memo)?;
+    let display = if note.value().inner() == 0 {
+        ensure_policy(memo == EMPTY_MEMO || memo == PADDING_MEMO)?;
+        Memo::Empty
+    } else if outgoing_scope == Scope::Internal {
+        ensure_policy(memo == EMPTY_MEMO)?;
+        Memo::Empty
+    } else {
+        classify_memo(&memo)
+    };
     let out_ciphertext = &output.encrypted_note().out_ciphertext;
     if let Some(ock) = output.ock() {
         ensure_malformed(
@@ -933,5 +1024,5 @@ fn verify_encryption(
     // covered by the real spend signatures produced after approval. When the
     // paired spend is dummy, its pre-existing signature is additionally verified
     // above. Requiring OVK recovery here would reject standard padding.
-    Ok(())
+    Ok(display)
 }

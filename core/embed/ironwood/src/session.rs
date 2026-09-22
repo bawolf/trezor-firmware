@@ -856,7 +856,7 @@ impl Body {
         } else {
             Scope::External
         };
-        verify_encryption(&parsed, fvk, outgoing_scope, &note)?;
+        let memo = verify_encryption(&parsed, fvk, outgoing_scope, &note)?;
         self.records.0[index] = Some(record);
         self.seen += 1;
         // lib.rs:700-716.
@@ -876,6 +876,7 @@ impl Body {
             receiver: recipient.to_raw_address_bytes(),
             value: output_value,
             kind,
+            memo,
         };
         self.projection.outputs.push(reviewed.clone());
         Ok((kind == OutputKind::Payment).then_some(reviewed))

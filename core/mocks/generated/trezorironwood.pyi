@@ -47,7 +47,10 @@ def session_begin(
 def session_feed(chunk: AnyBytes) -> tuple[int, int, tuple | None]:
     """Consume PCZT bytes. Returns (consumed, kind, payload): kind 0 needs more
     bytes; kind 1 is a payment output to confirm, payload
-    (action_index, receiver, value, is_change); kind 2 is the review, payload
+    (action_index, receiver, value, is_change, memo_kind, memo) where
+    memo_kind 0 is no memo (memo None), 1 a text memo (memo: its UTF-8
+    bytes, at most 256) and 2 a memo not shown verbatim (memo: the 32-byte
+    BLAKE2b-256 of the memo); kind 2 is the review, payload
     (expiry_height, blocks_until_expiry, input_total, payment_total,
     change_total, fee, padding_outputs, payment_outputs, action_count).
     Unconsumed bytes must be fed again. ValueError: malformed / too many

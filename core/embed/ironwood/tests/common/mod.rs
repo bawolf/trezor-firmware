@@ -172,6 +172,22 @@ pub fn build_with_wrong_change_ovk() -> Vec<u8> {
     )
 }
 
+/// A nonempty memo on the (hidden) change output, which the memo policy
+/// refuses: memos of hidden outputs must be empty.
+pub fn build_with_change_memo(memo: MemoBytes) -> Vec<u8> {
+    build_with_network(
+        local_network(),
+        600_000,
+        390_000,
+        MemoBytes::empty(),
+        48,
+        OutputPolicy {
+            change_memo: Some(memo),
+            ..OutputPolicy::standard(false)
+        },
+    )
+}
+
 /// Change encrypted with no OVK at all: what the stock SDK's default
 /// `OvkPolicy::Sender` builds (`internal_ovk: None`).
 pub fn build_with_change_without_ovk() -> Vec<u8> {
@@ -237,11 +253,13 @@ pub fn build_with_dummy_spend_padding() -> Vec<u8> {
     )
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone)]
 struct OutputPolicy {
     self_payment: bool,
     payment_ovk_scope: Option<Scope>,
     change_ovk_scope: Option<Scope>,
+    /// The change output's memo; `None` is the empty marker.
+    change_memo: Option<MemoBytes>,
     /// Keep what `redact_pczt_for_signer(Full)` keeps (the empty Sapling
     /// bundle with its anchor and `bsk`, the Ironwood `bsk`) instead of the
     /// device-profile redaction `finish` applies.
@@ -254,6 +272,7 @@ impl OutputPolicy {
             self_payment,
             payment_ovk_scope: Some(Scope::External),
             change_ovk_scope: Some(Scope::Internal),
+            change_memo: None,
             full_view: false,
         }
     }
@@ -328,7 +347,7 @@ fn build_with_network<P: Parameters>(
                     .map(|scope| fvk.to_ovk(scope)),
                 fvk.address_at(1u32, Scope::Internal),
                 Zatoshis::from_u64(change).unwrap(),
-                MemoBytes::empty(),
+                output_policy.change_memo.clone().unwrap_or_else(MemoBytes::empty),
             )
             .unwrap();
     }

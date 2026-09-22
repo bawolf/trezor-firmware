@@ -1,6 +1,6 @@
 use core::ffi::CStr;
 
-use trezor_ironwood::MAX_ACTIONS;
+use trezor_ironwood::{MAX_ACTIONS, Memo};
 use trezor_ironwood_receive::{derive_external_receiver, derive_full_viewing_key, Network};
 
 use crate::ironwood_signing::{self, Failure, Step, RECORD_LEN};
@@ -186,16 +186,28 @@ extern "C" fn session_feed(n_args: usize, args: *const Obj) -> Obj {
         let (consumed, step) = ironwood_signing::feed(chunk).map_err(failure)?;
         let (kind, payload): (u8, Obj) = match step {
             Step::Continue => (0, Obj::const_none()),
-            Step::Output(output) => (
-                1,
-                Tuple::alloc(&[
-                    Obj::try_from(output.action_index)?,
-                    Obj::try_from(&output.receiver[..])?,
-                    Obj::try_from(output.value)?,
-                    Obj::from(output.is_change),
-                ])?
-                .into(),
-            ),
+            Step::Output(output) => {
+                // Memo kinds as the handler shows them: 0 nothing, 1 text
+                // (UTF-8 bytes within the budget), 2 the 32-byte digest of a
+                // memo that is not shown verbatim.
+                let (memo_kind, memo): (u8, Obj) = match &output.memo {
+                    Memo::Empty => (0, Obj::const_none()),
+                    Memo::Text(text) => (1, Obj::try_from(text.as_str().as_bytes())?),
+                    Memo::Digest(digest) => (2, Obj::try_from(&digest[..])?),
+                };
+                (
+                    1,
+                    Tuple::alloc(&[
+                        Obj::try_from(output.action_index)?,
+                        Obj::try_from(&output.receiver[..])?,
+                        Obj::try_from(output.value)?,
+                        Obj::from(output.is_change),
+                        Obj::from(memo_kind),
+                        memo,
+                    ])?
+                    .into(),
+                )
+            }
             Step::Review(totals) => (
                 2,
                 Tuple::alloc(&[
@@ -360,7 +372,10 @@ pub static mp_module_trezorironwood: Module = obj_module! {
     /// def session_feed(chunk: AnyBytes) -> tuple[int, int, tuple | None]:
     ///     """Consume PCZT bytes. Returns (consumed, kind, payload): kind 0 needs more
     ///     bytes; kind 1 is a payment output to confirm, payload
-    ///     (action_index, receiver, value, is_change); kind 2 is the review, payload
+    ///     (action_index, receiver, value, is_change, memo_kind, memo) where
+    ///     memo_kind 0 is no memo (memo None), 1 a text memo (memo: its UTF-8
+    ///     bytes, at most 256) and 2 a memo not shown verbatim (memo: the 32-byte
+    ///     BLAKE2b-256 of the memo); kind 2 is the review, payload
     ///     (expiry_height, blocks_until_expiry, input_total, payment_total,
     ///     change_total, fee, padding_outputs, payment_outputs, action_count).
     ///     Unconsumed bytes must be fed again. ValueError: malformed / too many
@@ -420,7 +435,10 @@ pub static mp_module_trezorironwood: Module = obj_module! {
     // def session_feed(chunk: AnyBytes) -> tuple[int, int, tuple | None]:
     //     """Consume PCZT bytes. Returns (consumed, kind, payload): kind 0 needs more
     //     bytes; kind 1 is a payment output to confirm, payload
-    //     (action_index, receiver, value, is_change); kind 2 is the review, payload
+    //     (action_index, receiver, value, is_change, memo_kind, memo) where
+    //     memo_kind 0 is no memo (memo None), 1 a text memo (memo: its UTF-8
+    //     bytes, at most 256) and 2 a memo not shown verbatim (memo: the 32-byte
+    //     BLAKE2b-256 of the memo); kind 2 is the review, payload
     //     (expiry_height, blocks_until_expiry, input_total, payment_total,
     //     change_total, fee, padding_outputs, payment_outputs, action_count).
     //     Unconsumed bytes must be fed again. ValueError: malformed / too many

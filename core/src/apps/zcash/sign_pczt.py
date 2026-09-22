@@ -64,6 +64,14 @@ _TOO_MANY_ACTIONS = "Too many transaction actions (max 32)"
 _STEP_OUTPUT = const(1)
 _STEP_REVIEW = const(2)
 
+# Memo kinds of an output step (design note §11: nonempty memos are shown;
+# text within the byte budget verbatim, anything else as a hash). The native
+# session recovers the memo from the signed ciphertext, classifies it and
+# hands over only what is shown; the 512 memo bytes never reach Python.
+_MEMO_NONE = const(0)
+_MEMO_TEXT = const(1)
+_MEMO_DIGEST = const(2)
+
 RECORD_LEN = const(66)
 ZEC_DECIMALS = const(8)
 
@@ -116,6 +124,40 @@ async def _confirm_output(
         source_account=account_label,
         source_account_path=path,
     )
+
+
+async def _confirm_memo(memo_kind: int, memo: bytes, number: int) -> None:
+    from trezor import TR
+    from trezor.enums import ButtonRequestType
+    from trezor.ui import layouts
+    from trezor.utils import hexlify_if_bytes
+
+    title = f"{TR.words__recipient} #{number + 1}"
+    if memo_kind == _MEMO_TEXT:
+        # UTF-8 validated natively; at most 256 bytes.
+        await layouts.confirm_value(
+            title,
+            memo.decode(),
+            "Memo",
+            br_name="confirm_memo",
+            br_code=ButtonRequestType.ConfirmOutput,
+            verb=TR.buttons__continue,
+            is_data=False,
+        )
+    elif memo_kind == _MEMO_DIGEST:
+        # Binary, reserved, non-UTF-8 or over the budget: the BLAKE2b-256 of
+        # the 512 memo bytes, which the wallet can recompute.
+        await layouts.confirm_value(
+            title,
+            hexlify_if_bytes(memo),
+            "Memo hash (binary or too long to show)",
+            br_name="confirm_memo",
+            br_code=ButtonRequestType.ConfirmOutput,
+            verb=TR.buttons__continue,
+            is_data=True,
+        )
+    else:
+        raise ValueError(_MALFORMED)
 
 
 async def _confirm_totals(
@@ -326,7 +368,7 @@ async def _stream_and_sign(
             utils.zero_unused_stack()
             fed += consumed
             if kind == _STEP_OUTPUT:
-                _action_index, receiver, value, is_change = payload
+                _action_index, receiver, value, is_change, memo_kind, memo = payload
                 if is_change:
                     raise wire.ProcessError("Zcash PCZT rejected")
                 if timings is not None:
@@ -334,6 +376,9 @@ async def _stream_and_sign(
                 await _confirm_output(
                     receiver, value, payments, coin_name, account_label, path
                 )
+                if memo_kind != _MEMO_NONE:
+                    ironwood_account.require_session(session)
+                    await _confirm_memo(memo_kind, memo, payments)
                 payments += 1
                 ironwood_account.require_session(session)
             elif kind == _STEP_REVIEW:

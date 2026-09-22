@@ -179,6 +179,81 @@ def test_stock_sdk_view_signs(
     assert "verified 1 signature(s)" in _verify(fixture_tool, tmp_path, 4, signatures)
 
 
+MEMO_TEXT_BUDGET = 256
+
+
+def _accept_outputs_with_memos(session: Session, payments: int, expected: str):
+    # Address, amount, then the memo screen, which must show `expected`.
+    for _ in range(payments):
+        yield from _accept_outputs(session, 1)
+        br = yield
+        assert br.code == B.ConfirmOutput
+        assert br.name == "confirm_memo"
+        shown = session.debug.read_layout().text_content()
+        assert expected in shown.replace(" ", "").replace("\n", "") or expected in shown
+        session.debug.press_yes()
+
+
+def _accept_flow_with_memos(session: Session, payments: int, expected: str):
+    br = yield
+    assert br.code == B.Warning
+    session.debug.press_yes()
+    yield from _accept_outputs_with_memos(session, payments, expected)
+    br = yield
+    assert br.code == B.SignTx
+    session.debug.press_yes()
+
+
+@pytest.mark.parametrize(
+    "spec",
+    [
+        "text:Thanks for lunch!",
+        "text:Zodl ✓ café ☕ — thanks!",
+        "text:" + "a" * MEMO_TEXT_BUDGET,
+    ],
+    ids=["short", "utf8", "at-budget"],
+)
+def test_text_memo_is_shown_and_signed(
+    session: Session, fixture_tool: Path, tmp_path: Path, spec: str
+) -> None:
+    """A ZIP-302 text memo within the budget is shown verbatim on its own
+    screen after the output, then the transaction signs (design note §11)."""
+    pczt, summary = _build_fixture(fixture_tool, tmp_path, 2, f"memo={spec}")
+    payments = len(summary["payments"])
+    assert summary["memo"]["kind"] == "text"
+    expected = summary["memo"]["text"]
+
+    with session.test_ctx as client:
+        client.set_input_flow(_accept_flow_with_memos(session, payments, expected[:40]))
+        signatures = zcash.sign_pczt(session, pczt, NETWORK, ACCOUNT, HOST_HEIGHT)
+
+    assert "verified 1 signature(s)" in _verify(fixture_tool, tmp_path, 2, signatures)
+
+
+@pytest.mark.parametrize(
+    "spec",
+    [
+        "text:" + "a" * (MEMO_TEXT_BUDGET + 1),
+        "hex:ff" + "41" * 511,
+    ],
+    ids=["over-budget", "arbitrary"],
+)
+def test_binary_or_long_memo_is_shown_as_hash_and_signed(
+    session: Session, fixture_tool: Path, tmp_path: Path, spec: str
+) -> None:
+    """Over the budget or not text: the BLAKE2b-256 of the memo is shown."""
+    pczt, summary = _build_fixture(fixture_tool, tmp_path, 2, f"memo={spec}")
+    payments = len(summary["payments"])
+    assert summary["memo"]["kind"] == "digest"
+    digest = summary["memo"]["hex"]
+
+    with session.test_ctx as client:
+        client.set_input_flow(_accept_flow_with_memos(session, payments, digest[:16]))
+        signatures = zcash.sign_pczt(session, pczt, NETWORK, ACCOUNT, HOST_HEIGHT)
+
+    assert "verified 1 signature(s)" in _verify(fixture_tool, tmp_path, 2, signatures)
+
+
 def _accept_everything(session: Session):
     # Presses through whatever the device shows until it answers; used where
     # the rejection may land before or after the payment screens (the builder
@@ -215,8 +290,9 @@ def test_zip32_derivation_not_the_device_own_is_rejected(
     """A claim naming another seed or another account is refused as policy."""
     pczt, _summary = _build_fixture(fixture_tool, tmp_path, 2, f"zip32={claim}")
 
-    with session.test_ctx as client, pytest.raises(
-        TrezorFailure, match="Zcash PCZT rejected"
+    with (
+        session.test_ctx as client,
+        pytest.raises(TrezorFailure, match="Zcash PCZT rejected"),
     ):
         client.set_input_flow(_accept_everything(session))
         zcash.sign_pczt(session, pczt, NETWORK, ACCOUNT, HOST_HEIGHT)

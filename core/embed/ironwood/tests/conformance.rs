@@ -12,8 +12,8 @@ use rand_chacha::rand_core::SeedableRng;
 use serde_json::{Value, json};
 use trezor_ironwood::testing::preflight;
 use trezor_ironwood::{
-    Account, Engine, ErrorCode, Limits, MAX_ACTIONS, MAX_PCZT_BYTES, Network, OutputKind, Policy,
-    RequestContext,
+    Account, Engine, ErrorCode, Limits, MAX_ACTIONS, MAX_PCZT_BYTES, MEMO_TEXT_BUDGET, Memo,
+    Network, OutputKind, Policy, RequestContext,
 };
 use zcash_protocol::consensus::BranchId;
 
@@ -407,14 +407,150 @@ fn ironwood_bsk_is_ignored() {
     assert_eq!(ignored.projection(), plain.projection());
     assert_eq!(ignored.sighash(), plain.sighash());
 }
+/// Design §11: a payment's memo is shown. Text within the budget verbatim;
+/// the projection carries what the device shows, recovered from the
+/// `enc_ciphertext` the sighash covers.
 #[test]
-fn nonempty_memo_rejected_even_when_encryption_is_valid() {
+fn text_memo_on_payment_is_shown() {
     let memo = zcash_protocol::memo::MemoBytes::from_bytes(b"hello").unwrap();
+    let review = engine()
+        .begin_test(&build(600_000, 390_000, memo, false))
+        .unwrap();
+    let payment = review
+        .projection()
+        .outputs
+        .iter()
+        .find(|o| o.kind == OutputKind::Payment)
+        .unwrap();
+    match &payment.memo {
+        Memo::Text(text) => assert_eq!(text.as_str(), "hello"),
+        other => panic!("{other:?}"),
+    }
+    let change = review
+        .projection()
+        .outputs
+        .iter()
+        .find(|o| o.kind == OutputKind::InternalChange)
+        .unwrap();
+    assert_eq!(change.memo, Memo::Empty);
+}
+
+fn payment_memo(bytes: &[u8]) -> Memo {
+    engine()
+        .begin_test(bytes)
+        .unwrap()
+        .projection()
+        .outputs
+        .iter()
+        .find(|o| o.kind == OutputKind::Payment)
+        .unwrap()
+        .memo
+        .clone()
+}
+
+fn memo_digest(memo: &zcash_protocol::memo::MemoBytes) -> Memo {
+    let mut digest = [0; 32];
+    digest.copy_from_slice(
+        blake2b_simd::Params::new()
+            .hash_length(32)
+            .hash(memo.as_array())
+            .as_bytes(),
+    );
+    Memo::Digest(digest)
+}
+
+/// Text at the budget is shown; one byte over, binary, reserved, non-UTF-8 or
+/// NUL-bearing memos are shown as the BLAKE2b-256 of the 512 memo bytes.
+#[test]
+fn memo_budget_and_binary_memos_are_hashed() {
+    use zcash_protocol::memo::MemoBytes;
+    let at_budget = MemoBytes::from_bytes(&[b'a'; MEMO_TEXT_BUDGET]).unwrap();
+    match payment_memo(&build(600_000, 390_000, at_budget, false)) {
+        Memo::Text(text) => assert_eq!(text.as_str().len(), MEMO_TEXT_BUDGET),
+        other => panic!("{other:?}"),
+    }
+    let utf8 = MemoBytes::from_bytes("Zodl ✓ café ☕ — thanks!".as_bytes()).unwrap();
+    match payment_memo(&build(600_000, 390_000, utf8, false)) {
+        Memo::Text(text) => assert_eq!(text.as_str(), "Zodl ✓ café ☕ — thanks!"),
+        other => panic!("{other:?}"),
+    }
+    let over_budget = MemoBytes::from_bytes(&[b'a'; MEMO_TEXT_BUDGET + 1]).unwrap();
+    let mut arbitrary = [0x41u8; 512];
+    arbitrary[0] = 0xff;
+    let mut reserved = [0u8; 512];
+    reserved[0] = 0xf5;
+    let mut future = [0u8; 512];
+    future[0] = 0xf6;
+    future[1] = 1;
+    let mut interior_nul = [0u8; 512];
+    interior_nul[..3].copy_from_slice(b"a\0b");
+    for memo in [
+        over_budget,
+        MemoBytes::from_bytes(&[b'a'; 512]).unwrap(),
+        MemoBytes::from_bytes(&[0xc3, 0x28]).unwrap(),
+        MemoBytes::from_bytes(&arbitrary).unwrap(),
+        MemoBytes::from_bytes(&reserved).unwrap(),
+        MemoBytes::from_bytes(&future).unwrap(),
+        MemoBytes::from_bytes(&interior_nul).unwrap(),
+    ] {
+        assert_eq!(
+            payment_memo(&build(600_000, 390_000, memo.clone(), false)),
+            memo_digest(&memo)
+        );
+    }
+    // The all-zero empty text memo is nothing to show.
+    assert_eq!(
+        payment_memo(&build(
+            600_000,
+            390_000,
+            MemoBytes::from_bytes(&[0; 512]).unwrap(),
+            false
+        )),
+        Memo::Empty
+    );
+}
+
+/// Memos of hidden outputs must be empty: change with a memo is refused.
+#[test]
+fn change_output_with_memo_is_rejected() {
+    let memo = zcash_protocol::memo::MemoBytes::from_bytes(b"hidden").unwrap();
     assert_error(
-        engine()
-            .begin_test(&build(600_000, 390_000, memo, false))
-            .unwrap_err(),
+        engine().begin_test(&build_with_change_memo(memo)).unwrap_err(),
         ErrorCode::Policy,
+    );
+}
+
+/// The memo shown is the memo signed: it is recovered from the
+/// `enc_ciphertext` the digest hashes, so altering a memo byte on the wire
+/// is a recovery failure, and a different memo is a different sighash.
+#[test]
+fn shown_memo_is_bound_to_the_signed_output() {
+    use zcash_protocol::memo::MemoBytes;
+    let hello = build(
+        600_000,
+        390_000,
+        MemoBytes::from_bytes(b"hello").unwrap(),
+        false,
+    );
+    let hallo = build(
+        600_000,
+        390_000,
+        MemoBytes::from_bytes(b"hallo").unwrap(),
+        false,
+    );
+    let a = engine().begin_test(&hello).unwrap();
+    let b = engine().begin_test(&hallo).unwrap();
+    assert_ne!(a.sighash(), b.sighash());
+    // The memo occupies the ciphertext after the 52-byte note plaintext
+    // (version, diversifier, value, rseed); flip one of its bytes.
+    let mut value = json(&hello);
+    let i = payment(&value);
+    let ciphertext = &mut value["ironwood"]["actions"][i]["output"]["enc_ciphertext"]["Encrypted"];
+    let byte = ciphertext[60].as_u64().unwrap();
+    ciphertext[60] = (byte ^ 1).into();
+    assert_error(
+        engine().begin_test(&encode(value)).unwrap_err(),
+        ErrorCode::Malformed,
     );
 }
 #[test]

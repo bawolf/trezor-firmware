@@ -273,8 +273,10 @@ fn engine_review_reports_the_streaming_sighash() {
             }
         }
     }
-    // Everything but the memo and outgoing-key variants passes device policy.
-    assert_eq!(reviewed, corpus().len() - 3);
+    // Everything but the two outgoing-key variants (a payment without an OVK,
+    // change under the external OVK) passes device policy; a nonempty memo is
+    // shown, not refused (design §11).
+    assert_eq!(reviewed, corpus().len() - 2);
 }
 
 #[test]

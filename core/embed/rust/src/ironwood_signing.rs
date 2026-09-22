@@ -18,7 +18,7 @@ use core::ptr;
 use orchard::keys::{FullViewingKey, SpendAuthorizingKey, SpendingKey};
 use rand_core::{CryptoRng, Error as RngError, RngCore};
 use trezor_ironwood::{
-    Account, Event, Limits, Network, Policy, RequestContext, Result, Review, Session,
+    Account, Event, Limits, Memo, Network, Policy, RequestContext, Result, Review, Session,
 };
 
 /// Pool tag of a signature record (design §3).
@@ -76,6 +76,9 @@ pub struct Output {
     pub receiver: [u8; 43],
     pub value: u64,
     pub is_change: bool,
+    /// What to show for the memo (design §11), recovered from the signed
+    /// ciphertext of this action.
+    pub memo: Memo,
 }
 
 /// The digest-bound totals of the review projection. Network, account and
@@ -305,6 +308,7 @@ pub fn feed(chunk: &[u8]) -> core::result::Result<(usize, Step), Failure> {
                 receiver: output.receiver,
                 value: output.value,
                 is_change: output.kind == trezor_ironwood::OutputKind::InternalChange,
+                memo: output.memo,
             }),
             Event::Review(review) => {
                 let projection = review.projection();

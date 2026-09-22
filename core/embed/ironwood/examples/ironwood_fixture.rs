@@ -11,7 +11,8 @@
 //!
 //! ```text
 //! ironwood_fixture build <seed-hex> <mainnet|testnet> <account> <height> <outputs> <out> \
-//!     [view=device|full|sdk] [zip32=none|own|other-seed|other-account]
+//!     [view=device|full|sdk] [zip32=none|own|other-seed|other-account] \
+//!     [memo=text:<utf-8>|hex:<bytes>]
 //! ironwood_fixture verify <pczt-file> <records-file>
 //! ```
 //!
@@ -29,8 +30,15 @@
 //! canonical implementation) and `m/32'/coin_type'/account'`; `other-seed`
 //! and `other-account` are claims the device must refuse.
 //!
+//! `memo` puts the same memo on every payment output (change stays empty):
+//! `text:` a ZIP-302 text memo, `hex:` raw memo bytes (padded to 512, so a
+//! leading `ff` is an arbitrary-data memo). The summary's `memos` gives what
+//! the device shows for it under the firmware's policy: `{"kind": "text",
+//! "text": ...}` or `{"kind": "digest", "hex": ...}` (BLAKE2b-256 of the 512
+//! memo bytes, computed here independently).
+//!
 //! `build` prints a JSON summary (fvk, seed fingerprint, payments, fee,
-//! expiry, shape) on stdout.
+//! expiry, shape, memos) on stdout.
 
 use std::fs;
 use std::process::ExitCode;
@@ -109,15 +117,28 @@ enum Zip32Claim {
 struct Options {
     view: View,
     zip32: Zip32Claim,
+    memo: MemoBytes,
 }
+
+/// Shown verbatim iff a ZIP-302 text memo within the device's budget.
+const MEMO_TEXT_BUDGET: usize = 256;
 
 fn parse_options(args: &[String]) -> Result<Options, String> {
     let mut options = Options {
         view: View::Device,
         zip32: Zip32Claim::None,
+        memo: MemoBytes::empty(),
     };
     for arg in args {
         match arg.split_once('=') {
+            Some(("memo", spec)) => {
+                let bytes = match spec.split_once(':') {
+                    Some(("text", text)) => text.as_bytes().to_vec(),
+                    Some(("hex", hex)) => hex_decode(hex)?,
+                    _ => return Err(format!("unknown memo spec {spec}")),
+                };
+                options.memo = MemoBytes::from_bytes(&bytes).map_err(|e| format!("memo: {e:?}"))?;
+            }
             Some(("view", "device")) => options.view = View::Device,
             Some(("view", "full")) => options.view = View::Full,
             Some(("view", "sdk")) => options.view = View::Sdk,
@@ -231,12 +252,17 @@ fn build_with<P: Parameters>(
             let ovk = (options.view != View::Sdk).then(|| fvk.to_ovk(Scope::Internal));
             (fvk.address_at(i as u32, Scope::Internal), ovk)
         };
+        let memo = if i % 2 == 0 {
+            options.memo.clone()
+        } else {
+            MemoBytes::empty()
+        };
         builder
             .add_ironwood_output::<zip317::FeeError>(
                 ovk,
                 recipient,
                 Zatoshis::from_u64(value).unwrap(),
-                MemoBytes::empty(),
+                memo,
             )
             .unwrap();
     }
@@ -341,6 +367,25 @@ fn build_with<P: Parameters>(
         "user_addresses": user_addresses,
     });
 
+    // What the device shows for the payment memo (independent replica of
+    // the firmware's classification): text iff leading byte <= 0xF4, no NUL,
+    // UTF-8, within the budget; otherwise the BLAKE2b-256 of the 512 bytes.
+    let memo_display = {
+        let memo = options.memo.as_array();
+        let trimmed = &memo[..memo.iter().rposition(|&b| b != 0).map_or(0, |i| i + 1)];
+        if trimmed.is_empty() && (memo[0] == 0xf6 || memo[0] == 0) {
+            json!({"kind": "none"})
+        } else if memo[0] <= 0xf4
+            && trimmed.len() <= MEMO_TEXT_BUDGET
+            && !trimmed.contains(&0)
+            && std::str::from_utf8(trimmed).is_ok()
+        {
+            json!({"kind": "text", "text": std::str::from_utf8(trimmed).unwrap()})
+        } else {
+            let digest = blake2b_simd::Params::new().hash_length(32).hash(memo);
+            json!({"kind": "digest", "hex": hex_encode(digest.as_bytes())})
+        }
+    };
     let payment_total: u64 = payments.iter().map(|p| p["value"].as_u64().unwrap()).sum();
     let fee = outputs.max(2) as u64 * 5_000;
     let summary = json!({
@@ -353,6 +398,7 @@ fn build_with<P: Parameters>(
         "expiry_height": height + 40,
         "pczt_length": bytes.len(),
         "shape": shape,
+        "memo": memo_display,
     });
     Ok((bytes, summary))
 }

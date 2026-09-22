@@ -198,6 +198,51 @@ fn corpus() -> Vec<Case> {
             ),
         ),
         case(
+            "memo at budget",
+            build(
+                600_000,
+                390_000,
+                MemoBytes::from_bytes(&[b'a'; trezor_ironwood::MEMO_TEXT_BUDGET]).unwrap(),
+                false,
+            ),
+        ),
+        case(
+            "memo over budget",
+            build(
+                600_000,
+                390_000,
+                MemoBytes::from_bytes(&[b'a'; trezor_ironwood::MEMO_TEXT_BUDGET + 1]).unwrap(),
+                false,
+            ),
+        ),
+        case(
+            "utf-8 memo",
+            build(
+                600_000,
+                390_000,
+                MemoBytes::from_bytes("Zodl ✓ café ☕".as_bytes()).unwrap(),
+                false,
+            ),
+        ),
+        case(
+            "arbitrary memo",
+            build(
+                600_000,
+                390_000,
+                MemoBytes::from_bytes(&{
+                    let mut m = [0x41u8; 512];
+                    m[0] = 0xff;
+                    m
+                })
+                .unwrap(),
+                false,
+            ),
+        ),
+        case(
+            "change memo",
+            build_with_change_memo(MemoBytes::from_bytes(b"hidden").unwrap()),
+        ),
+        case(
             "zero-value nonempty memo",
             build(
                 0,
