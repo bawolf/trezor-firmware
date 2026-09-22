@@ -266,7 +266,9 @@ async def sign_pczt(msg: ZcashSignPczt) -> ZcashSpendAuthSignatures:
         # ValueError is collapsed to the generic malformed string so incidental
         # MicroPython/parse text never leaks (Fable review #S3).
         msg = str(exc)
-        raise wire.DataError(msg if msg in (_MALFORMED, _TOO_MANY_ACTIONS) else _MALFORMED)
+        raise wire.DataError(
+            msg if msg in (_MALFORMED, _TOO_MANY_ACTIONS) else _MALFORMED
+        )
     except RuntimeError:
         raise wire.ProcessError("Zcash PCZT rejected")
     finally:

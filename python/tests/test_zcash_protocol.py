@@ -130,7 +130,8 @@ def test_freed_download_ids_stay_unclaimed() -> None:
     assert not re.search(r"^message Zcash\w*Signed\w*", schema, re.M)
     assert "next_offset" not in schema
     assert not any(
-        n.startswith("Zcash") and "Signed" in n for n in messages.MessageType.__members__
+        n.startswith("Zcash") and "Signed" in n
+        for n in messages.MessageType.__members__
     )
 
 

@@ -77,9 +77,19 @@ def fixture_tool(tmp_path_factory) -> Path:
 def _build_fixture(tool: Path, directory: Path, actions: int) -> tuple[bytes, dict]:
     out = directory / f"fixture-{actions}.pczt"
     summary = subprocess.run(
-        [tool, "build", SEED_HEX, "mainnet", str(ACCOUNT), str(HOST_HEIGHT),
-         str(actions), str(out)],
-        check=True, capture_output=True, text=True,
+        [
+            tool,
+            "build",
+            SEED_HEX,
+            "mainnet",
+            str(ACCOUNT),
+            str(HOST_HEIGHT),
+            str(actions),
+            str(out),
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
     ).stdout
     return out.read_bytes(), json.loads(summary)
 
@@ -87,12 +97,16 @@ def _build_fixture(tool: Path, directory: Path, actions: int) -> tuple[bytes, di
 def _verify(tool: Path, directory: Path, actions: int, signatures) -> str:
     records = directory / f"records-{actions}.bin"
     records.write_bytes(
-        b"".join(bytes((zcash.POOL_IRONWOOD, s.action_index)) + s.signature
-                 for s in signatures)
+        b"".join(
+            bytes((zcash.POOL_IRONWOOD, s.action_index)) + s.signature
+            for s in signatures
+        )
     )
     return subprocess.run(
         [tool, "verify", str(directory / f"fixture-{actions}.pczt"), str(records)],
-        check=True, capture_output=True, text=True,
+        check=True,
+        capture_output=True,
+        text=True,
     ).stdout
 
 

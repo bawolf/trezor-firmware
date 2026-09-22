@@ -1012,7 +1012,8 @@ def test_signatures_reject_non_bytes_records() -> None:
     session = scripted(
         *upload_requests(len(pczt)),
         messages.ZcashSpendAuthSignatures(
-            transfer_id=TRANSFER_ID, records=t.cast(bytes, records_for([0]).decode("latin-1"))
+            transfer_id=TRANSFER_ID,
+            records=t.cast(bytes, records_for([0]).decode("latin-1")),
         ),
     )
     with pytest.raises(exceptions.ProtocolError, match="Invalid Zcash signature"):
@@ -1084,9 +1085,7 @@ def test_host_never_reuses_a_transfer_id_across_workflows() -> None:
         session = scripted(*sign_script(pczt, records_for([0]), transfer_id))
         zcash.sign_pczt(session, pczt, MAINNET, 0, REFERENCE_HEIGHT)
         ids = {
-            m.transfer_id
-            for m in sent(session)
-            if isinstance(m, messages.ZcashPcztAck)
+            m.transfer_id for m in sent(session) if isinstance(m, messages.ZcashPcztAck)
         }
         assert ids == {transfer_id}
 

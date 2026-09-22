@@ -237,7 +237,7 @@ def test_text_memo_is_shown_and_signed(
         "hex:ff" + "41" * 511,
         # U+1F600 is outside the BMP, and the glyph lookup truncates a code
         # point to u16, so it would draw as some unrelated BMP character.
-        "text:pay me \U0001F600",
+        "text:pay me \U0001f600",
         # U+202E RIGHT-TO-LEFT OVERRIDE reverses what is drawn after it.
         "text:send to \u202ebob",
     ],
