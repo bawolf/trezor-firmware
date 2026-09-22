@@ -66,6 +66,8 @@ TRANSFER_ID_BYTES = 16
 # order, one per real spend, at most one per admitted action.
 POOL_IRONWOOD = 0x03
 RECORD_BYTES = 66
+# ZIP-32 seed fingerprint length (ZcashViewingKey.seed_fingerprint).
+SEED_FINGERPRINT_BYTES = 32
 # Must track the firmware cap (core/embed/ironwood/src/wire.rs MAX_ACTIONS),
 # raised 8 -> 32 for 16/32-action signing.
 MAX_ACTIONS = 32
@@ -83,6 +85,18 @@ class SpendAuthSignature(t.NamedTuple):
 
     action_index: int
     signature: bytes
+
+
+class ViewingKeyExport(t.NamedTuple):
+    """What `export_viewing_key` releases behind the device's confirmation."""
+
+    #: The network-encoded, Orchard-only Unified Full Viewing Key.
+    key: str
+    #: The ZIP-32 seed fingerprint of the wallet seed (32 bytes): a public
+    #: identifier of the seed, not key material. A wallet stores it next to the
+    #: account index; the device admits a PCZT `zip32_derivation` only when it
+    #: names this fingerprint and the requested account path.
+    seed_fingerprint: bytes
 
 
 # ZIP-32 account index bound. The device derives m/32'/coin_type'/account'
@@ -166,16 +180,18 @@ def get_address(
 
 
 @workflow()
-def get_viewing_key(
+def export_viewing_key(
     session: "Session",
     network: messages.ZcashNetwork,
     account: int,
-) -> str:
-    """Return the Orchard-only Unified Full Viewing Key for `account`.
+) -> ViewingKeyExport:
+    """Return the Orchard-only Unified Full Viewing Key for `account` and the
+    wallet's ZIP-32 seed fingerprint.
 
     The device requires an explicit privacy confirmation for every export. The
     UFVK can reveal and link wallet activity and can derive the account's
-    viewing material and addresses, but it cannot confer spend authority.
+    viewing material and addresses, but it cannot confer spend authority. The
+    seed fingerprint is a public identifier of the seed.
     """
     _check_network(network)
     _check_account(account)
@@ -183,10 +199,22 @@ def get_viewing_key(
     response = _call(
         session, messages.ZcashGetViewingKey(network=network, account=account)
     )
-    key = _expect(session, response, messages.ZcashViewingKey).key
-    if not _has_canonical_orchard_ufvk_envelope(key, network):
+    response = _expect(session, response, messages.ZcashViewingKey)
+    if not _has_canonical_orchard_ufvk_envelope(response.key, network):
         _cancel_and_fail(session, "Invalid Zcash viewing key")
-    return key
+    fingerprint = response.seed_fingerprint
+    if type(fingerprint) is not bytes or len(fingerprint) != SEED_FINGERPRINT_BYTES:
+        _cancel_and_fail(session, "Invalid Zcash seed fingerprint")
+    return ViewingKeyExport(response.key, fingerprint)
+
+
+def get_viewing_key(
+    session: "Session",
+    network: messages.ZcashNetwork,
+    account: int,
+) -> str:
+    """Return only the Unified Full Viewing Key; see `export_viewing_key`."""
+    return export_viewing_key(session, network, account).key
 
 
 @workflow()

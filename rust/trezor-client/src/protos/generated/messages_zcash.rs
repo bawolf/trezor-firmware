@@ -622,6 +622,8 @@ pub struct ZcashViewingKey {
     // message fields
     // @@protoc_insertion_point(field:hw.trezor.messages.zcash.ZcashViewingKey.key)
     pub key: ::std::option::Option<::std::string::String>,
+    // @@protoc_insertion_point(field:hw.trezor.messages.zcash.ZcashViewingKey.seed_fingerprint)
+    pub seed_fingerprint: ::std::option::Option<::std::vec::Vec<u8>>,
     // special fields
     // @@protoc_insertion_point(special_field:hw.trezor.messages.zcash.ZcashViewingKey.special_fields)
     pub special_fields: ::protobuf::SpecialFields,
@@ -674,13 +676,54 @@ impl ZcashViewingKey {
         self.key.take().unwrap_or_else(|| ::std::string::String::new())
     }
 
+    // required bytes seed_fingerprint = 2;
+
+    pub fn seed_fingerprint(&self) -> &[u8] {
+        match self.seed_fingerprint.as_ref() {
+            Some(v) => v,
+            None => &[],
+        }
+    }
+
+    pub fn clear_seed_fingerprint(&mut self) {
+        self.seed_fingerprint = ::std::option::Option::None;
+    }
+
+    pub fn has_seed_fingerprint(&self) -> bool {
+        self.seed_fingerprint.is_some()
+    }
+
+    // Param is passed by value, moved
+    pub fn set_seed_fingerprint(&mut self, v: ::std::vec::Vec<u8>) {
+        self.seed_fingerprint = ::std::option::Option::Some(v);
+    }
+
+    // Mutable pointer to the field.
+    // If field is not initialized, it is initialized with default value first.
+    pub fn mut_seed_fingerprint(&mut self) -> &mut ::std::vec::Vec<u8> {
+        if self.seed_fingerprint.is_none() {
+            self.seed_fingerprint = ::std::option::Option::Some(::std::vec::Vec::new());
+        }
+        self.seed_fingerprint.as_mut().unwrap()
+    }
+
+    // Take field
+    pub fn take_seed_fingerprint(&mut self) -> ::std::vec::Vec<u8> {
+        self.seed_fingerprint.take().unwrap_or_else(|| ::std::vec::Vec::new())
+    }
+
     fn generated_message_descriptor_data() -> ::protobuf::reflect::GeneratedMessageDescriptorData {
-        let mut fields = ::std::vec::Vec::with_capacity(1);
+        let mut fields = ::std::vec::Vec::with_capacity(2);
         let mut oneofs = ::std::vec::Vec::with_capacity(0);
         fields.push(::protobuf::reflect::rt::v2::make_option_accessor::<_, _>(
             "key",
             |m: &ZcashViewingKey| { &m.key },
             |m: &mut ZcashViewingKey| { &mut m.key },
+        ));
+        fields.push(::protobuf::reflect::rt::v2::make_option_accessor::<_, _>(
+            "seed_fingerprint",
+            |m: &ZcashViewingKey| { &m.seed_fingerprint },
+            |m: &mut ZcashViewingKey| { &mut m.seed_fingerprint },
         ));
         ::protobuf::reflect::GeneratedMessageDescriptorData::new_2::<ZcashViewingKey>(
             "ZcashViewingKey",
@@ -697,6 +740,9 @@ impl ::protobuf::Message for ZcashViewingKey {
         if self.key.is_none() {
             return false;
         }
+        if self.seed_fingerprint.is_none() {
+            return false;
+        }
         true
     }
 
@@ -705,6 +751,9 @@ impl ::protobuf::Message for ZcashViewingKey {
             match tag {
                 10 => {
                     self.key = ::std::option::Option::Some(is.read_string()?);
+                },
+                18 => {
+                    self.seed_fingerprint = ::std::option::Option::Some(is.read_bytes()?);
                 },
                 tag => {
                     ::protobuf::rt::read_unknown_or_skip_group(tag, is, self.special_fields.mut_unknown_fields())?;
@@ -721,6 +770,9 @@ impl ::protobuf::Message for ZcashViewingKey {
         if let Some(v) = self.key.as_ref() {
             my_size += ::protobuf::rt::string_size(1, &v);
         }
+        if let Some(v) = self.seed_fingerprint.as_ref() {
+            my_size += ::protobuf::rt::bytes_size(2, &v);
+        }
         my_size += ::protobuf::rt::unknown_fields_size(self.special_fields.unknown_fields());
         self.special_fields.cached_size().set(my_size as u32);
         my_size
@@ -729,6 +781,9 @@ impl ::protobuf::Message for ZcashViewingKey {
     fn write_to_with_cached_sizes(&self, os: &mut ::protobuf::CodedOutputStream<'_>) -> ::protobuf::Result<()> {
         if let Some(v) = self.key.as_ref() {
             os.write_string(1, v)?;
+        }
+        if let Some(v) = self.seed_fingerprint.as_ref() {
+            os.write_bytes(2, v)?;
         }
         os.write_unknown_fields(self.special_fields.unknown_fields())?;
         ::std::result::Result::Ok(())
@@ -748,12 +803,14 @@ impl ::protobuf::Message for ZcashViewingKey {
 
     fn clear(&mut self) {
         self.key = ::std::option::Option::None;
+        self.seed_fingerprint = ::std::option::Option::None;
         self.special_fields.clear();
     }
 
     fn default_instance() -> &'static ZcashViewingKey {
         static instance: ZcashViewingKey = ZcashViewingKey {
             key: ::std::option::Option::None,
+            seed_fingerprint: ::std::option::Option::None,
             special_fields: ::protobuf::SpecialFields::new(),
         };
         &instance
@@ -1885,14 +1942,15 @@ static file_descriptor_proto_data: &'static [u8] = b"\
     \x10diversifierIndex\"(\n\x0cZcashAddress\x12\x18\n\x07address\x18\x01\
     \x20\x02(\tR\x07address\"p\n\x12ZcashGetViewingKey\x12@\n\x07network\x18\
     \x01\x20\x02(\x0e2&.hw.trezor.messages.zcash.ZcashNetworkR\x07network\
-    \x12\x18\n\x07account\x18\x02\x20\x02(\rR\x07account\"#\n\x0fZcashViewin\
-    gKey\x12\x10\n\x03key\x18\x01\x20\x02(\tR\x03key\"\xc0\x01\n\rZcashSignP\
-    czt\x12@\n\x07network\x18\x01\x20\x02(\x0e2&.hw.trezor.messages.zcash.Zc\
-    ashNetworkR\x07network\x12\x18\n\x07account\x18\x02\x20\x02(\rR\x07accou\
-    nt\x12\x1f\n\x0bpczt_length\x18\x03\x20\x02(\rR\npcztLength\x122\n\x15ho\
-    st_reference_height\x18\x04\x20\x02(\rR\x13hostReferenceHeight\"c\n\x10Z\
-    cashPcztRequest\x12\x1f\n\x0btransfer_id\x18\x01\x20\x02(\x0cR\ntransfer\
-    Id\x12\x16\n\x06offset\x18\x02\x20\x02(\rR\x06offset\x12\x16\n\x06length\
+    \x12\x18\n\x07account\x18\x02\x20\x02(\rR\x07account\"N\n\x0fZcashViewin\
+    gKey\x12\x10\n\x03key\x18\x01\x20\x02(\tR\x03key\x12)\n\x10seed_fingerpr\
+    int\x18\x02\x20\x02(\x0cR\x0fseedFingerprint\"\xc0\x01\n\rZcashSignPczt\
+    \x12@\n\x07network\x18\x01\x20\x02(\x0e2&.hw.trezor.messages.zcash.Zcash\
+    NetworkR\x07network\x12\x18\n\x07account\x18\x02\x20\x02(\rR\x07account\
+    \x12\x1f\n\x0bpczt_length\x18\x03\x20\x02(\rR\npcztLength\x122\n\x15host\
+    _reference_height\x18\x04\x20\x02(\rR\x13hostReferenceHeight\"c\n\x10Zca\
+    shPcztRequest\x12\x1f\n\x0btransfer_id\x18\x01\x20\x02(\x0cR\ntransferId\
+    \x12\x16\n\x06offset\x18\x02\x20\x02(\rR\x06offset\x12\x16\n\x06length\
     \x18\x03\x20\x02(\rR\x06length\"[\n\x0cZcashPcztAck\x12\x1f\n\x0btransfe\
     r_id\x18\x01\x20\x02(\x0cR\ntransferId\x12\x16\n\x06offset\x18\x02\x20\
     \x02(\rR\x06offset\x12\x12\n\x04data\x18\x03\x20\x02(\x0cR\x04data\"z\n\

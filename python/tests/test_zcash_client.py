@@ -55,6 +55,8 @@ OTHER_TRANSFER_ID = bytes(range(16, 32))
 REFERENCE_HEIGHT = FIXTURE_MANIFEST["corpus_height"]
 DIVERSIFIER_INDEX = bytes(11)
 
+# A 32-byte value with the fingerprint's shape (PUBLIC TEST VALUE).
+SEED_FINGERPRINT = bytes(range(32))
 VIEWING_KEYS = {
     MAINNET: "uview17j0q0nnczz63ducvkhe409f4r8sa2gx88unakv64k95dpe4r2hvn3lhe2gdfn00vsl830682a7tdhzwuhtsw2dp7usgxzdgqxujgu4pv50xrhuakfuk294xjcuhrs5ag0esenlp4wsawqmuqaaspykcplgk0vrds7fm0hrp3up2mmzgh7rdfhycgu2xp8",
     TESTNET: "uviewtest1frzzf669pvkxdjsgwf6y43tvuulek5l3fujvjsfrddrqs07mvpmaa2tua4jhdw4n3ekkqdxq9zgl53r8axe6l3sdzddlwuv3fz6tkyzv4xfkpfmkuevv2q46sapk5d3lhp7m5te04k7ulpv9j3sa08w7akay2xlpj68ly3355l0pgcydz3kvu5c335ggc",
@@ -269,7 +271,7 @@ def test_get_address(network: messages.ZcashNetwork, account: int) -> None:
 
 def test_get_address_wrong_response_type_cancels() -> None:
     session = scripted(
-        messages.ZcashViewingKey(key="uview1example"),
+        messages.ZcashViewingKey(seed_fingerprint=SEED_FINGERPRINT, key="uview1example"),
         messages.Failure(code=messages.FailureType.ActionCancelled),
     )
     with pytest.raises(exceptions.UnexpectedMessageError):
@@ -324,12 +326,43 @@ def test_get_address_rejects_bad_diversifier(diversifier: object) -> None:
 @pytest.mark.parametrize("account", ACCOUNTS)
 def test_get_viewing_key(network: messages.ZcashNetwork, account: int) -> None:
     key = VIEWING_KEYS[network]
-    session = scripted(messages.ZcashViewingKey(key=key))
+    session = scripted(messages.ZcashViewingKey(seed_fingerprint=SEED_FINGERPRINT, key=key))
     assert zcash.get_viewing_key(session, network, account) == key
     assert sent(session) == [
         messages.ZcashGetViewingKey(network=network, account=account)
     ]
     assert not remaining(session)
+
+
+@pytest.mark.parametrize("network", NETWORKS)
+def test_export_viewing_key_returns_key_and_seed_fingerprint(
+    network: messages.ZcashNetwork,
+) -> None:
+    key = VIEWING_KEYS[network]
+    session = scripted(
+        messages.ZcashViewingKey(seed_fingerprint=SEED_FINGERPRINT, key=key)
+    )
+    export = zcash.export_viewing_key(session, network, 3)
+    assert export == zcash.ViewingKeyExport(key, SEED_FINGERPRINT)
+    assert export.seed_fingerprint == SEED_FINGERPRINT
+    assert sent(session) == [messages.ZcashGetViewingKey(network=network, account=3)]
+    assert not remaining(session)
+
+
+@pytest.mark.parametrize("fingerprint", [b"", b"\x00" * 31, b"\x00" * 33])
+def test_export_viewing_key_rejects_wrong_fingerprint_length(
+    fingerprint: bytes,
+) -> None:
+    """A fingerprint that is not exactly 32 bytes is a device violation."""
+    session = scripted(
+        messages.ZcashViewingKey(
+            seed_fingerprint=fingerprint, key=VIEWING_KEYS[MAINNET]
+        ),
+        messages.Failure(code=messages.FailureType.ActionCancelled),
+    )
+    with pytest.raises(exceptions.ProtocolError, match="seed fingerprint"):
+        zcash.export_viewing_key(session, MAINNET, 0)
+    assert_cancelled(session)
 
 
 def test_viewing_key_export_has_no_full_selector() -> None:
@@ -338,7 +371,10 @@ def test_viewing_key_export_has_no_full_selector() -> None:
         "network",
         "account",
     }
-    assert set(f.name for f in messages.ZcashViewingKey.FIELDS.values()) == {"key"}
+    assert set(f.name for f in messages.ZcashViewingKey.FIELDS.values()) == {
+        "key",
+        "seed_fingerprint",
+    }
 
 
 @pytest.mark.parametrize(
@@ -386,7 +422,7 @@ def test_get_viewing_key_rejects_invalid_or_cross_network_response(
     network: messages.ZcashNetwork, key: object
 ) -> None:
     session = scripted(
-        messages.ZcashViewingKey(key=t.cast(str, key)),
+        messages.ZcashViewingKey(seed_fingerprint=SEED_FINGERPRINT, key=t.cast(str, key)),
         messages.Failure(code=messages.FailureType.ActionCancelled),
     )
     with pytest.raises(exceptions.ProtocolError, match="Invalid Zcash viewing key"):
@@ -418,7 +454,7 @@ def test_get_viewing_key_rejects_well_checksummed_non_orchard_shapes(
     key = _encode_malformed_ufvk("uview", payload)
     assert len(key) == 195
     session = scripted(
-        messages.ZcashViewingKey(key=key),
+        messages.ZcashViewingKey(seed_fingerprint=SEED_FINGERPRINT, key=key),
         messages.Failure(code=messages.FailureType.ActionCancelled),
     )
     with pytest.raises(exceptions.ProtocolError, match="Invalid Zcash viewing key"):
@@ -432,7 +468,7 @@ def test_get_viewing_key_rejects_noncanonical_bit_conversion() -> None:
     data[-1] |= 1  # the final three bits are required zero padding
     key = zcash._bech32m_encode(hrp, data)
     session = scripted(
-        messages.ZcashViewingKey(key=key),
+        messages.ZcashViewingKey(seed_fingerprint=SEED_FINGERPRINT, key=key),
         messages.Failure(code=messages.FailureType.ActionCancelled),
     )
     with pytest.raises(exceptions.ProtocolError, match="Invalid Zcash viewing key"):
@@ -447,7 +483,7 @@ def test_get_viewing_key_rejects_noncanonical_compact_size() -> None:
     key = _encode_malformed_ufvk("uview", payload)
     assert len(key) > 195
     session = scripted(
-        messages.ZcashViewingKey(key=key),
+        messages.ZcashViewingKey(seed_fingerprint=SEED_FINGERPRINT, key=key),
         messages.Failure(code=messages.FailureType.ActionCancelled),
     )
     with pytest.raises(exceptions.ProtocolError, match="Invalid Zcash viewing key"):
@@ -468,7 +504,7 @@ def test_get_viewing_key_rejects_bech32_instead_of_bech32m() -> None:
         + "".join(zcash._BECH32_CHARSET[item] for item in data + checksum_values)
     )
     session = scripted(
-        messages.ZcashViewingKey(key=key),
+        messages.ZcashViewingKey(seed_fingerprint=SEED_FINGERPRINT, key=key),
         messages.Failure(code=messages.FailureType.ActionCancelled),
     )
     with pytest.raises(exceptions.ProtocolError, match="Invalid Zcash viewing key"):

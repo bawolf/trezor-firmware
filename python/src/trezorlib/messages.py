@@ -10239,14 +10239,17 @@ class ZcashViewingKey(protobuf.MessageType):
     MESSAGE_WIRE_TYPE = 32103
     FIELDS = {
         1: protobuf.Field("key", "string", repeated=False, required=True),
+        2: protobuf.Field("seed_fingerprint", "bytes", repeated=False, required=True),
     }
 
     def __init__(
         self,
         *,
         key: "str",
+        seed_fingerprint: "bytes",
     ) -> None:
         self.key = key
+        self.seed_fingerprint = seed_fingerprint
 
 
 class ZcashSignPczt(protobuf.MessageType):

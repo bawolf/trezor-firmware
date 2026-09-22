@@ -86,6 +86,27 @@ extern "C" fn derive_viewing_key(n_args: usize, args: *const Obj) -> Obj {
     unsafe { util::try_with_args_and_kwargs(n_args, args, &Map::EMPTY, block) }
 }
 
+extern "C" fn seed_fingerprint(seed: Obj, output: Obj) -> Obj {
+    let block = || {
+        // Requiring immutable bytes prevents the seed and writable output from
+        // aliasing while both are borrowed by Rust.
+        if !unsafe { ffi::mp_type_bytes.is_type_of(seed) } {
+            return Err(Error::TypeError);
+        }
+        // SAFETY: The seed is immutable, the output is a distinct writable
+        // object, and neither reference is retained or crosses into Python.
+        let seed = unsafe { get_buffer(seed)? };
+        let output = unsafe { get_buffer_mut(output)? };
+        let output: &mut [u8; 32] = output
+            .try_into()
+            .map_err(|_| Error::ValueError(c"Invalid seed fingerprint output length"))?;
+        ironwood_signing::seed_fingerprint(seed, output)
+            .map_err(|_| Error::RuntimeError(c"Seed fingerprint derivation failed"))?;
+        Ok(Obj::const_none())
+    };
+    unsafe { util::try_or_raise(block) }
+}
+
 /// Python raises `DataError` for `ValueError` and `ProcessError` for
 /// `RuntimeError`, so only malformed bytes become a `ValueError`.
 fn failure(failure: Failure) -> Error {
@@ -319,6 +340,10 @@ pub static mp_module_trezorironwood: Module = obj_module! {
     /// ) -> None:
     ///     """Fill a 96-byte Orchard FVK buffer from device wallet state."""
     Qstr::MP_QSTR_derive_viewing_key => obj_fn_var!(4, 4, derive_viewing_key).as_obj(),
+    /// def seed_fingerprint(seed: bytes, output: AnyBuffer) -> None:
+    ///     """Fill a 32-byte buffer with the ZIP-32 seed fingerprint of the wallet
+    ///     seed: a public identifier of the seed, not key material."""
+    Qstr::MP_QSTR_seed_fingerprint => obj_fn_2!(seed_fingerprint).as_obj(),
     /// def session_begin(
     ///     seed: bytes,
     ///     network: int,
@@ -375,6 +400,10 @@ pub static mp_module_trezorironwood: Module = obj_module! {
     // ) -> None:
     //     """Fill a 96-byte Orchard FVK buffer from device wallet state."""
     Qstr::MP_QSTR_derive_viewing_key => obj_fn_var!(4, 4, derive_viewing_key).as_obj(),
+    // def seed_fingerprint(seed: bytes, output: AnyBuffer) -> None:
+    //     """Fill a 32-byte buffer with the ZIP-32 seed fingerprint of the wallet
+    //     seed: a public identifier of the seed, not key material."""
+    Qstr::MP_QSTR_seed_fingerprint => obj_fn_2!(seed_fingerprint).as_obj(),
     // def session_begin(
     //     seed: bytes,
     //     network: int,

@@ -80,10 +80,18 @@ message ZcashGetViewingKey {
  * and no spend-authorizing scalar. Possession can reveal and link wallet
  * activity and can derive the account's viewing material and addresses, but
  * cannot confer spend authority.
+ * seed_fingerprint is the ZIP-32 seed fingerprint of the wallet seed
+ * (BLAKE2b-256 of the seed under the ZIP-32 personalization, 32 bytes): a
+ * public identifier, not key material. A wallet stores it next to the
+ * account index and the device admits a PCZT zip32_derivation only when it
+ * names this fingerprint and the consented account path. It rides this
+ * response so it is released only behind the same on-device confirmation
+ * as the viewing key.
  * @end
  */
 message ZcashViewingKey {
     required string key = 1;
+    required bytes seed_fingerprint = 2;  // exactly 32 bytes
 }
 
 /**

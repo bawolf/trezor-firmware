@@ -23,6 +23,12 @@ def derive_viewing_key(
 
 
 # rust/src/micropython/ironwood.rs
+def seed_fingerprint(seed: bytes, output: AnyBuffer) -> None:
+    """Fill a 32-byte buffer with the ZIP-32 seed fingerprint of the wallet
+    seed: a public identifier of the seed, not key material."""
+
+
+# rust/src/micropython/ironwood.rs
 def session_begin(
     seed: bytes,
     network: int,

@@ -181,7 +181,6 @@ static void _librust_qstrs(void) {
   MP_QSTR_backup_check_allowed;
   MP_QSTR_backup_failed;
   MP_QSTR_backup_needed;
-  MP_QSTR_bench;
   MP_QSTR_bitcoin__commitment_data;
   MP_QSTR_bitcoin__confirm_locktime;
   MP_QSTR_bitcoin__create_proof_of_ownership;
@@ -1596,8 +1595,10 @@ static void _librust_qstrs(void) {
   MP_QSTR_debug__loading_seed_not_recommended;
 #endif
 #ifdef USE_IRONWOOD
+  MP_QSTR_bench;
   MP_QSTR_derive_receiver;
   MP_QSTR_derive_viewing_key;
+  MP_QSTR_seed_fingerprint;
   MP_QSTR_session_approve;
   MP_QSTR_session_begin;
   MP_QSTR_session_cancel;

@@ -67,6 +67,8 @@ CANDIDATE_CAPABILITY = 30
 DONOR_WIRE_IDS = range(32000, 32009)
 
 NETWORKS = [messages.ZcashNetwork.Mainnet, messages.ZcashNetwork.Testnet]
+# A 32-byte value with the seed fingerprint's shape (PUBLIC TEST VALUE).
+SEED_FINGERPRINT = bytes(range(32))
 VIEWING_KEYS = {
     messages.ZcashNetwork.Mainnet: "uview17j0q0nnczz63ducvkhe409f4r8sa2gx88unakv64k95dpe4r2hvn3lhe2gdfn00vsl830682a7tdhzwuhtsw2dp7usgxzdgqxujgu4pv50xrhuakfuk294xjcuhrs5ag0esenlp4wsawqmuqaaspykcplgk0vrds7fm0hrp3up2mmzgh7rdfhycgu2xp8",
     messages.ZcashNetwork.Testnet: "uviewtest1frzzf669pvkxdjsgwf6y43tvuulek5l3fujvjsfrddrqs07mvpmaa2tua4jhdw4n3ekkqdxq9zgl53r8axe6l3sdzddlwuv3fz6tkyzv4xfkpfmkuevv2q46sapk5d3lhp7m5te04k7ulpv9j3sa08w7akay2xlpj68ly3355l0pgcydz3kvu5c335ggc",
@@ -255,7 +257,7 @@ def test_roundtrip_all_messages(network: messages.ZcashNetwork) -> None:
         ),
         messages.ZcashAddress(address="u1example"),
         messages.ZcashGetViewingKey(network=network, account=7),
-        messages.ZcashViewingKey(key=VIEWING_KEYS[network]),
+        messages.ZcashViewingKey(seed_fingerprint=SEED_FINGERPRINT, key=VIEWING_KEYS[network]),
         messages.ZcashSignPczt(
             network=network,
             account=7,
@@ -273,13 +275,14 @@ def test_roundtrip_all_messages(network: messages.ZcashNetwork) -> None:
 
 @pytest.mark.parametrize(
     "network, encoded_size",
-    [(messages.ZcashNetwork.Mainnet, 198), (messages.ZcashNetwork.Testnet, 202)],
+    # The key plus the 32-byte fingerprint field (2 bytes of framing).
+    [(messages.ZcashNetwork.Mainnet, 232), (messages.ZcashNetwork.Testnet, 236)],
 )
 def test_viewing_key_response_has_fixed_small_wire_size(
     network: messages.ZcashNetwork, encoded_size: int
 ) -> None:
     buf = BytesIO()
-    protobuf.dump_message(buf, messages.ZcashViewingKey(key=VIEWING_KEYS[network]))
+    protobuf.dump_message(buf, messages.ZcashViewingKey(seed_fingerprint=SEED_FINGERPRINT, key=VIEWING_KEYS[network]))
     assert len(buf.getvalue()) == encoded_size
 
 

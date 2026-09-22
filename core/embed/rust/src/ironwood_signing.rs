@@ -126,6 +126,25 @@ fn wipe<T>(value: &mut T) {
     core::sync::atomic::compiler_fence(core::sync::atomic::Ordering::SeqCst);
 }
 
+/// The seed lengths the device derives from: a restored SLIP-39 secret or a
+/// ZIP-32 seed. One rule for signing and for the seed fingerprint, so a
+/// wallet that can sign can also be identified.
+fn admissible_seed(seed: &[u8]) -> bool {
+    seed.len() == RESTORED_SLIP39_SEED_BYTES
+        || (MIN_ZIP32_SEED_BYTES..=MAX_SEED_BYTES).contains(&seed.len())
+}
+
+/// The device's ZIP-32 seed fingerprint ([`trezor_ironwood::seed_fingerprint`])
+/// into `output`. A public identifier of the seed, not key material; `seed`
+/// is borrowed for this call only.
+pub fn seed_fingerprint(seed: &[u8], output: &mut [u8; 32]) -> core::result::Result<(), Failure> {
+    if !admissible_seed(seed) {
+        return Err(Failure::State);
+    }
+    *output = trezor_ironwood::seed_fingerprint(seed).ok_or(Failure::State)?;
+    Ok(())
+}
+
 /// Derived keys of `m/32'/coin_type'/account'`. The spending key is wiped on
 /// drop; callers move the derived keys out and wipe those themselves.
 struct AccountKeys {
@@ -134,9 +153,7 @@ struct AccountKeys {
 
 impl AccountKeys {
     fn derive(seed: &[u8], coin_type: u32, account: u32) -> Option<Self> {
-        if seed.len() != RESTORED_SLIP39_SEED_BYTES
-            && !(MIN_ZIP32_SEED_BYTES..=MAX_SEED_BYTES).contains(&seed.len())
-        {
+        if !admissible_seed(seed) {
             return None;
         }
         // The account type is `zip32::AccountId`, inferred from the parameter so

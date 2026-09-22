@@ -225,7 +225,8 @@ def test_zip32_derivation_not_the_device_own_is_rejected(
 def test_device_fvk_matches_fixture(
     session: Session, fixture_tool: Path, tmp_path: Path
 ) -> None:
-    """The signing derivation (orchard zip32) and the viewing export (receive crate) agree."""
+    """The signing derivation (orchard zip32) and the viewing export (receive crate) agree,
+    and the exported seed fingerprint is the canonical ZIP-32 one (zip32 crate)."""
     _pczt, summary = _build_fixture(fixture_tool, tmp_path, 2)
 
     def accept(session: Session):
@@ -238,12 +239,16 @@ def test_device_fvk_matches_fixture(
 
     with session.test_ctx as client:
         client.set_input_flow(accept(session))
-        key = zcash.get_viewing_key(session, NETWORK, ACCOUNT)
+        export = zcash.export_viewing_key(session, NETWORK, ACCOUNT)
 
-    _hrp, data = zcash._bech32m_decode(key)
+    _hrp, data = zcash._bech32m_decode(export.key)
     jumbled = bytearray(zcash._convert_bits(data, 5, 8, pad=False))
     zcash._f4jumble(jumbled, inverse=True)
     assert jumbled[2:98].hex() == summary["fvk"]
+    # The fixture tool derives it with zip32::fingerprint::SeedFingerprint from
+    # the same seed; the device computes it natively (trezor_ironwood).
+    assert export.seed_fingerprint.hex() == summary["seed_fingerprint"]
+    assert len(export.seed_fingerprint) == 32
 
 
 def test_cancel_at_output(session: Session, fixture_tool: Path, tmp_path: Path) -> None:

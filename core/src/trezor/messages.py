@@ -8168,11 +8168,13 @@ if TYPE_CHECKING:
 
     class ZcashViewingKey(protobuf.MessageType):
         key: "str"
+        seed_fingerprint: "AnyBytes"
 
         def __init__(
             self,
             *,
             key: "str",
+            seed_fingerprint: "AnyBytes",
         ) -> None:
             pass
 

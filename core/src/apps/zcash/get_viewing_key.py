@@ -32,6 +32,16 @@ def _derive_viewing_key(
         utils.zero_unused_stack()
 
 
+def _derive_seed_fingerprint(seed: bytes, output: AnyBuffer) -> None:
+    from trezor import utils
+    from trezorironwood import seed_fingerprint
+
+    try:
+        seed_fingerprint(seed, output)
+    finally:
+        utils.zero_unused_stack()
+
+
 async def get_viewing_key(msg: ZcashGetViewingKey) -> ZcashViewingKey:
     from trezor import TR, utils, wire
     from trezor.enums import ButtonRequestType
@@ -76,11 +86,15 @@ async def get_viewing_key(msg: ZcashGetViewingKey) -> ZcashViewingKey:
 
     wallet_seed = await seed.get_seed()
     raw_fvk = bytearray(96)
+    # The ZIP-32 seed fingerprint is a public identifier of the seed (a
+    # one-way hash), released behind the same confirmation as the key.
+    fingerprint = bytearray(32)
     try:
         ironwood_account.require_session(session)
         try:
             _derive_viewing_key(wallet_seed, network, account, raw_fvk)
             key = unified_addresses.encode_fvk(raw_fvk, coininfo.by_name(coin_name))
+            _derive_seed_fingerprint(wallet_seed, fingerprint)
         except (KeyError, ValueError, RuntimeError):
             raise wire.ProcessError("Zcash viewing key derivation failed")
     finally:
@@ -88,4 +102,4 @@ async def get_viewing_key(msg: ZcashGetViewingKey) -> ZcashViewingKey:
         del wallet_seed
 
     ironwood_account.require_session(session)
-    return ZcashViewingKey(key=key)
+    return ZcashViewingKey(key=key, seed_fingerprint=bytes(fingerprint))
