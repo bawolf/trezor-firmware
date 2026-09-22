@@ -225,6 +225,16 @@ fn corpus() -> Vec<Case> {
             ),
         ),
         case(
+            "unrenderable memo",
+            build(
+                600_000,
+                390_000,
+                // Supplementary plane and a bidi override: hashed, not shown.
+                MemoBytes::from_bytes("pay \u{1F600} \u{202E}bob".as_bytes()).unwrap(),
+                false,
+            ),
+        ),
+        case(
             "arbitrary memo",
             build(
                 600_000,

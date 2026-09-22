@@ -510,6 +510,69 @@ fn memo_budget_and_binary_memos_are_hashed() {
     );
 }
 
+/// A memo the device cannot draw as itself is hashed, not shown.
+///
+/// The glyph lookup truncates a code point to `u16`, so a supplementary-plane
+/// character aliases onto a BMP glyph (U+10041 draws as 'A'); bidi overrides
+/// reorder what is drawn; zero-width and format characters draw as nothing.
+/// Each of those makes the screen disagree with the bytes the signature
+/// commits to, so the whole memo becomes a digest.
+#[test]
+fn memos_the_device_cannot_render_faithfully_are_hashed() {
+    use zcash_protocol::memo::MemoBytes;
+    for text in [
+        // U+1F600 GRINNING FACE: outside the BMP.
+        "pay me \u{1F600}",
+        // U+10041: aliases to 'A' under the u16 truncation.
+        "\u{10041}BC",
+        // RIGHT-TO-LEFT OVERRIDE: displays the rest in reverse.
+        "send 1 ZEC to \u{202E}bob",
+        // POP DIRECTIONAL FORMATTING and LEFT-TO-RIGHT EMBEDDING.
+        "a\u{202A}b\u{202C}c",
+        // ZERO WIDTH SPACE / JOINER: invisible.
+        "tre\u{200B}zor",
+        "a\u{200D}b",
+        // Word joiner and the invisible bidi isolates.
+        "a\u{2060}b",
+        "a\u{2066}b\u{2069}c",
+        // LINE SEPARATOR and PARAGRAPH SEPARATOR.
+        "a\u{2028}b",
+        "a\u{2029}b",
+        // Soft hyphen, NBSP (substituted with a plain space), BOM,
+        // variation selector.
+        "co\u{00AD}op",
+        "a\u{00A0}b",
+        "\u{FEFF}hello",
+        "x\u{FE0F}",
+        // A control other than newline: carriage return is dropped by the
+        // text layout, tab and DEL draw as the nonprintable placeholder.
+        "a\rb",
+        "a\tb",
+        "a\u{7F}b",
+        "a\u{0085}b",
+    ] {
+        let memo = MemoBytes::from_bytes(text.as_bytes()).unwrap();
+        assert_eq!(
+            payment_memo(&build(600_000, 390_000, memo.clone(), false)),
+            memo_digest(&memo),
+            "{text:?} must be hashed"
+        );
+    }
+    // Newline is the one control the layout honours, so it stays text.
+    let lines = MemoBytes::from_bytes(b"line one\nline two").unwrap();
+    match payment_memo(&build(600_000, 390_000, lines, false)) {
+        Memo::Text(text) => assert_eq!(text.as_str(), "line one\nline two"),
+        other => panic!("{other:?}"),
+    }
+    // A BMP character the font may lack still draws as a visible
+    // placeholder, never as different text, so it is shown.
+    let cjk = MemoBytes::from_bytes("\u{4F60}\u{597D}".as_bytes()).unwrap();
+    match payment_memo(&build(600_000, 390_000, cjk, false)) {
+        Memo::Text(text) => assert_eq!(text.as_str(), "\u{4F60}\u{597D}"),
+        other => panic!("{other:?}"),
+    }
+}
+
 /// Memos of hidden outputs must be empty: change with a memo is refused.
 #[test]
 fn change_output_with_memo_is_rejected() {

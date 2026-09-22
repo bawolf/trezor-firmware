@@ -123,6 +123,33 @@ struct Options {
 /// Shown verbatim iff a ZIP-302 text memo within the device's budget.
 const MEMO_TEXT_BUDGET: usize = 256;
 
+/// Replica of `trezor_ironwood::renders_faithfully` (private to the crate):
+/// characters the device draws as themselves. Anything else makes the memo a
+/// digest, so the fixture's expected display must apply the same rule.
+fn renders_faithfully(c: char) -> bool {
+    let code = c as u32;
+    if code > 0xFFFF {
+        return false;
+    }
+    if c != '\n' && c.is_control() {
+        return false;
+    }
+    !matches!(
+        code,
+        0x00A0
+            | 0x00AD
+            | 0x034F
+            | 0x061C
+            | 0x180E
+            | 0xFE00..=0xFE0F
+            | 0xFEFF
+            | 0xFFF9..=0xFFFB
+            | 0x200B..=0x200F
+            | 0x2028..=0x202E
+            | 0x2060..=0x2069
+    )
+}
+
 fn parse_options(args: &[String]) -> Result<Options, String> {
     let mut options = Options {
         view: View::Device,
@@ -369,7 +396,8 @@ fn build_with<P: Parameters>(
 
     // What the device shows for the payment memo (independent replica of
     // the firmware's classification): text iff leading byte <= 0xF4, no NUL,
-    // UTF-8, within the budget; otherwise the BLAKE2b-256 of the 512 bytes.
+    // UTF-8, within the budget, and every character one the device draws as
+    // itself; otherwise the BLAKE2b-256 of the 512 bytes.
     let memo_display = {
         let memo = options.memo.as_array();
         let trimmed = &memo[..memo.iter().rposition(|&b| b != 0).map_or(0, |i| i + 1)];
@@ -378,7 +406,7 @@ fn build_with<P: Parameters>(
         } else if memo[0] <= 0xf4
             && trimmed.len() <= MEMO_TEXT_BUDGET
             && !trimmed.contains(&0)
-            && std::str::from_utf8(trimmed).is_ok()
+            && std::str::from_utf8(trimmed).is_ok_and(|s| s.chars().all(renders_faithfully))
         {
             json!({"kind": "text", "text": std::str::from_utf8(trimmed).unwrap()})
         } else {

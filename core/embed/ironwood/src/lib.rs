@@ -92,9 +92,11 @@ pub enum Memo {
     /// A ZIP-302 text memo within [`MEMO_TEXT_BUDGET`], shown verbatim.
     Text(MemoText),
     /// Anything else (arbitrary `0xFF` data, a reserved leading byte, text
-    /// that is not UTF-8 or contains NUL, or text over the budget): the
-    /// unkeyed BLAKE2b-256 of the full 512 memo bytes, shown as hex, which a
-    /// wallet can recompute from the memo it built.
+    /// that is not UTF-8, contains NUL, is over the budget, or holds a
+    /// character the device cannot draw faithfully -- see
+    /// [`renders_faithfully`]): the unkeyed BLAKE2b-256 of the full 512 memo
+    /// bytes, shown as hex, which a wallet can recompute from the memo it
+    /// built.
     Digest([u8; 32]),
 }
 
@@ -118,6 +120,51 @@ impl core::fmt::Debug for MemoText {
     }
 }
 
+/// Whether the device can draw `c` as itself.
+///
+/// "Shown verbatim" has to mean it: a memo is the one host-controlled free
+/// text the device displays, and a character that draws as a *different*
+/// character, as nothing, or that reorders its neighbours would make the
+/// screen disagree with what is signed. Such a memo is hashed instead
+/// (`Memo::Digest`), which is honest and still lets the wallet reproduce the
+/// value. Refused here, not in the UI, so every model behaves alike.
+///
+/// A BMP character the font simply lacks is *not* excluded: the glyph lookup
+/// draws the nonprintable placeholder for it, which is visibly a placeholder
+/// and cannot be mistaken for other text.
+fn renders_faithfully(c: char) -> bool {
+    let code = c as u32;
+    // Supplementary planes alias onto the BMP: the glyph lookup truncates the
+    // code point to `u16` (`ui::display::font::GlyphData::get_glyph`), so
+    // U+10041 would draw as 'A' and U+1F600 as a random BMP glyph. Silent
+    // substitution of a plausible character, which is the dangerous kind.
+    if code > 0xFFFF {
+        return false;
+    }
+    // C0/C1 controls. '\n' is the one control the text layout honours (it
+    // breaks the line and paginates); '\r' is dropped and the rest draw as
+    // the nonprintable placeholder, so none of them is the character the
+    // signer wrote.
+    if c != '\n' && c.is_control() {
+        return false;
+    }
+    !matches!(
+        code,
+        // NBSP, which the glyph lookup substitutes with a plain space.
+        0x00A0
+        // Invisible marks: soft hyphen, combining grapheme joiner, Arabic
+        // letter mark, Mongolian vowel separator, variation selectors, BOM,
+        // interlinear annotation. They draw as nothing (or as a placeholder
+        // that is not what was written) and can hide or fuse neighbours.
+        | 0x00AD | 0x034F | 0x061C | 0x180E | 0xFE00..=0xFE0F | 0xFEFF | 0xFFF9..=0xFFFB
+        // Zero-width and bidi controls, and the line/paragraph separators:
+        // U+200B-U+200F, U+2028-U+202E (LRE/RLE/PDF/LRO/RLO) and
+        // U+2060-U+2069 (word joiner, invisible operators, LRI/RLI/FSI/PDI).
+        // An RLO can display a memo in an order the bytes do not have.
+        | 0x200B..=0x200F | 0x2028..=0x202E | 0x2060..=0x2069
+    )
+}
+
 /// ZIP-302 classification of a payment output's memo for display.
 fn classify_memo(memo: &[u8; 512]) -> Memo {
     if *memo == EMPTY_MEMO || *memo == PADDING_MEMO {
@@ -129,7 +176,7 @@ fn classify_memo(memo: &[u8; 512]) -> Memo {
         let text = &memo[..end];
         if text.len() <= MEMO_TEXT_BUDGET
             && !text.contains(&0)
-            && core::str::from_utf8(text).is_ok()
+            && core::str::from_utf8(text).is_ok_and(|s| s.chars().all(renders_faithfully))
         {
             let mut bytes = [0; MEMO_TEXT_BUDGET];
             bytes[..text.len()].copy_from_slice(text);

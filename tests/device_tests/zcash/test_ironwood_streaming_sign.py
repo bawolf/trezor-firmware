@@ -235,13 +235,19 @@ def test_text_memo_is_shown_and_signed(
     [
         "text:" + "a" * (MEMO_TEXT_BUDGET + 1),
         "hex:ff" + "41" * 511,
+        # U+1F600 is outside the BMP, and the glyph lookup truncates a code
+        # point to u16, so it would draw as some unrelated BMP character.
+        "text:pay me \U0001F600",
+        # U+202E RIGHT-TO-LEFT OVERRIDE reverses what is drawn after it.
+        "text:send to \u202ebob",
     ],
-    ids=["over-budget", "arbitrary"],
+    ids=["over-budget", "arbitrary", "supplementary-plane", "bidi-override"],
 )
 def test_binary_or_long_memo_is_shown_as_hash_and_signed(
     session: Session, fixture_tool: Path, tmp_path: Path, spec: str
 ) -> None:
-    """Over the budget or not text: the BLAKE2b-256 of the memo is shown."""
+    """Over the budget, not text, or not drawable as itself: the
+    BLAKE2b-256 of the memo is shown instead of the text."""
     pczt, summary = _build_fixture(fixture_tool, tmp_path, 2, f"memo={spec}")
     payments = len(summary["payments"])
     assert summary["memo"]["kind"] == "digest"
