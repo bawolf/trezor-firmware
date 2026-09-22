@@ -271,7 +271,9 @@ def test_get_address(network: messages.ZcashNetwork, account: int) -> None:
 
 def test_get_address_wrong_response_type_cancels() -> None:
     session = scripted(
-        messages.ZcashViewingKey(seed_fingerprint=SEED_FINGERPRINT, key="uview1example"),
+        messages.ZcashViewingKey(
+            seed_fingerprint=SEED_FINGERPRINT, key="uview1example"
+        ),
         messages.Failure(code=messages.FailureType.ActionCancelled),
     )
     with pytest.raises(exceptions.UnexpectedMessageError):
@@ -326,7 +328,9 @@ def test_get_address_rejects_bad_diversifier(diversifier: object) -> None:
 @pytest.mark.parametrize("account", ACCOUNTS)
 def test_get_viewing_key(network: messages.ZcashNetwork, account: int) -> None:
     key = VIEWING_KEYS[network]
-    session = scripted(messages.ZcashViewingKey(seed_fingerprint=SEED_FINGERPRINT, key=key))
+    session = scripted(
+        messages.ZcashViewingKey(seed_fingerprint=SEED_FINGERPRINT, key=key)
+    )
     assert zcash.get_viewing_key(session, network, account) == key
     assert sent(session) == [
         messages.ZcashGetViewingKey(network=network, account=account)
@@ -422,7 +426,9 @@ def test_get_viewing_key_rejects_invalid_or_cross_network_response(
     network: messages.ZcashNetwork, key: object
 ) -> None:
     session = scripted(
-        messages.ZcashViewingKey(seed_fingerprint=SEED_FINGERPRINT, key=t.cast(str, key)),
+        messages.ZcashViewingKey(
+            seed_fingerprint=SEED_FINGERPRINT, key=t.cast(str, key)
+        ),
         messages.Failure(code=messages.FailureType.ActionCancelled),
     )
     with pytest.raises(exceptions.ProtocolError, match="Invalid Zcash viewing key"):

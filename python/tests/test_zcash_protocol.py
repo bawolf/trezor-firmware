@@ -257,7 +257,9 @@ def test_roundtrip_all_messages(network: messages.ZcashNetwork) -> None:
         ),
         messages.ZcashAddress(address="u1example"),
         messages.ZcashGetViewingKey(network=network, account=7),
-        messages.ZcashViewingKey(seed_fingerprint=SEED_FINGERPRINT, key=VIEWING_KEYS[network]),
+        messages.ZcashViewingKey(
+            seed_fingerprint=SEED_FINGERPRINT, key=VIEWING_KEYS[network]
+        ),
         messages.ZcashSignPczt(
             network=network,
             account=7,
@@ -282,7 +284,12 @@ def test_viewing_key_response_has_fixed_small_wire_size(
     network: messages.ZcashNetwork, encoded_size: int
 ) -> None:
     buf = BytesIO()
-    protobuf.dump_message(buf, messages.ZcashViewingKey(seed_fingerprint=SEED_FINGERPRINT, key=VIEWING_KEYS[network]))
+    protobuf.dump_message(
+        buf,
+        messages.ZcashViewingKey(
+            seed_fingerprint=SEED_FINGERPRINT, key=VIEWING_KEYS[network]
+        ),
+    )
     assert len(buf.getvalue()) == encoded_size
 
 
