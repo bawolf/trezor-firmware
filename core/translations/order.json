@@ -1299,5 +1299,7 @@
   "1297": "zcash__weak_backup_warning",
   "1298": "zcash__export_viewing_key",
   "1299": "zcash__viewing_key_warning",
-  "1300": "zcash__seed_fingerprint_warning"
+  "1300": "zcash__seed_fingerprint_warning",
+  "1301": "zcash__memo",
+  "1302": "zcash__memo_hash"
 }

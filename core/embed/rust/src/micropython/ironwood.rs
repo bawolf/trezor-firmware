@@ -189,7 +189,10 @@ extern "C" fn session_feed(n_args: usize, args: *const Obj) -> Obj {
             Step::Output(output) => {
                 // Memo kinds as the handler shows them: 0 nothing, 1 text
                 // (UTF-8 bytes within the budget), 2 the 32-byte digest of a
-                // memo that is not shown verbatim.
+                // memo that is not shown verbatim. Mirrored on the Python
+                // side by `_MEMO_NONE` / `_MEMO_TEXT` / `_MEMO_DIGEST` in
+                // core/src/apps/zcash/sign_pczt.py; the two lists must move
+                // together.
                 let (memo_kind, memo): (u8, Obj) = match &output.memo {
                     Memo::Empty => (0, Obj::const_none()),
                     Memo::Text(text) => (1, Obj::try_from(text.as_str().as_bytes())?),

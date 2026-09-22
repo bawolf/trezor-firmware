@@ -5,7 +5,7 @@ streaming session (`trezorironwood.session_*`), which never retains more than
 one action. Payment outputs are confirmed as they arrive, like Bitcoin's
 signer; those confirmations are not consent. Consent is the totals screen
 after the whole PCZT verified, after which the device returns one signature
-record per real spend (docs/proposals/STREAMING_SIGNING_DESIGN.md §3-§4).
+record per real spend (docs/common/zcash-ironwood-signing.md §3-§4).
 """
 
 from micropython import const
@@ -64,10 +64,15 @@ _TOO_MANY_ACTIONS = "Too many transaction actions (max 32)"
 _STEP_OUTPUT = const(1)
 _STEP_REVIEW = const(2)
 
-# Memo kinds of an output step (design note §11: nonempty memos are shown;
-# text within the byte budget verbatim, anything else as a hash). The native
-# session recovers the memo from the signed ciphertext, classifies it and
-# hands over only what is shown; the 512 memo bytes never reach Python.
+# Memo kinds of an output step. Emitted by `session_feed` in
+# core/embed/rust/src/micropython/ironwood.rs, which picks the same 0/1/2;
+# the two lists must move together. The native session recovers the memo
+# from the signed ciphertext, classifies it and hands over only what is
+# shown, so the 512 memo bytes never reach Python: nothing for an empty
+# memo, the UTF-8 text of a memo within the 256-byte display budget, or the
+# 32-byte BLAKE2b-256 of all 512 bytes for anything else (binary, reserved
+# leading byte, not UTF-8, over the budget, or a character the device
+# cannot draw as itself).
 _MEMO_NONE = const(0)
 _MEMO_TEXT = const(1)
 _MEMO_DIGEST = const(2)
@@ -138,7 +143,7 @@ async def _confirm_memo(memo_kind: int, memo: bytes, number: int) -> None:
         await layouts.confirm_value(
             title,
             memo.decode(),
-            "Memo",
+            TR.zcash__memo,
             br_name="confirm_memo",
             br_code=ButtonRequestType.ConfirmOutput,
             verb=TR.buttons__continue,
@@ -150,7 +155,7 @@ async def _confirm_memo(memo_kind: int, memo: bytes, number: int) -> None:
         await layouts.confirm_value(
             title,
             hexlify_if_bytes(memo),
-            "Memo hash (binary or too long to show)",
+            TR.zcash__memo_hash,
             br_name="confirm_memo",
             br_code=ButtonRequestType.ConfirmOutput,
             verb=TR.buttons__continue,
