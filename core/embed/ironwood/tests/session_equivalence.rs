@@ -15,6 +15,13 @@ mod stream;
 use std::collections::BTreeSet;
 
 use common::*;
+use ironwood::{
+    Engine, ErrorCode, Event, Network, OutputKind, Policy, Review, ReviewedOutput, Session,
+    SignatureRecord,
+};
+pub use ironwood::{
+    Error, MAX_ACTIONS, MAX_PCZT_BYTES, Result, USER_ADDRESS_BUDGET, ZIP32_HARDENED,
+};
 use ironwood_pasta_curves::group::ff::{Field, PrimeField};
 use ironwood_pasta_curves::pallas;
 use orchard::keys::{FullViewingKey, SpendAuthorizingKey, SpendingKey};
@@ -24,13 +31,6 @@ use pczt::roles::signer::{Signer, SpendAuthSignature};
 use rand_chacha::ChaCha20Rng;
 use rand_chacha::rand_core::SeedableRng;
 use serde_json::{Value, json};
-use trezor_ironwood::{
-    Engine, ErrorCode, Event, Network, OutputKind, Policy, Review, ReviewedOutput, Session,
-    SignatureRecord,
-};
-pub use trezor_ironwood::{
-    Error, MAX_ACTIONS, MAX_PCZT_BYTES, Result, USER_ADDRESS_BUDGET, ZIP32_HARDENED,
-};
 use zcash_protocol::memo::MemoBytes;
 use zcash_protocol::value::MAX_MONEY;
 
@@ -204,7 +204,7 @@ fn corpus() -> Vec<Case> {
             build(
                 600_000,
                 390_000,
-                MemoBytes::from_bytes(&[b'a'; trezor_ironwood::MEMO_TEXT_BUDGET]).unwrap(),
+                MemoBytes::from_bytes(&[b'a'; ironwood::MEMO_TEXT_BUDGET]).unwrap(),
                 false,
             ),
         ),
@@ -213,7 +213,7 @@ fn corpus() -> Vec<Case> {
             build(
                 600_000,
                 390_000,
-                MemoBytes::from_bytes(&[b'a'; trezor_ironwood::MEMO_TEXT_BUDGET + 1]).unwrap(),
+                MemoBytes::from_bytes(&[b'a'; ironwood::MEMO_TEXT_BUDGET + 1]).unwrap(),
                 false,
             ),
         ),
@@ -968,7 +968,7 @@ fn run(session: &mut Session<ChaCha20Rng>, bytes: &[u8], chunk: usize) -> Result
     stream_into(session, bytes, bytes.len(), chunk)
 }
 
-fn assert_no_consent(session: &mut Session<ChaCha20Rng>, token: Option<&trezor_ironwood::Token>) {
+fn assert_no_consent(session: &mut Session<ChaCha20Rng>, token: Option<&ironwood::Token>) {
     assert!(!session.test_has_pending_request());
     assert!(session.test_request_binding_is_zero());
     if let Some(token) = token {

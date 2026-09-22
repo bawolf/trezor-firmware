@@ -1,9 +1,9 @@
 use core::ffi::CStr;
 
-use trezor_ironwood::{MAX_ACTIONS, Memo};
-use trezor_ironwood_receive::{derive_external_receiver, derive_full_viewing_key, Network};
+use ironwood::receive::{derive_external_receiver, derive_full_viewing_key, Network};
+use ironwood::{Memo, MAX_ACTIONS};
 
-use crate::ironwood_signing::{self, Failure, Step, RECORD_LEN};
+use crate::ironwood::signing::{self, Failure, Step, RECORD_LEN};
 use crate::micropython::buffer::{get_buffer, get_buffer_mut};
 use crate::micropython::map::Map;
 use crate::micropython::module::Module;
@@ -36,7 +36,7 @@ extern "C" fn derive_receiver(n_args: usize, args: *const Obj) -> Obj {
         // viewing-key derivation allocate. Root (or reuse) the boot-lifetime
         // signing region first: it is a `.buf` static that is reserved
         // whatever this image does, and `install_region` is idempotent.
-        crate::ironwood_allocator::install_region();
+        crate::ironwood::allocator::install_region();
 
         let receiver = {
             // SAFETY: No MicroPython code or allocation runs while either buffer is
@@ -80,7 +80,7 @@ extern "C" fn derive_viewing_key(n_args: usize, args: *const Obj) -> Obj {
         // viewing-key derivation allocate. Root (or reuse) the boot-lifetime
         // signing region first: it is a `.buf` static that is reserved
         // whatever this image does, and `install_region` is idempotent.
-        crate::ironwood_allocator::install_region();
+        crate::ironwood::allocator::install_region();
 
         // SAFETY: The seed is immutable, the output is a distinct writable
         // object, and neither reference is retained or crosses into Python.
@@ -112,7 +112,7 @@ extern "C" fn seed_fingerprint(seed: Obj, output: Obj) -> Obj {
         let output: &mut [u8; 32] = output
             .try_into()
             .map_err(|_| Error::ValueError(c"Invalid seed fingerprint output length"))?;
-        ironwood_signing::seed_fingerprint(seed, output)
+        signing::seed_fingerprint(seed, output)
             .map_err(|_| Error::RuntimeError(c"Seed fingerprint derivation failed"))?;
         Ok(Obj::const_none())
     };
@@ -134,10 +134,10 @@ fn failure(failure: Failure) -> Error {
     }
 }
 
-fn parse_network(value: Obj) -> Result<trezor_ironwood::Network, Error> {
+fn parse_network(value: Obj) -> Result<ironwood::Network, Error> {
     match parse_u32(value, c"Invalid network")? {
-        0 => Ok(trezor_ironwood::Network::Mainnet),
-        1 => Ok(trezor_ironwood::Network::Testnet),
+        0 => Ok(ironwood::Network::Mainnet),
+        1 => Ok(ironwood::Network::Testnet),
         _ => Err(Error::ValueError(c"Invalid network")),
     }
 }
@@ -158,21 +158,21 @@ extern "C" fn session_begin(n_args: usize, args: *const Obj) -> Obj {
             return Err(Error::TypeError);
         }
         // Any earlier request must release its blocks before the new one begins.
-        ironwood_signing::cancel();
+        signing::cancel();
         // Root (or reuse) the boot-lifetime signing region. It is a native
         // `.buf` static, not a Python object, so nothing needs to be kept
         // referenced across the session and it survives every session for the
         // whole boot (fixes cross-session staleness of the Pasta table / orchard
         // OnceBox caches; docs/decisions/2026-09-18-cross-session-region-lifetime.md).
-        crate::ironwood_allocator::install_region();
+        crate::ironwood::allocator::install_region();
         // Measurement bookkeeping: reset the per-session region peak and sample
         // the bytes already in use (the persistent Pasta table + orchard OnceBox
         // caches after session 1) BEFORE `begin` allocates, so the sweep can see a
         // flat per-session peak and a constant in-use-at-begin (a leak otherwise).
-        crate::ironwood_allocator::mark_session_begin();
+        crate::ironwood::allocator::mark_session_begin();
         // SAFETY: the seed is borrowed for this call only and not mutated.
         let seed = unsafe { get_buffer(args[0])? };
-        ironwood_signing::begin(
+        signing::begin(
             seed,
             network,
             account,
@@ -195,7 +195,7 @@ extern "C" fn session_feed(n_args: usize, args: *const Obj) -> Obj {
         }
         // SAFETY: the chunk is borrowed for the call only and not mutated.
         let chunk = unsafe { get_buffer(args[0])? };
-        let (consumed, step) = ironwood_signing::feed(chunk).map_err(failure)?;
+        let (consumed, step) = signing::feed(chunk).map_err(failure)?;
         let (kind, payload): (u8, Obj) = match step {
             Step::Continue => (0, Obj::const_none()),
             Step::Output(output) => {
@@ -247,7 +247,7 @@ extern "C" fn session_feed(n_args: usize, args: *const Obj) -> Obj {
 
 extern "C" fn session_approve() -> Obj {
     let block = || {
-        ironwood_signing::approve().map_err(failure)?;
+        signing::approve().map_err(failure)?;
         Ok(Obj::const_none())
     };
     unsafe { util::try_or_raise(block) }
@@ -262,7 +262,7 @@ extern "C" fn session_sign(seed: Obj) -> Obj {
         let count = {
             // SAFETY: the seed is borrowed for the derivation only.
             let seed = unsafe { get_buffer(seed)? };
-            ironwood_signing::sign(seed, &mut records).map_err(failure)?
+            signing::sign(seed, &mut records).map_err(failure)?
         };
         Obj::try_from(&records[..count * RECORD_LEN])
     };
@@ -270,7 +270,7 @@ extern "C" fn session_sign(seed: Obj) -> Obj {
 }
 
 extern "C" fn session_cancel() -> Obj {
-    ironwood_signing::cancel();
+    signing::cancel();
     Obj::const_none()
 }
 
@@ -284,9 +284,9 @@ extern "C" fn session_region_high_water() -> Obj {
         // region base; every element is 0 on the emulator. The per-session peak
         // is the figure the sweep reads (the boot-monotone peak can only grow).
         Ok(Tuple::alloc(&[
-            Obj::try_from(crate::ironwood_allocator::region_session_high_water())?,
-            Obj::try_from(crate::ironwood_allocator::region_in_use_at_begin())?,
-            Obj::try_from(crate::ironwood_allocator::region_high_water())?,
+            Obj::try_from(crate::ironwood::allocator::region_session_high_water())?,
+            Obj::try_from(crate::ironwood::allocator::region_in_use_at_begin())?,
+            Obj::try_from(crate::ironwood::allocator::region_high_water())?,
         ])?
         .into())
     };
@@ -318,16 +318,16 @@ extern "C" fn bench(n_args: usize, args: *const Obj) -> Obj {
         // The signing region is now a boot-lifetime `.buf` static, so the
         // caller's bytearray (arg 1) is accepted for API compatibility but
         // ignored; the bench allocates from the same rooted region signing uses.
-        crate::ironwood_allocator::install_region();
+        crate::ironwood::allocator::install_region();
         let accumulator: u64 = match selector {
             0 => {
-                trezor_ironwood::bench::warmup();
+                ironwood::bench::warmup();
                 0
             }
-            1 => trezor_ironwood::bench::note_commitment(iters),
-            2 => trezor_ironwood::bench::sinsemilla_hash(iters),
-            3 => trezor_ironwood::bench::scalar_mul(iters),
-            4 => trezor_ironwood::bench::commit_ivk(iters),
+            1 => ironwood::bench::note_commitment(iters),
+            2 => ironwood::bench::sinsemilla_hash(iters),
+            3 => ironwood::bench::scalar_mul(iters),
+            4 => ironwood::bench::commit_ivk(iters),
             _ => return Err(Error::ValueError(c"Invalid bench selector")),
         };
         Obj::try_from(accumulator)
@@ -337,14 +337,14 @@ extern "C" fn bench(n_args: usize, args: *const Obj) -> Obj {
 
 // The module is defined twice under mutually-exclusive cfgs. The PRODUCTION
 // variant (default) omits the MEASUREMENT-ONLY `session_region_high_water` and
-// `bench` bindings so no bench symbol links and no region telemetry is reachable
-// (Fable review R1). The MEASUREMENT variant (`ironwood-measurement`) adds those
-// two bindings for on-device op-timing sweeps. The `obj_module!` macro cannot
-// cfg individual entries, so the two shared-plus-extra variants are spelled out;
-// keep the shared entries below in sync between the two. Only the PRODUCTION
-// table carries the `/// def` mock docs for the shared entries (`build_mocks`
-// is cfg-blind and would otherwise emit every shared stub twice); the
-// MEASUREMENT table documents only its two extra bindings.
+// `bench` bindings so no bench symbol links and no region telemetry is
+// reachable (Fable review R1). The MEASUREMENT variant (`ironwood-measurement`)
+// adds those two bindings for on-device op-timing sweeps. The `obj_module!`
+// macro cannot cfg individual entries, so the two shared-plus-extra variants
+// are spelled out; keep the shared entries below in sync between the two. Only
+// the PRODUCTION table carries the `/// def` mock docs for the shared entries
+// (`build_mocks` is cfg-blind and would otherwise emit every shared stub
+// twice); the MEASUREMENT table documents only its two extra bindings.
 
 /// PRODUCTION module (default): no MEASUREMENT-ONLY bindings.
 #[cfg(not(feature = "ironwood-measurement"))]

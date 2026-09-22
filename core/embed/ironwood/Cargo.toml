@@ -1,8 +1,8 @@
 [package]
-name = "trezor-ironwood"
+name = "ironwood"
 version = "0.0.0"
 edition = "2024"
-publish = false
+links = "ironwood"
 
 [features]
 default = []
@@ -11,9 +11,9 @@ test = []
 # Links the small-flash *computed-generators* Sinsemilla instead of the fast
 # precomputed table. Production firmware enables this (via the `rust` crate's
 # `ironwood` feature) to save flash; host regression builds
-# (`cargo test -p trezor-ironwood`) leave it OFF so the table generators link
-# and the equivalence corpus runs in minutes, not tens of minutes. The Session
-# == Engine equivalence is representation-independent, so it holds either way.
+# (`cargo test -p ironwood`) leave it OFF so the table generators link and the
+# equivalence corpus runs in minutes, not tens of minutes. The Session ==
+# Engine equivalence is representation-independent, so it holds either way.
 computed-generators = ["ironwood-sinsemilla/computed-generators"]
 # Measurement-only op-timing scaffolding (the `bench` module). Default-OFF so
 # production builds exclude it entirely (Fable review R1). A measurement image
@@ -23,6 +23,7 @@ ironwood-measurement = []
 [dependencies]
 # Exact versions live in the embed workspace manifest. Every production
 # dependency is default-off; the crate enables only the portable features it uses.
+aes.workspace = true
 blake2b_simd.workspace = true
 ironwood-pasta-curves.workspace = true
 ironwood-sinsemilla.workspace = true
@@ -43,3 +44,9 @@ rand_core = { workspace = true, features = ["getrandom"] }
 serde_json.workspace = true
 zcash_protocol = { workspace = true, features = ["local-consensus"] }
 zip32.workspace = true
+
+# Host-side generator for the emulator signing fixtures. Requires `test`, so no
+# firmware build can reach it.
+[[example]]
+name = "ironwood_fixture"
+required-features = ["test"]

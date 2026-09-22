@@ -1,5 +1,5 @@
 //! Emulator-only global allocator for the Ironwood crates: the device image
-//! carves from a Python-owned region (`ironwood_allocator.rs`); the unix
+//! carves from a Python-owned region (`allocator.rs`); the unix
 //! emulator delegates to the C allocator, so the region the handler passes is
 //! accepted and ignored.
 

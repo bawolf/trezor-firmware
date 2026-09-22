@@ -28,12 +28,11 @@ num-derive.workspace = true
 num-traits.workspace = true
 pareen.workspace = true
 qrcodegen-no-heap.workspace = true
+ironwood = { workspace = true, optional = true }
 orchard = { workspace = true, optional = true }
 rand_core = { workspace = true, optional = true }
 spin.workspace = true
 static-alloc.workspace = true
-trezor-ironwood = { workspace = true, optional = true }
-trezor-ironwood-receive = { workspace = true, optional = true }
 trezor-thp = { workspace = true, optional = true }
 trezor-tjpgdec.workspace = true
 ufmt.workspace = true
@@ -82,19 +81,18 @@ layout_eckhart = []
 ironwood = [
     "dep:orchard",
     "dep:rand_core",
-    "dep:trezor-ironwood",
-    "dep:trezor-ironwood-receive",
+    "dep:ironwood",
     # Flash lever: production firmware links the small-flash computed-generators
-    # Sinsemilla. Host regression (`cargo test -p trezor-ironwood`) omits it and
+    # Sinsemilla. Host regression (`cargo test -p ironwood`) omits it and
     # links the fast table generators instead (see the crate feature comment).
-    "trezor-ironwood/computed-generators",
+    "ironwood/computed-generators",
 ]
 # Measurement-only op-timing scaffolding: the native `bench` binding, the
 # `session_region_high_water` region-telemetry binding, and the reserved-0xff
 # `_op_timing_bench` short-circuit in get_address.py. Default-OFF; production
 # builds omit it so no bench symbol links and no region telemetry is reachable
 # pre-consent (Fable review R1). Implies `ironwood`.
-ironwood-measurement = ["ironwood", "trezor-ironwood/ironwood-measurement"]
+ironwood-measurement = ["ironwood", "ironwood/ironwood-measurement"]
 micropython = ["dep:upymod"]
 miniscript = []
 n1w1 = []

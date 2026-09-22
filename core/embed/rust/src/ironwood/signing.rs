@@ -15,18 +15,18 @@
 use alloc::boxed::Box;
 use core::ptr;
 
-use orchard::keys::{FullViewingKey, SpendAuthorizingKey, SpendingKey};
-use rand_core::{CryptoRng, Error as RngError, RngCore};
-use trezor_ironwood::{
+use ironwood::{
     Account, Event, Limits, Memo, Network, Policy, RequestContext, Result, Review, Session,
 };
+use orchard::keys::{FullViewingKey, SpendAuthorizingKey, SpendingKey};
+use rand_core::{CryptoRng, Error as RngError, RngCore};
 
 /// Pool tag of a signature record (design §3).
 pub const POOL_IRONWOOD: u8 = 0x03;
 /// `pool ‖ action_index ‖ signature`.
 pub const RECORD_LEN: usize = 1 + 1 + 64;
 
-/// Seed lengths the receive crate admits (`ironwood-receive/src/keys.rs`):
+/// Seed lengths the receive module admits (`ironwood/src/receive/keys.rs`):
 /// a restored SLIP-39 secret or a ZIP-32 seed. Kept identical so an account
 /// that can show an address can also sign.
 const RESTORED_SLIP39_SEED_BYTES: usize = 16;
@@ -138,19 +138,19 @@ fn admissible_seed(seed: &[u8]) -> bool {
         || (MIN_ZIP32_SEED_BYTES..=MAX_SEED_BYTES).contains(&seed.len())
 }
 
-/// The device's ZIP-32 seed fingerprint ([`trezor_ironwood::seed_fingerprint`])
+/// The device's ZIP-32 seed fingerprint ([`ironwood::seed_fingerprint`])
 /// into `output`. A public identifier of the seed, not key material; `seed`
 /// is borrowed for this call only.
 ///
 /// For a 16-byte restored SLIP-39 secret this is a Trezor-only extension of
-/// the ZIP-32 construction (see [`trezor_ironwood::seed_fingerprint`]): the
+/// the ZIP-32 construction (see [`ironwood::seed_fingerprint`]): the
 /// standard defines no fingerprint that short, so the device's value is the
 /// authoritative one for such a wallet.
 pub fn seed_fingerprint(seed: &[u8], output: &mut [u8; 32]) -> core::result::Result<(), Failure> {
     if !admissible_seed(seed) {
         return Err(Failure::State);
     }
-    *output = trezor_ironwood::seed_fingerprint(seed).ok_or(Failure::State)?;
+    *output = ironwood::seed_fingerprint(seed).ok_or(Failure::State)?;
     Ok(())
 }
 
@@ -221,9 +221,9 @@ pub enum Failure {
     Signing,
 }
 
-impl From<trezor_ironwood::ErrorCode> for Failure {
-    fn from(code: trezor_ironwood::ErrorCode) -> Self {
-        use trezor_ironwood::ErrorCode::*;
+impl From<ironwood::ErrorCode> for Failure {
+    fn from(code: ironwood::ErrorCode) -> Self {
+        use ironwood::ErrorCode::*;
         match code {
             Malformed => Self::Malformed,
             Capacity => Self::Capacity,
@@ -261,7 +261,7 @@ pub fn begin(
     // point (one `Fp` square root), without the ~2-3 s of Sinsemilla hashing the
     // old `bench::warmup` wasted here and without rooting the region for process
     // lifetime. It touches no signing material and changes no signing behavior.
-    trezor_ironwood::prewarm();
+    ironwood::prewarm();
     let policy = Policy::new(
         RequestContext::new(network, Account::new(account)?, host_reference_height),
         Limits::new(maximum_fee, expiry_window)?,
@@ -272,7 +272,7 @@ pub fn begin(
     drop(keys);
     // The device's own seed fingerprint: with the consented account it is the
     // only `zip32_derivation` the session admits on the wire.
-    let seed_fingerprint = trezor_ironwood::seed_fingerprint(seed).ok_or(Failure::State)?;
+    let seed_fingerprint = ironwood::seed_fingerprint(seed).ok_or(Failure::State)?;
     let mut session = Session::with_rng(policy, DeviceRng)?;
     session.begin(declared_len, &fvk, &seed_fingerprint)?;
     *active() = Some(Box::new(Signing {
@@ -304,7 +304,7 @@ fn with_active<T>(f: impl FnOnce(&mut Signing) -> Result<T>) -> core::result::Re
 pub fn feed(chunk: &[u8]) -> core::result::Result<(usize, Step), Failure> {
     with_active(|signing| {
         if signing.review.is_some() {
-            return Err(trezor_ironwood::ErrorCode::State);
+            return Err(ironwood::ErrorCode::State);
         }
         let (consumed, event) = signing.session.feed(chunk, &signing.fvk)?;
         let step = match event {
@@ -313,7 +313,7 @@ pub fn feed(chunk: &[u8]) -> core::result::Result<(usize, Step), Failure> {
                 action_index: output.action_index,
                 receiver: output.receiver,
                 value: output.value,
-                is_change: output.kind == trezor_ironwood::OutputKind::InternalChange,
+                is_change: output.kind == ironwood::OutputKind::InternalChange,
                 memo: output.memo,
             }),
             Event::Review(review) => {
@@ -329,7 +329,7 @@ pub fn feed(chunk: &[u8]) -> core::result::Result<(usize, Step), Failure> {
                     payment_outputs: projection
                         .outputs
                         .iter()
-                        .filter(|output| output.kind == trezor_ironwood::OutputKind::Payment)
+                        .filter(|output| output.kind == ironwood::OutputKind::Payment)
                         .count(),
                     // One Orchard action per output; `outputs` holds every
                     // payment and change output, `padding_outputs` counts the
@@ -348,10 +348,7 @@ pub fn feed(chunk: &[u8]) -> core::result::Result<(usize, Step), Failure> {
 /// Records consent after the trusted totals screen.
 pub fn approve() -> core::result::Result<(), Failure> {
     with_active(|signing| {
-        let review = signing
-            .review
-            .as_ref()
-            .ok_or(trezor_ironwood::ErrorCode::State)?;
+        let review = signing.review.as_ref().ok_or(ironwood::ErrorCode::State)?;
         signing.session.approve(review.token())
     })
 }
@@ -361,12 +358,9 @@ pub fn approve() -> core::result::Result<(), Failure> {
 /// derived from `seed` for this call only and wiped before returning.
 pub fn sign(seed: &[u8], records: &mut [u8]) -> core::result::Result<usize, Failure> {
     let result = with_active(|signing| {
-        let review = signing
-            .review
-            .as_ref()
-            .ok_or(trezor_ironwood::ErrorCode::State)?;
+        let review = signing.review.as_ref().ok_or(ironwood::ErrorCode::State)?;
         let keys = AccountKeys::derive(seed, signing.coin_type, signing.account)
-            .ok_or(trezor_ironwood::ErrorCode::State)?;
+            .ok_or(ironwood::ErrorCode::State)?;
         let mut ask = keys.spend_authorizing_key();
         drop(keys);
         let signatures = signing.session.sign(review.token(), &ask);
@@ -376,7 +370,7 @@ pub fn sign(seed: &[u8], records: &mut [u8]) -> core::result::Result<usize, Fail
         for record in signatures.records() {
             let slot = records
                 .get_mut(written..written + RECORD_LEN)
-                .ok_or(trezor_ironwood::ErrorCode::Capacity)?;
+                .ok_or(ironwood::ErrorCode::Capacity)?;
             slot[0] = POOL_IRONWOOD;
             slot[1] = record.action_index;
             slot[2..].copy_from_slice(&record.signature);

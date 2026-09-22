@@ -1,6 +1,6 @@
 //! The device's seed fingerprint against the canonical implementation.
 
-use trezor_ironwood::seed_fingerprint;
+use ironwood::seed_fingerprint;
 use zip32::fingerprint::SeedFingerprint;
 
 /// For every seed length ZIP 32 admits the device fingerprint is the ZIP-32

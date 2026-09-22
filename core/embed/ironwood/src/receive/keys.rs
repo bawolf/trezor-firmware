@@ -6,7 +6,7 @@ use ironwood_pasta_curves::group::{Curve, GroupEncoding};
 use ironwood_pasta_curves::pallas::Scalar;
 use zeroize::{Zeroize, ZeroizeOnDrop};
 
-use crate::{Error, Network, Result, ff1, generators, sinsemilla};
+use super::{Error, Network, Result, ff1, generators, sinsemilla};
 
 const RESTORED_SLIP39_SEED_BYTES: usize = 16;
 const MIN_ZIP32_SEED_BYTES: usize = 32;

@@ -1,4 +1,4 @@
-Trezor Ironwood approval core
+Trezor Ironwood approval core and receiver derivation
 Copyright (c) 2026 Bryant Wolf
 
 This component follows the Trezor Core licensing convention and is governed by
@@ -7,6 +7,10 @@ project-authored donor sources that were published under the MIT License. The
 donor license is retained in `DONOR-LICENSE-MIT`, with exact provenance and
 file-level donor hashes in `SOURCE_MAP.md`; this is not a per-directory license
 exception.
+
+The receiver derivation under `src/receive/` is a Rust re-expression of code
+from Trezor's historical `zcash-orchard` branch; its source paths and hashes are
+in `SOURCE_MAP.md` too.
 
 The public Zcash dependencies retain their own package license metadata and
 license texts. The Zcash crates used here are MIT OR Apache-2.0, blake2b_simd

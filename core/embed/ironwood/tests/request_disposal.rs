@@ -3,10 +3,10 @@
 mod common;
 
 use common::{TestEngineExt, assert_error, engine, fixture, keys};
+use ironwood::ErrorCode;
 use orchard::keys::{SpendAuthorizingKey, SpendingKey};
-use trezor_ironwood::ErrorCode;
 
-fn assert_empty(engine: &trezor_ironwood::Engine<rand_chacha::ChaCha20Rng>) {
+fn assert_empty(engine: &ironwood::Engine<rand_chacha::ChaCha20Rng>) {
     assert!(!engine.test_has_pending_request());
     assert!(engine.test_request_binding_is_zero());
 }

@@ -971,6 +971,28 @@ dependencies = [
 ]
 
 [[package]]
+name = "ironwood"
+version = "0.0.0"
+dependencies = [
+ "aes",
+ "blake2b_simd",
+ "orchard",
+ "pasta_curves",
+ "pczt",
+ "rand_chacha",
+ "rand_core 0.6.4",
+ "sapling-crypto",
+ "serde_json",
+ "sinsemilla",
+ "zcash_note_encryption",
+ "zcash_primitives",
+ "zcash_protocol",
+ "zcash_transparent",
+ "zeroize",
+ "zip32",
+]
+
+[[package]]
 name = "itertools"
 version = "0.13.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2001,37 +2023,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "db97caf9d906fbde555dd62fa95ddba9eecfd14cb388e4f491a66d74cd5fb79a"
 
 [[package]]
-name = "trezor-ironwood"
-version = "0.0.0"
-dependencies = [
- "blake2b_simd",
- "orchard",
- "pasta_curves",
- "pczt",
- "rand_chacha",
- "rand_core 0.6.4",
- "sapling-crypto",
- "serde_json",
- "sinsemilla",
- "zcash_note_encryption",
- "zcash_primitives",
- "zcash_protocol",
- "zcash_transparent",
- "zeroize",
- "zip32",
-]
-
-[[package]]
-name = "trezor-ironwood-receive"
-version = "0.0.0"
-dependencies = [
- "aes",
- "blake2b_simd",
- "pasta_curves",
- "zeroize",
-]
-
-[[package]]
 name = "trezor-noise-protocol"
 version = "0.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2065,6 +2056,7 @@ dependencies = [
  "heapless",
  "hex",
  "io",
+ "ironwood",
  "log",
  "minicbor",
  "models",
@@ -2080,8 +2072,6 @@ dependencies = [
  "spin",
  "static-alloc",
  "sys",
- "trezor-ironwood",
- "trezor-ironwood-receive",
  "trezor-thp",
  "trezor-tjpgdec",
  "ufmt",

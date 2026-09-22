@@ -13,8 +13,8 @@
 //! T3B1 -- alongside the other persistent display/wire buffers, and NOT in the
 //! MicroPython GC heap). It is
 //! formatted once, on the first `install_region`, and never freed. Blocks are
-//! split on allocation; on free the whole region is swept once (O(n)) to merge every
-//! run of adjacent free blocks, so freed per-action scratch is reclaimed
+//! split on allocation; on free the whole region is swept once (O(n)) to merge
+//! every run of adjacent free blocks, so freed per-action scratch is reclaimed
 //! regardless of the order frees arrive in (temporary vectors — Pasta grows
 //! four 256-element vectors while building the table — do not strand holes).
 //!
@@ -50,16 +50,18 @@
 //! freed, so the table and caches stay valid across every session by
 //! construction, the pre-warm is a one-time boot cost, and the region no longer
 //! competes with (or churns) the GC heap. `install_region` formats it once
-//! (`REGION_ROOTED`) and is a no-op thereafter, keeping every earlier allocation.
+//! (`REGION_ROOTED`) and is a no-op thereafter, keeping every earlier
+//! allocation.
 
 use core::alloc::{GlobalAlloc, Layout};
 use core::mem::MaybeUninit;
 use core::ptr;
 
 /// Bytes of the process-lifetime signing region. Sized to the measured
-/// single-session working set (~44 KB high-water incl. the ~29.8 KB Pasta table)
-/// plus headroom. Reserved from AUX2 RAM, so it shrinks the MicroPython GC heap
-/// by this amount for the whole boot (see the decision note's heap analysis).
+/// single-session working set (~44 KB high-water incl. the ~29.8 KB Pasta
+/// table) plus headroom. Reserved from AUX2 RAM, so it shrinks the MicroPython
+/// GC heap by this amount for the whole boot (see the decision note's heap
+/// analysis).
 const REGION_BYTES: usize = 96 * 1024;
 
 /// 16-byte-aligned backing store so the free-list base is `UNIT`-aligned.
@@ -71,8 +73,8 @@ struct Region(MaybeUninit<[u8; REGION_BYTES]>);
 /// freed, never moved: this is what keeps Pasta's sqrt table and orchard's
 /// `OnceBox` caches valid across sessions. Contents are formatted by
 /// `install_region` before any use, so leaving it uninitialised (`.buf` is
-/// NOLOAD) is fine. The `link_section` is skipped on host/emulator builds, which
-/// never compile this module anyway (it is `target_arch = "arm"` only).
+/// NOLOAD) is fine. The `link_section` is skipped on host/emulator builds,
+/// which never compile this module anyway (it is `target_arch = "arm"` only).
 #[cfg_attr(not(target_os = "macos"), link_section = ".buf")]
 static mut REGION: Region = Region(MaybeUninit::uninit());
 
@@ -93,8 +95,8 @@ static mut REGION_SESSION_PEAK: usize = 0;
 // constant across a sweep; any upward drift is a cross-session leak.
 static mut REGION_IN_USE_AT_BEGIN: usize = 0;
 // Set once the region is formatted this boot; `install_region` is then a no-op
-// so the Pasta table + orchard OnceBox caches carved into it survive every later
-// session (the whole point of the process-lifetime region).
+// so the Pasta table + orchard OnceBox caches carved into it survive every
+// later session (the whole point of the process-lifetime region).
 static mut REGION_ROOTED: bool = false;
 
 const HEADER: usize = 16;
@@ -117,19 +119,20 @@ unsafe fn set_block(block: *mut u8, len: usize, free: bool) {
     }
 }
 
-/// True if a header describes a well-formed block that stays inside `[base, end)`.
-/// A malformed header (zero length, off the UNIT grid, or running past the region
-/// end) can only arise from a wild write by another subsystem; the walks below stop
-/// on it rather than looping forever or stepping outside the region.
+/// True if a header describes a well-formed block that stays inside `[base,
+/// end)`. A malformed header (zero length, off the UNIT grid, or running past
+/// the region end) can only arise from a wild write by another subsystem; the
+/// walks below stop on it rather than looping forever or stepping outside the
+/// region.
 unsafe fn block_ok(block: *mut u8, blen: usize, end: *mut u8) -> bool {
     blen != 0 && blen % UNIT == 0 && unsafe { block.add(blen) } <= end
 }
 
-/// Sweep the whole region once, merging every maximal run of adjacent free blocks
-/// into a single free block. O(n) in the number of blocks. Called on every free so
-/// the free list is always fully coalesced (no two adjacent free blocks), which makes
-/// backward coalescing fall out of the forward sweep and keeps first-fit allocation
-/// order-independent.
+/// Sweep the whole region once, merging every maximal run of adjacent free
+/// blocks into a single free block. O(n) in the number of blocks. Called on
+/// every free so the free list is always fully coalesced (no two adjacent free
+/// blocks), which makes backward coalescing fall out of the forward sweep and
+/// keeps first-fit allocation order-independent.
 unsafe fn coalesce_all(base: *mut u8, len: usize) {
     unsafe {
         let end = base.add(len);
@@ -163,11 +166,11 @@ unsafe fn coalesce_all(base: *mut u8, len: usize) {
 
 /// Roots the process-lifetime region on the first call and is a no-op
 /// thereafter. The region is the fixed `.buf` static, so its base never moves
-/// and it is never freed: the first call formats it as one free block, and every
-/// later `session_begin` reuses it with the Pasta table + orchard `OnceBox`
-/// caches (and the coalesced free list) still intact. That is what lets a second
-/// sign in the same boot succeed where the old per-session region left those
-/// statics dangling.
+/// and it is never freed: the first call formats it as one free block, and
+/// every later `session_begin` reuses it with the Pasta table + orchard
+/// `OnceBox` caches (and the coalesced free list) still intact. That is what
+/// lets a second sign in the same boot succeed where the old per-session region
+/// left those statics dangling.
 pub fn install_region() {
     // SAFETY: single-threaded firmware; `REGION` is a boot-lifetime static.
     unsafe {
@@ -190,25 +193,25 @@ pub fn install_region() {
     }
 }
 
-/// Highest payload end handed out since the region was installed (boot-monotone,
-/// never reset), in bytes from the region base.
+/// Highest payload end handed out since the region was installed
+/// (boot-monotone, never reset), in bytes from the region base.
 pub fn region_high_water() -> usize {
     // SAFETY: single-threaded read of the bookkeeping.
     unsafe { REGION_PEAK }
 }
 
 /// Highest payload end handed out during the CURRENT session (reset at each
-/// `mark_session_begin`), in bytes from the region base. This is the per-session
-/// figure the measurement sweep reads.
+/// `mark_session_begin`), in bytes from the region base. This is the
+/// per-session figure the measurement sweep reads.
 pub fn region_session_high_water() -> usize {
     // SAFETY: single-threaded read of the bookkeeping.
     unsafe { REGION_SESSION_PEAK }
 }
 
-/// Bytes already allocated in the region when the current session began, sampled
-/// by `mark_session_begin` before `begin` allocates. Constant across a sweep in
-/// steady state (the persistent Pasta table + orchard OnceBox caches); any
-/// upward drift is a cross-session leak.
+/// Bytes already allocated in the region when the current session began,
+/// sampled by `mark_session_begin` before `begin` allocates. Constant across a
+/// sweep in steady state (the persistent Pasta table + orchard OnceBox caches);
+/// any upward drift is a cross-session leak.
 pub fn region_in_use_at_begin() -> usize {
     // SAFETY: single-threaded read of the bookkeeping.
     unsafe { REGION_IN_USE_AT_BEGIN }
@@ -241,7 +244,8 @@ pub fn region_in_use_bytes() -> usize {
 
 /// Marks the start of a signing session for measurement: resets the per-session
 /// peak and samples the in-use bytes BEFORE the session allocates, so a
-/// cross-session leak is detectable. Call after `install_region`, before `begin`.
+/// cross-session leak is detectable. Call after `install_region`, before
+/// `begin`.
 pub fn mark_session_begin() {
     // SAFETY: single-threaded write of the bookkeeping.
     unsafe {

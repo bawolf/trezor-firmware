@@ -1,4 +1,4 @@
-use trezor_ironwood_receive::{Error, Network, derive_external_receiver, derive_full_viewing_key};
+use ironwood::receive::{Error, Network, derive_external_receiver, derive_full_viewing_key};
 
 const SEED: [u8; 32] = [
     0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25,

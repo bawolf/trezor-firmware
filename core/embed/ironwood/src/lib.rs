@@ -33,6 +33,7 @@ mod digest;
 mod effects;
 mod error;
 mod prewarm;
+pub mod receive;
 mod session;
 mod stream;
 mod wire;

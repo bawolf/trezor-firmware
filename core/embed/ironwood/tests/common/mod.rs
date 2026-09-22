@@ -2,6 +2,9 @@
 
 use std::sync::atomic::{AtomicU64, Ordering};
 
+use ironwood::{
+    Account, Engine, Error, ErrorCode, Limits, Network, Policy, RequestContext, Result, Review,
+};
 use orchard::bundle::BundleVersion;
 use orchard::keys::{FullViewingKey, Scope, SpendAuthorizingKey, SpendingKey};
 use orchard::note_encryption::IronwoodDomain;
@@ -14,9 +17,6 @@ use rand_chacha::ChaCha20Rng;
 use rand_chacha::rand_core::SeedableRng;
 use rand_core::{CryptoRng, RngCore};
 use serde_json::Value;
-use trezor_ironwood::{
-    Account, Engine, Error, ErrorCode, Limits, Network, Policy, RequestContext, Result, Review,
-};
 use zcash_note_encryption::try_note_decryption;
 use zcash_primitives::transaction::builder::{BundlePadding, DeferredPcztBuilder};
 use zcash_primitives::transaction::fees::zip317;

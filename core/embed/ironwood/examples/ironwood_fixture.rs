@@ -123,7 +123,7 @@ struct Options {
 /// Shown verbatim iff a ZIP-302 text memo within the device's budget.
 const MEMO_TEXT_BUDGET: usize = 256;
 
-/// Replica of `trezor_ironwood::renders_faithfully` (private to the crate):
+/// Replica of `ironwood::renders_faithfully` (private to the crate):
 /// characters the device draws as themselves. Anything else makes the memo a
 /// digest, so the fixture's expected display must apply the same rule.
 fn renders_faithfully(c: char) -> bool {
@@ -186,11 +186,8 @@ fn build(args: &[String]) -> Result<(), String> {
     let account: u32 = args[2].parse().map_err(|_| "bad account")?;
     let height: u32 = args[3].parse().map_err(|_| "bad height")?;
     let outputs: usize = args[4].parse().map_err(|_| "bad outputs")?;
-    if !(1..=trezor_ironwood::MAX_ACTIONS).contains(&outputs) {
-        return Err(format!(
-            "outputs must be 1..={}",
-            trezor_ironwood::MAX_ACTIONS
-        ));
+    if !(1..=ironwood::MAX_ACTIONS).contains(&outputs) {
+        return Err(format!("outputs must be 1..={}", ironwood::MAX_ACTIONS));
     }
     let options = parse_options(&args[6..])?;
     let (bytes, summary) = match args[1].as_str() {

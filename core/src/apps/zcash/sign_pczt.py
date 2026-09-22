@@ -26,7 +26,7 @@ MAX_PCZT_BYTES = const(65536)
 CHUNK_BYTES = const(1024)
 TRANSFER_ID_BYTES = const(16)
 
-# Device-owned policy limits (trezor_ironwood::Limits). The fee cap is 0.01 ZEC;
+# Device-owned policy limits (ironwood::Limits). The fee cap is 0.01 ZEC;
 # the expiry window bounds how far past the host's reference height a
 # transaction may stay valid.
 MAXIMUM_FEE = const(1_000_000)

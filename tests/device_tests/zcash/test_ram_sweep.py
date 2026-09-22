@@ -65,6 +65,8 @@ def fixture_tool(tmp_path_factory) -> Path:
             "--quiet",
             "--manifest-path",
             str(CRATE / "Cargo.toml"),
+            "--features",
+            "test",
             "--example",
             "ironwood_fixture",
         ],

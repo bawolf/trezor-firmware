@@ -3,11 +3,11 @@ use std::num::NonZeroU32;
 use std::panic::AssertUnwindSafe;
 use std::rc::Rc;
 
+use ironwood::{Engine, ErrorCode, Network};
 use pczt::Pczt;
 use pczt::roles::signer::{Signer, SpendAuthSignature};
 use rand_chacha::ChaCha20Rng;
 use rand_core::{CryptoRng, RngCore, SeedableRng};
-use trezor_ironwood::{Engine, ErrorCode, Network};
 
 use super::common::{
     TestEngineExt, assert_error, build_inputs, fixture, json, keys, policy, signatures,

@@ -40,13 +40,8 @@ mod coverage;
 #[cfg(feature = "universal_fw")]
 mod definitions;
 mod io;
-#[cfg(all(feature = "ironwood", target_arch = "arm"))]
-mod ironwood_allocator;
-#[cfg(all(feature = "ironwood", not(target_arch = "arm")))]
-#[path = "ironwood_unix_allocator.rs"]
-mod ironwood_allocator;
 #[cfg(feature = "ironwood")]
-mod ironwood_signing;
+mod ironwood;
 mod maybe_trace;
 #[cfg(feature = "micropython")]
 mod micropython;

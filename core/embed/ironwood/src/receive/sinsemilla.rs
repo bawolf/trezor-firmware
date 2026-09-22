@@ -4,7 +4,7 @@ use ironwood_pasta_curves::group::ff::PrimeField;
 use ironwood_pasta_curves::group::{Curve, Group};
 use ironwood_pasta_curves::pallas::{Point, Scalar};
 
-use crate::{Error, Result, generators};
+use super::{Error, Result, generators};
 
 fn incomplete_add(lhs: Point, rhs: Point) -> Result<Point> {
     // Sinsemilla uses incomplete addition and rejects its exceptional inputs.
