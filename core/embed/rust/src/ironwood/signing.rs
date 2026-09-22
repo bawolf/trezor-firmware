@@ -169,6 +169,32 @@ pub fn seed_fingerprint(seed: &[u8], output: &mut [u8; 32]) -> core::result::Res
     Ok(())
 }
 
+/// The account's Orchard full viewing key as `ak ‖ nk ‖ rivk`, derived
+/// through `orchard` -- the implementation that signs.
+///
+/// This exists so the viewing-key export can be checked against the
+/// independent port in `ironwood::receive`, which is what derives addresses.
+/// Two implementations of ZIP-32 and the Orchard key expansion ship in this
+/// image; if they ever disagreed for some seed the wallet would receive to
+/// addresses the signing path cannot spend from, and every real spend would
+/// fail the session's `fvk` equality check. Funds stuck, not stolen, and
+/// silently.
+///
+/// `orchard`'s `from_zip32_seed` goes through `zip32`'s `HardenedOnlyKey`,
+/// which puts no lower bound on the seed, so this covers the 16-byte restored
+/// SLIP-39 secret too -- the one length with no external oracle.
+pub fn orchard_full_viewing_key(
+    seed: &[u8],
+    network: Network,
+    account: u32,
+) -> core::result::Result<[u8; 96], Failure> {
+    let keys = AccountKeys::derive(seed, coin_type(network), account).ok_or(Failure::State)?;
+    let mut fvk = keys.full_viewing_key();
+    let bytes = fvk.to_bytes();
+    wipe(&mut fvk);
+    Ok(bytes)
+}
+
 /// Derived keys of `m/32'/coin_type'/account'`. The spending key is wiped on
 /// drop; callers move the derived keys out and wipe those themselves.
 struct AccountKeys {

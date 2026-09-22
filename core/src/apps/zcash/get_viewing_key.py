@@ -74,6 +74,14 @@ async def get_viewing_key(msg: ZcashGetViewingKey) -> ZcashViewingKey:
         description=TR.zcash__viewing_key_warning,
         br_code=ButtonRequestType.SignTx,
         prompt_screen=True,
+        # Hold, not tap. A UFVK hands over the account's whole history, past
+        # and future, and with `include_seed_fingerprint` the linkage between
+        # accounts; it cannot be taken back. Bitcoin's `GetPublicKey` is
+        # tap-only, but a UFVK is closer to `GetOwnershipProof` in
+        # consequence, and hold-to-confirm is what this codebase uses when one
+        # accidental press is irreversible (`wipe_device.py`,
+        # `apply_settings.py`, `common/sdcard.py`).
+        hold=True,
     )
     ironwood_account.require_session(session)
 

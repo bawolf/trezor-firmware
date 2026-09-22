@@ -92,6 +92,29 @@ extern "C" fn derive_viewing_key(n_args: usize, args: *const Obj) -> Obj {
 
         derive_full_viewing_key(seed, network, account, output)
             .map_err(|_| Error::RuntimeError(c"Viewing key derivation failed"))?;
+
+        // Cross-check against `orchard`, the implementation that signs. The
+        // key just written comes from this firmware's own ZIP-32 and Orchard
+        // key expansion; the spending path uses `orchard`'s. Nothing but
+        // goldens has ever held the two together, and a disagreement would be
+        // silent and expensive: the wallet would receive to addresses derived
+        // from one key while every real spend failed the session's byte-for-
+        // byte `fvk` check against the other. Refuse to export rather than
+        // export something that cannot be spent from.
+        let signing_network = match network {
+            Network::Mainnet => ironwood::Network::Mainnet,
+            Network::Testnet => ironwood::Network::Testnet,
+        };
+        let independent = signing::orchard_full_viewing_key(seed, signing_network, account)
+            .map_err(|_| Error::RuntimeError(c"Viewing key derivation failed"))?;
+        let mut difference = 0u8;
+        for (a, b) in output.iter().zip(independent.iter()) {
+            difference |= a ^ b;
+        }
+        if difference != 0 {
+            output.fill(0);
+            return Err(Error::RuntimeError(c"Viewing key derivation failed"));
+        }
         Ok(Obj::const_none())
     };
 
