@@ -1,6 +1,6 @@
-use trezor_pasta_curves::Fp;
-use trezor_pasta_curves::arithmetic::CurveAffine;
-use trezor_pasta_curves::pallas::{Affine, Point};
+use ironwood_pasta_curves::Fp;
+use ironwood_pasta_curves::arithmetic::CurveAffine;
+use ironwood_pasta_curves::pallas::{Affine, Point};
 
 fn point(x: [u64; 4], y: [u64; 4]) -> Point {
     Option::<Affine>::from(Affine::from_xy(Fp::from_raw(x), Fp::from_raw(y)))
@@ -61,7 +61,7 @@ pub fn ivk_commitment_q() -> Point {
 
 #[cfg(test)]
 mod tests {
-    use trezor_pasta_curves::group::GroupEncoding;
+    use ironwood_pasta_curves::group::GroupEncoding;
 
     use super::*;
 

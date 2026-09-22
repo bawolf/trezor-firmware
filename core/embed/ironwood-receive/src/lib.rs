@@ -1,7 +1,8 @@
 #![no_std]
 #![forbid(unsafe_code)]
 #![deny(clippy::all)]
-//! Allocation-free Orchard receiver and viewing-key derivation for Trezor firmware.
+//! Allocation-free Orchard receiver and viewing-key derivation for Trezor
+//! firmware.
 //!
 //! The implementation is a current Rust port of the key primitives from
 //! Trezor's historical `zcash-orchard` branch. It intentionally exposes only

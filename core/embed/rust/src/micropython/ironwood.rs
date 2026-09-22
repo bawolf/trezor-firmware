@@ -32,6 +32,12 @@ extern "C" fn derive_receiver(n_args: usize, args: *const Obj) -> Obj {
             return Err(Error::ValueError(c"Invalid account"));
         }
 
+        // pasta_curves' `hash_to_curve` boxes its hasher, so receiver and
+        // viewing-key derivation allocate. Root (or reuse) the boot-lifetime
+        // signing region first: it is a `.buf` static that is reserved
+        // whatever this image does, and `install_region` is idempotent.
+        crate::ironwood_allocator::install_region();
+
         let receiver = {
             // SAFETY: No MicroPython code or allocation runs while either buffer is
             // borrowed. Neither buffer is mutated, and no reference is retained.
@@ -69,6 +75,12 @@ extern "C" fn derive_viewing_key(n_args: usize, args: *const Obj) -> Obj {
         if !unsafe { ffi::mp_type_bytes.is_type_of(args[0]) } {
             return Err(Error::TypeError);
         }
+
+        // pasta_curves' `hash_to_curve` boxes its hasher, so receiver and
+        // viewing-key derivation allocate. Root (or reuse) the boot-lifetime
+        // signing region first: it is a `.buf` static that is reserved
+        // whatever this image does, and `install_region` is idempotent.
+        crate::ironwood_allocator::install_region();
 
         // SAFETY: The seed is immutable, the output is a distinct writable
         // object, and neither reference is retained or crosses into Python.

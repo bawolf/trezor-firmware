@@ -1,14 +1,10 @@
-use trezor_pasta_curves::Fp;
-use trezor_pasta_curves::arithmetic::{CurveAffine, CurveExt};
-use trezor_pasta_curves::group::ff::PrimeField;
-use trezor_pasta_curves::group::{Curve, Group};
-use trezor_pasta_curves::pallas::{Point, Scalar};
+use ironwood_pasta_curves::Fp;
+use ironwood_pasta_curves::arithmetic::{CurveAffine, CurveExt};
+use ironwood_pasta_curves::group::ff::PrimeField;
+use ironwood_pasta_curves::group::{Curve, Group};
+use ironwood_pasta_curves::pallas::{Point, Scalar};
 
 use crate::{Error, Result, generators};
-
-fn hash_to_point(domain: &str, message: &[u8]) -> Point {
-    Point::hash_to_curve(domain, message)
-}
 
 fn incomplete_add(lhs: Point, rhs: Point) -> Result<Point> {
     // Sinsemilla uses incomplete addition and rejects its exceptional inputs.
@@ -26,6 +22,9 @@ fn field_bit(value: &Fp, index: usize) -> u8 {
 
 pub fn commit_ivk(ak: Fp, nk: Fp, rivk: Scalar) -> Result<Fp> {
     let mut acc = generators::ivk_commitment_q();
+    // `hash_to_curve` returns a closure holding the domain-separated hasher
+    // state, so it is built once and applied to all 51 chunks.
+    let hash_s = Point::hash_to_curve("z.cash:SinsemillaS");
 
     for chunk in 0..51 {
         let mut index = 0u16;
@@ -38,7 +37,7 @@ pub fn commit_ivk(ak: Fp, nk: Fp, rivk: Scalar) -> Result<Fp> {
             };
             index |= u16::from(bit) << offset;
         }
-        let s = hash_to_point("z.cash:SinsemillaS", &u32::from(index).to_le_bytes());
+        let s = hash_s(&u32::from(index).to_le_bytes());
         acc = incomplete_add(incomplete_add(acc, s)?, acc)?;
     }
 
@@ -54,9 +53,10 @@ pub fn commit_ivk(ak: Fp, nk: Fp, rivk: Scalar) -> Result<Fp> {
 }
 
 pub fn diversify_hash(diversifier: &[u8; 11]) -> Point {
-    let point = hash_to_point("z.cash:Orchard-gd", diversifier);
+    let hash_gd = Point::hash_to_curve("z.cash:Orchard-gd");
+    let point = hash_gd(diversifier);
     if bool::from(point.is_identity()) {
-        hash_to_point("z.cash:Orchard-gd", &[])
+        hash_gd(&[])
     } else {
         point
     }

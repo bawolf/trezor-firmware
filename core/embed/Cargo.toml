@@ -77,7 +77,7 @@ log = { version = "0.4.29", features = ["max_level_trace", "release_max_level_of
 minicbor = { version = "1.0.0", default-features = false }
 num-derive = "0.4.2"
 num-traits = { version = "0.2.19", default-features = false, features = ["libm"] }
-ironwood-pasta-curves = { package = "pasta_curves", version = "=0.5.1", default-features = false, features = ["uninline-portable"] }
+ironwood-pasta-curves = { package = "pasta_curves", version = "=0.5.1", default-features = false, features = ["alloc", "uninline-portable"] }
 # Default (no `computed-generators`) links the FAST precomputed-table Sinsemilla.
 # Production firmware turns computed generators ON via the crate's own
 # `computed-generators` feature (see `ironwood`'s feature wiring in the `rust`
@@ -88,7 +88,6 @@ ironwood-pasta-curves = { package = "pasta_curves", version = "=0.5.1", default-
 # equivalence is representation-independent, so the corpus is valid under either.
 ironwood-sinsemilla = { package = "sinsemilla", version = "=0.1.0", default-features = false }
 orchard = { version = "=0.15.3", default-features = false }
-trezor-pasta-curves = { package = "pasta_curves", git = "https://github.com/jarys/pasta_curves", rev = "e11dfe4089d0da24483094a99cceb89f32974c17", default-features = false, features = ["uninline-portable"] }
 pareen = { version = "0.3.3", path = "../../rust/pareen", default-features = false, features = ["libm", "easer"] }
 pczt = { version = "=0.9.3", default-features = false, features = ["orchard"] }
 qrcodegen-no-heap = { version = "1.8.1", path = "../vendor/QR-Code-generator/rust-no-heap" }
@@ -146,7 +145,5 @@ zlib-rs = "0.6.3"
 xbuild = { path = "xbuild" }
 
 [patch.crates-io]
-# Signing flash probe only: exact-base Sinsemilla computed-generators commit on the user fork, pinned by full SHA.
 sinsemilla = { git = "https://github.com/bawolf/sinsemilla", rev = "6ca88ff52835899c87ff83489b95c5cda887e8a4" }
-# Signing flash probe only: Orchard Sinsemilla-dedup commit on the user fork, pinned by full SHA.
 orchard = { git = "https://github.com/bawolf/orchard", rev = "d4792911986deda16cc3d689a97f316655f08e84" }

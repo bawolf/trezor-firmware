@@ -1,9 +1,9 @@
 use blake2b_simd::Params;
-use trezor_pasta_curves::Fp;
-use trezor_pasta_curves::arithmetic::{CurveAffine, FieldExt};
-use trezor_pasta_curves::group::ff::{Field, PrimeField};
-use trezor_pasta_curves::group::{Curve, GroupEncoding};
-use trezor_pasta_curves::pallas::Scalar;
+use ironwood_pasta_curves::Fp;
+use ironwood_pasta_curves::arithmetic::CurveAffine;
+use ironwood_pasta_curves::group::ff::{Field, FromUniformBytes, PrimeField};
+use ironwood_pasta_curves::group::{Curve, GroupEncoding};
+use ironwood_pasta_curves::pallas::Scalar;
 use zeroize::{Zeroize, ZeroizeOnDrop};
 
 use crate::{Error, Network, Result, ff1, generators, sinsemilla};
@@ -82,18 +82,18 @@ impl ExtendedSpendingKey {
 impl FullViewingKey {
     fn from_spending_key(spending_key: &[u8; 32]) -> Result<Self> {
         let mut ask_material = prf_expand(spending_key, &[&[0x06]]);
-        let ask = Scalar::from_bytes_wide(&ask_material);
+        let ask = Scalar::from_uniform_bytes(&ask_material);
         ask_material.zeroize();
         if bool::from(ask.is_zero()) {
             return Err(Error::InvalidKey);
         }
 
         let mut nk_material = prf_expand(spending_key, &[&[0x07]]);
-        let nk = Fp::from_bytes_wide(&nk_material);
+        let nk = Fp::from_uniform_bytes(&nk_material);
         nk_material.zeroize();
 
         let mut rivk_material = prf_expand(spending_key, &[&[0x08]]);
-        let rivk = Scalar::from_bytes_wide(&rivk_material);
+        let rivk = Scalar::from_uniform_bytes(&rivk_material);
         rivk_material.zeroize();
 
         let ak = Option::<Fp>::from(
@@ -118,7 +118,7 @@ impl FullViewingKey {
                 self.nk.to_repr().as_ref(),
             ],
         );
-        let internal_rivk = Scalar::from_bytes_wide(&material);
+        let internal_rivk = Scalar::from_uniform_bytes(&material);
         material.zeroize();
         let internal = Self {
             ak: self.ak,

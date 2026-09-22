@@ -38,27 +38,14 @@ through `FullViewingKey::from_bytes` before encoding it. These APIs establish
 that the serialized component is `ak || nk || rivk` and contains no spending
 key or spend-authorizing scalar.
 
-The Pallas implementation is reused from the exact fork and revision used by
-the historical Trezor work:
+The Pallas implementation is published `pasta_curves` 0.5.1 with
+`default-features = false` and the `alloc` and `uninline-portable` features, the
+same instance the signing path links through `orchard`. `uninline-portable` is
+the embedded lever the historical work needed a fork for; it has been a
+published feature since 0.5.1.
 
-- repository: <https://github.com/jarys/pasta_curves>
-- revision: `e11dfe4089d0da24483094a99cceb89f32974c17`
-- functional no-allocation parent: `c24eca86081b1a837671fe358af332404007d0f8`
-- enabled feature: `uninline-portable`
-- package license: MIT OR Apache-2.0
-- fetched license hashes: `LICENSE-MIT`
-  `3828dc9528439762d750e0350cc0421c7b65c29ca960b369b82951e7616a2a4a`,
-  `LICENSE-APACHE`
-  `3708458dee7f359ac6c9c5558023ed481be87e5372c43ebd7f2ca7ad23c12026`,
-  `COPYING.md`
-  `1b0f8332e3f8b72835e1bf816a7471103c74e82b16c149e08f36136e175d9846`.
-  Copies are tracked in `licenses/pasta-curves/`; their text is unchanged, with
-  trailing blank lines normalized for the repository. The tracked hashes are
-  `3828dc9528439762d750e0350cc0421c7b65c29ca960b369b82951e7616a2a4a`,
-  `a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2`, and
-  `83cb0e5d720687fb724ee31124ce67c70e643ca0ae8ea3419b98eed8f1545df0`.
-
-The fork removes boxed hash-to-curve state and its allocation feature gate. It
-is pinned because published `pasta_curves` 0.5.1 and `orchard` 0.15.3 require
-Rust allocation on this path. Dependency audit and secret-scalar cleanup remain
-explicit acceptance gates before this feasibility branch can be integrated.
+Derivation is byte-identical to the previously pinned
+`jarys/pasta_curves` e11dfe4089d0: `from_bytes_wide` is `from_uniform_bytes`
+verbatim, and simplified-SWU hashing to the curve is the same algorithm with the
+hasher returned as a boxed closure rather than applied in place. Every golden in
+`tests/receive.rs` is unchanged and passes.

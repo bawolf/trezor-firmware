@@ -5,6 +5,5 @@ This component follows the Trezor Core licensing convention and is governed by
 Trezor's historical `zcash-orchard` branch. Exact source paths and hashes are in
 `SOURCE_MAP.md`.
 
-The pinned `jarys/pasta_curves` dependency retains its MIT OR Apache-2.0 package
-license. Copies of its license texts are retained under
-`licenses/pasta-curves/`. The dependency is not relicensed by this component.
+The `pasta_curves` dependency retains its MIT OR Apache-2.0 package license and
+is not relicensed by this component.

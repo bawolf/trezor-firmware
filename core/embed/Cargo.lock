@@ -214,8 +214,8 @@ version = "0.8.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d7bc6d6292be3a19e6379786dac800f551e5865a5bb51ebbe3064ab80433f403"
 dependencies = [
- "ff 0.13.1",
- "group 0.13.0",
+ "ff",
+ "group",
  "pairing",
  "rand_core 0.6.4",
  "subtle",
@@ -726,16 +726,6 @@ checksum = "9f1f227452a390804cdb637b74a86990f2a7d7ba4b7d5693aac9b4dd6defd8d6"
 
 [[package]]
 name = "ff"
-version = "0.12.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d013fc25338cc558c5c2cfbad646908fb23591e2404481826742b651c9af7160"
-dependencies = [
- "rand_core 0.6.4",
- "subtle",
-]
-
-[[package]]
-name = "ff"
 version = "0.13.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c0b50bfb653653f9ca9095b427bed08ab8d75a137839d9ad64eb11810d5b6393"
@@ -846,22 +836,11 @@ dependencies = [
 
 [[package]]
 name = "group"
-version = "0.12.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5dfbfb3a6cfbd390d5c9564ab283a0349b9b9fcd46a706c1eb10e0db70bfbac7"
-dependencies = [
- "ff 0.12.1",
- "rand_core 0.6.4",
- "subtle",
-]
-
-[[package]]
-name = "group"
 version = "0.13.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f0f9ef7462f7c099f518d754361858f86d8a07af53ba9af0fe635bbccb151a63"
 dependencies = [
- "ff 0.13.1",
+ "ff",
  "rand_core 0.6.4",
  "subtle",
 ]
@@ -873,9 +852,9 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0fa3da60b81f02f9b33ebc6252d766f843291fb4d2247a07ae73d20b791fc56f"
 dependencies = [
  "bitvec",
- "ff 0.13.1",
- "group 0.13.0",
- "pasta_curves 0.5.1",
+ "ff",
+ "group",
+ "pasta_curves",
 ]
 
 [[package]]
@@ -1050,8 +1029,8 @@ checksum = "8499f7a74008aafbecb2a2e608a3e13e4dd3e84df198b604451efe93f2de6e61"
 dependencies = [
  "bitvec",
  "bls12_381",
- "ff 0.13.1",
- "group 0.13.0",
+ "ff",
+ "group",
  "rand_core 0.6.4",
  "subtle",
 ]
@@ -1249,10 +1228,10 @@ dependencies = [
  "chacha20",
  "chacha20poly1305",
  "corez",
- "ff 0.13.1",
+ "ff",
  "fpe",
  "getset",
- "group 0.13.0",
+ "group",
  "halo2_poseidon",
  "hex",
  "incrementalmerkletree",
@@ -1260,7 +1239,7 @@ dependencies = [
  "memuse",
  "nonempty",
  "once_cell",
- "pasta_curves 0.5.1",
+ "pasta_curves",
  "rand 0.8.8",
  "rand_core 0.6.4",
  "reddsa",
@@ -1286,7 +1265,7 @@ version = "0.23.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "81fec4625e73cf41ef4bb6846cafa6d44736525f442ba45e407c4a000a13996f"
 dependencies = [
- "group 0.13.0",
+ "group",
 ]
 
 [[package]]
@@ -1299,26 +1278,13 @@ dependencies = [
 
 [[package]]
 name = "pasta_curves"
-version = "0.4.1"
-source = "git+https://github.com/jarys/pasta_curves?rev=e11dfe4089d0da24483094a99cceb89f32974c17#e11dfe4089d0da24483094a99cceb89f32974c17"
-dependencies = [
- "blake2b_simd",
- "ff 0.12.1",
- "group 0.12.1",
- "rand 0.8.8",
- "static_assertions",
- "subtle",
-]
-
-[[package]]
-name = "pasta_curves"
 version = "0.5.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d3e57598f73cc7e1b2ac63c79c517b31a0877cd7c402cdcaa311b5208de7a095"
 dependencies = [
  "blake2b_simd",
- "ff 0.13.1",
- "group 0.13.0",
+ "ff",
+ "group",
  "lazy_static",
  "rand 0.8.8",
  "static_assertions",
@@ -1339,12 +1305,12 @@ checksum = "a5592f4f3eba7f9344cc423f45b6e65911e0630c9b89968d5a20792aadd5a0eb"
 dependencies = [
  "blake2b_simd",
  "bls12_381",
- "ff 0.13.1",
+ "ff",
  "getset",
  "jubjub",
  "nonempty",
  "orchard",
- "pasta_curves 0.5.1",
+ "pasta_curves",
  "postcard",
  "rand_core 0.6.4",
  "redjubjub",
@@ -1517,10 +1483,10 @@ checksum = "78a5191930e84973293aa5f532b513404460cd2216c1cfb76d08748c15b40b02"
 dependencies = [
  "blake2b_simd",
  "byteorder",
- "group 0.13.0",
+ "group",
  "hex",
  "jubjub",
- "pasta_curves 0.5.1",
+ "pasta_curves",
  "rand_core 0.6.4",
 ]
 
@@ -1637,10 +1603,10 @@ dependencies = [
  "blake2s_simd",
  "bls12_381",
  "corez",
- "ff 0.13.1",
+ "ff",
  "fpe",
  "getset",
- "group 0.13.0",
+ "group",
  "hex",
  "incrementalmerkletree",
  "jubjub",
@@ -1834,8 +1800,8 @@ name = "sinsemilla"
 version = "0.1.0"
 source = "git+https://github.com/bawolf/sinsemilla?rev=6ca88ff52835899c87ff83489b95c5cda887e8a4#6ca88ff52835899c87ff83489b95c5cda887e8a4"
 dependencies = [
- "group 0.13.0",
- "pasta_curves 0.5.1",
+ "group",
+ "pasta_curves",
  "subtle",
 ]
 
@@ -2040,7 +2006,7 @@ version = "0.0.0"
 dependencies = [
  "blake2b_simd",
  "orchard",
- "pasta_curves 0.5.1",
+ "pasta_curves",
  "pczt",
  "rand_chacha",
  "rand_core 0.6.4",
@@ -2061,7 +2027,7 @@ version = "0.0.0"
 dependencies = [
  "aes",
  "blake2b_simd",
- "pasta_curves 0.4.1",
+ "pasta_curves",
  "zeroize",
 ]
 
@@ -2341,7 +2307,7 @@ dependencies = [
  "corez",
  "crypto-common 0.2.0-rc.1",
  "equihash",
- "ff 0.13.1",
+ "ff",
  "hex",
  "incrementalmerkletree",
  "jubjub",

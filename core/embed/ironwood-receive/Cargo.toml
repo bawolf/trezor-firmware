@@ -8,5 +8,5 @@ publish = false
 [dependencies]
 aes.workspace = true
 blake2b_simd.workspace = true
-trezor-pasta-curves.workspace = true
+ironwood-pasta-curves.workspace = true
 zeroize.workspace = true
