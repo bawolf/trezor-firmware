@@ -29,6 +29,15 @@
 //! undersize, misalignment, or out-of-region writes across the interleaved
 //! alloc/free pattern, and a clean null on genuine OOM.
 //!
+//! Residue after a fatal reset: `.buf` is NOLOAD, so nothing zeroes this
+//! region at boot. The `dealloc` wipe below covers every orderly path -- each
+//! freed block's payload is zeroed before it returns to the free list -- but a
+//! fatal mid-session exit (`alloc_error_handler` -> `system_exit_fatal`, or
+//! any other reset) runs no destructors, so whatever was live stays in RAM
+//! until the same offsets are allocated again. It is the same exposure every
+//! coin's stack residues have, and the same answer: what is left is
+//! key-derived scratch, not the seed, which never enters this region.
+//!
 //! Note on the 8-action fault (region-allocator-fix-20260918 report): the
 //! free-list arithmetic is memory-safe; the observed Pasta fault is a capacity
 //! problem (the 8-action working set can exceed the 96 KB region), which now

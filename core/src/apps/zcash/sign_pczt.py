@@ -59,6 +59,7 @@ CHUNK_TIMEOUT_MS = const(5_000)
 # to the host (Fable review #S3). Must match `micropython/ironwood.rs::failure`.
 _MALFORMED = "Malformed PCZT"
 _TOO_MANY_ACTIONS = "Too many transaction actions (max 32)"
+_AMOUNT_OUT_OF_RANGE = "Zcash amount out of range"
 
 # session_feed step kinds.
 _STEP_OUTPUT = const(1)
@@ -281,7 +282,9 @@ async def sign_pczt(msg: ZcashSignPczt) -> ZcashSpendAuthSignatures:
         # MicroPython/parse text never leaks (Fable review #S3).
         msg = str(exc)
         raise wire.DataError(
-            msg if msg in (_MALFORMED, _TOO_MANY_ACTIONS) else _MALFORMED
+            msg
+            if msg in (_MALFORMED, _TOO_MANY_ACTIONS, _AMOUNT_OUT_OF_RANGE)
+            else _MALFORMED
         )
     except RuntimeError:
         raise wire.ProcessError("Zcash PCZT rejected")
@@ -431,9 +434,7 @@ async def _stream_and_sign(
             utils.zero_unused_stack()
             fed += consumed
             if kind == _STEP_OUTPUT:
-                _action_index, receiver, value, is_change, memo_kind, memo = payload
-                if is_change:
-                    raise wire.ProcessError("Zcash PCZT rejected")
+                _action_index, receiver, value, memo_kind, memo = payload
                 if timings is not None:
                     timings.segment()
                 await _confirm_output(

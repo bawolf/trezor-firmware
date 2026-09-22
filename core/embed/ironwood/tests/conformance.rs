@@ -1108,10 +1108,11 @@ fn valid_individual_notes_cannot_overflow_total_input_policy() {
     // These note values, encodings and net balance are individually representable.
     preflight(&bytes).unwrap();
     Signer::new(Pczt::parse(&bytes).unwrap()).unwrap();
-    assert_error(
-        engine().begin_test(&bytes).unwrap_err(),
-        ErrorCode::Capacity,
-    );
+    // `Amount`, not `Capacity`: the bundle is within every size bound, it is
+    // the sum of its values that is not representable. The two classes carry
+    // different user-facing strings, and "too many actions" would be wrong
+    // here.
+    assert_error(engine().begin_test(&bytes).unwrap_err(), ErrorCode::Amount);
 }
 
 #[test]

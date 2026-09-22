@@ -145,12 +145,12 @@ class TestIronwoodSignPcztProgress(unittest.TestCase):
         plain = (
             CONSUMED,
             sign_pczt._STEP_OUTPUT,
-            (0, _RECEIVER, 30_000, False, 0, b""),
+            (0, _RECEIVER, 30_000, 0, b""),
         )
         with_memo = (
             CONSUMED,
             sign_pczt._STEP_OUTPUT,
-            (1, _RECEIVER, 40_000, False, sign_pczt._MEMO_TEXT, b"hi"),
+            (1, _RECEIVER, 40_000, sign_pczt._MEMO_TEXT, b"hi"),
         )
         silent = (CONSUMED, 0, None)
         review = (CONSUMED, sign_pczt._STEP_REVIEW, _TOTALS)

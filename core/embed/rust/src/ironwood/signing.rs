@@ -88,7 +88,6 @@ pub struct Output {
     pub action_index: usize,
     pub receiver: [u8; 43],
     pub value: u64,
-    pub is_change: bool,
     /// What to show for the memo (§11: text within the display budget
     /// verbatim, anything else as a hash), recovered from the signed
     /// ciphertext of this action.
@@ -275,6 +274,10 @@ pub enum Failure {
     /// instead of a raw "malformed" for an otherwise well-formed but oversized
     /// transaction (Ironwood action-cap guardrail; MAX_ACTIONS = 32).
     Capacity,
+    /// A value, or a running total, is outside the money range. Its own class
+    /// because the `Capacity` message names the action cap, which is the wrong
+    /// thing to tell a user about a transaction whose amounts do not add up.
+    Amount,
     /// Signing or entropy failed.
     Signing,
 }
@@ -285,6 +288,7 @@ impl From<ironwood::ErrorCode> for Failure {
         match code {
             Malformed => Self::Malformed,
             Capacity => Self::Capacity,
+            Amount => Self::Amount,
             Policy => Self::Policy,
             State | Internal => Self::State,
             Entropy | Signing => Self::Signing,
@@ -395,13 +399,23 @@ pub fn feed(handle: u32, chunk: &[u8]) -> core::result::Result<(usize, Step), Fa
         let (consumed, event) = signing.session.feed(chunk, &signing.fvk)?;
         let step = match event {
             Event::None => Step::Continue,
-            Event::ConfirmOutput(output) => Step::Output(Output {
-                action_index: output.action_index,
-                receiver: output.receiver,
-                value: output.value,
-                is_change: output.kind == ironwood::OutputKind::InternalChange,
-                memo: output.memo,
-            }),
+            Event::ConfirmOutput(output) => {
+                // The session offers only payments for confirmation; change
+                // and padding are proved to be the device's own and are never
+                // shown (`Session::action`). Checked here rather than in the
+                // handler, where the equivalent `if is_change: raise` could
+                // only ever be dead code, so a regression in the session
+                // stops at the boundary instead of reaching a screen.
+                if output.kind != ironwood::OutputKind::Payment {
+                    return Err(ironwood::ErrorCode::State);
+                }
+                Step::Output(Output {
+                    action_index: output.action_index,
+                    receiver: output.receiver,
+                    value: output.value,
+                    memo: output.memo,
+                })
+            }
             Event::Review(review) => {
                 let projection = review.projection();
                 let totals = Totals {

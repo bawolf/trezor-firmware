@@ -844,11 +844,13 @@ impl<R: RngCore + CryptoRng> Engine<R> {
     }
 }
 
+/// Running totals of note and output values, bounded by the money range.
+/// `Amount`, not `Capacity`: nothing here is about how big the transaction is.
 fn add(total: u64, value: u64) -> Result<u64> {
     total
         .checked_add(value)
         .filter(|sum| *sum <= MAX_MONEY)
-        .ok_or(Error::capacity())
+        .ok_or(Error::amount())
 }
 
 #[cfg(feature = "test")]

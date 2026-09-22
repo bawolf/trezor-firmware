@@ -50,7 +50,7 @@ def session_begin(
 def session_feed(handle: int, chunk: AnyBytes) -> tuple[int, int, tuple | None]:
     """Consume PCZT bytes. Returns (consumed, kind, payload): kind 0 needs more
     bytes; kind 1 is a payment output to confirm, payload
-    (action_index, receiver, value, is_change, memo_kind, memo) where
+    (action_index, receiver, value, memo_kind, memo) where
     memo_kind 0 is no memo (memo None), 1 a text memo (memo: its UTF-8
     bytes, at most 256) and 2 a memo not shown verbatim (memo: the 32-byte
     BLAKE2b-256 of the memo); kind 2 is the review, payload

@@ -151,6 +151,10 @@ fn failure(failure: Failure) -> Error {
         // or over the byte limit). Its own comprehensible reason, not a raw
         // "malformed": the handler surfaces this message to the user.
         Failure::Capacity => Error::ValueError(c"Too many transaction actions (max 32)"),
+        // A well-formed transaction whose values, or their running totals, fall
+        // outside the money range. Separate from `Capacity` so neither message
+        // has to describe the other's bound.
+        Failure::Amount => Error::ValueError(c"Zcash amount out of range"),
         Failure::Policy => Error::RuntimeError(c"PCZT violates device policy"),
         Failure::State => Error::RuntimeError(c"Invalid signing state"),
         Failure::Signing => Error::RuntimeError(c"Signing failed"),
@@ -250,7 +254,6 @@ extern "C" fn session_feed(n_args: usize, args: *const Obj) -> Obj {
                         Obj::try_from(output.action_index)?,
                         Obj::try_from(&output.receiver[..])?,
                         Obj::try_from(output.value)?,
-                        Obj::from(output.is_change),
                         Obj::from(memo_kind),
                         memo,
                     ])?
@@ -425,7 +428,7 @@ pub static mp_module_trezorironwood: Module = obj_module! {
     /// def session_feed(handle: int, chunk: AnyBytes) -> tuple[int, int, tuple | None]:
     ///     """Consume PCZT bytes. Returns (consumed, kind, payload): kind 0 needs more
     ///     bytes; kind 1 is a payment output to confirm, payload
-    ///     (action_index, receiver, value, is_change, memo_kind, memo) where
+    ///     (action_index, receiver, value, memo_kind, memo) where
     ///     memo_kind 0 is no memo (memo None), 1 a text memo (memo: its UTF-8
     ///     bytes, at most 256) and 2 a memo not shown verbatim (memo: the 32-byte
     ///     BLAKE2b-256 of the memo); kind 2 is the review, payload
@@ -494,7 +497,7 @@ pub static mp_module_trezorironwood: Module = obj_module! {
     // def session_feed(handle: int, chunk: AnyBytes) -> tuple[int, int, tuple | None]:
     //     """Consume PCZT bytes. Returns (consumed, kind, payload): kind 0 needs more
     //     bytes; kind 1 is a payment output to confirm, payload
-    //     (action_index, receiver, value, is_change, memo_kind, memo) where
+    //     (action_index, receiver, value, memo_kind, memo) where
     //     memo_kind 0 is no memo (memo None), 1 a text memo (memo: its UTF-8
     //     bytes, at most 256) and 2 a memo not shown verbatim (memo: the 32-byte
     //     BLAKE2b-256 of the memo); kind 2 is the review, payload

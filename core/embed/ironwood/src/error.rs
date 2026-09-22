@@ -9,6 +9,10 @@ pub enum ErrorCode {
     Policy,
     State,
     Capacity,
+    /// A value, or a running total of values, is outside the money range.
+    /// Split from `Capacity` so the handler can say which bound was hit: a
+    /// transaction whose amounts sum past MAX_MONEY is not "too many actions".
+    Amount,
     Entropy,
     Signing,
     Internal,
@@ -29,6 +33,10 @@ impl ErrorCode {
 
     pub(crate) const fn capacity() -> Self {
         Self::Capacity
+    }
+
+    pub(crate) const fn amount() -> Self {
+        Self::Amount
     }
 
     pub(crate) const fn entropy() -> Self {
