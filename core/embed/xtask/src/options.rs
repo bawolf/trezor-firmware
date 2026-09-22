@@ -208,8 +208,9 @@ build_options! {
     #[arg(long, num_args = 0..=1, default_missing_value = "true")]
     map miniscript: bool,
 
-    /// Enable experimental Ironwood (Zcash) support (Safe 3/T3B1, Safe 5/T3T1,
-    /// Safe 7/T3W1)
+    /// Enable experimental Ironwood (Zcash) support. Firmware builds only,
+    /// and only for the models in `IRONWOOD_MODELS`; the error message on an
+    /// unsupported target lists them, so this text does not repeat the list.
     #[arg(long, num_args = 0..=1, default_missing_value = "true")]
     map ironwood: bool,
 
@@ -295,9 +296,33 @@ build_options! {
 /// excluded on capacity, not on architecture: their `.stack`, `.buf` and
 /// `.heap` all share a single 191 KiB AUX1_RAM, so the boot-lifetime 96 KiB
 /// signing REGION cannot coexist with a workable MicroPython heap, and they
-/// have no U5 crypto accelerators. T3T2 is excluded because it is an
-/// unreleased devkit-only model with a smaller (1640 KiB) firmware slot.
-const IRONWOOD_MODELS: &[Model] = &[Model::T3B1, Model::T3T1, Model::T3W1];
+/// have no U5 crypto accelerators. The remaining exclusions are not technical:
+/// T3T2 is unreleased, and D002/D003 are STM32U5 bring-up devkits, so none of
+/// them ships product firmware and none has been measured. (T3T2's 1640 KiB
+/// slot is not the obstacle -- the T3B1 image fits in 1463.5 KiB.)
+///
+/// This list is the single source of truth: the rejection message and both
+/// the positive and the negative test derive from it, so adding a model is a
+/// one-line change here.
+pub(crate) const IRONWOOD_MODELS: &[Model] = &[Model::T3B1, Model::T3T1, Model::T3W1];
+
+/// The models `--ironwood` accepts, as the rejection message spells them.
+pub(crate) fn ironwood_models_phrase() -> String {
+    IRONWOOD_MODELS
+        .iter()
+        .map(|model| model.model_id())
+        .collect::<Vec<_>>()
+        .join(", ")
+}
+
+/// The rejection every unsupported `--ironwood` target gets. Shared with the
+/// tests so a new model needs no test edit.
+pub(crate) fn ironwood_unsupported_message() -> String {
+    format!(
+        "--ironwood is supported only for {} firmware builds",
+        ironwood_models_phrase()
+    )
+}
 
 impl ResolvedBuildArgs {
     /// Validates options against the user-selected top-level build target.
@@ -310,9 +335,7 @@ impl ResolvedBuildArgs {
         if self.ironwood
             && (self.project != Project::Firmware || !IRONWOOD_MODELS.contains(&self.model))
         {
-            bail!(
-                "--ironwood is supported only for Safe 3/T3B1, Safe 5/T3T1 and Safe 7/T3W1 firmware builds"
-            );
+            bail!(ironwood_unsupported_message());
         }
         if self.ironwood && self.btc_only {
             bail!("--ironwood cannot be combined with --btc-only");

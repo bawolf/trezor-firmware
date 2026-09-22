@@ -196,9 +196,11 @@ pub fn configure_cargo(args: &ResolvedBuildArgs, cmd: &mut process::Command) -> 
 
 #[cfg(test)]
 mod tests {
+    use clap::ValueEnum;
+
     use super::*;
     use crate::args::{BuildArgs, Model, Project};
-    use crate::options::BuildOptions;
+    use crate::options::{BuildOptions, IRONWOOD_MODELS, ironwood_unsupported_message};
 
     fn ironwood_build_args(project: Project, model: Model) -> BuildArgs {
         BuildArgs {
@@ -227,20 +229,6 @@ mod tests {
     }
 
     #[test]
-    fn enables_ironwood_for_safe_5_firmware() {
-        let args = ResolvedBuildArgs {
-            model: Model::T3T1,
-            ironwood: true,
-            frozen: true,
-            pyopt: true,
-            ..ResolvedBuildArgs::default()
-        };
-
-        let features = resolve_features(&args).unwrap().features;
-        assert!(features.contains(&"ironwood".to_string()));
-    }
-
-    #[test]
     fn enables_ironwood_for_safe_5_firmware_emulator() {
         let args = ResolvedBuildArgs {
             model: Model::T3T1,
@@ -255,46 +243,70 @@ mod tests {
         assert!(features.contains(&"ironwood".to_string()));
     }
 
+    /// Every model on the allow-list builds with the feature, and gets the
+    /// layout its model config selects. Derived from `IRONWOOD_MODELS`, so a
+    /// new model needs no edit here.
     #[test]
-    fn enables_ironwood_for_safe_7_firmware() {
-        let args = ResolvedBuildArgs {
-            model: Model::T3W1,
-            ironwood: true,
-            frozen: true,
-            pyopt: true,
-            ..ResolvedBuildArgs::default()
-        };
+    fn enables_ironwood_for_every_allowed_model() {
+        for &model in IRONWOOD_MODELS {
+            let args = ResolvedBuildArgs {
+                model,
+                ironwood: true,
+                frozen: true,
+                pyopt: true,
+                ..ResolvedBuildArgs::default()
+            };
 
-        let features = resolve_features(&args).unwrap().features;
-        assert!(features.contains(&"ironwood".to_string()));
-        assert!(features.contains(&"layout_eckhart".to_string()));
+            let features = resolve_features(&args).unwrap().features;
+            assert!(
+                features.contains(&"ironwood".to_string()),
+                "{} must build with ironwood",
+                model.model_id()
+            );
+        }
     }
 
+    /// The three layouts the zcash screens must serve, one per allowed model.
     #[test]
-    fn enables_ironwood_for_safe_3_firmware() {
-        let args = ResolvedBuildArgs {
-            model: Model::T3B1,
-            ironwood: true,
-            frozen: true,
-            pyopt: true,
-            ..ResolvedBuildArgs::default()
-        };
+    fn allowed_models_cover_caesar_delizia_and_eckhart() {
+        for (model, layout) in [
+            (Model::T3B1, "layout_caesar"),
+            (Model::T3T1, "layout_delizia"),
+            (Model::T3W1, "layout_eckhart"),
+        ] {
+            assert!(
+                IRONWOOD_MODELS.contains(&model),
+                "{} left the allow-list; this table needs updating",
+                model.model_id()
+            );
+            let args = ResolvedBuildArgs {
+                model,
+                ironwood: true,
+                frozen: true,
+                pyopt: true,
+                ..ResolvedBuildArgs::default()
+            };
 
-        let features = resolve_features(&args).unwrap().features;
-        assert!(features.contains(&"ironwood".to_string()));
-        assert!(features.contains(&"layout_caesar".to_string()));
+            let features = resolve_features(&args).unwrap().features;
+            assert!(features.contains(&layout.to_string()));
+        }
     }
 
+    /// Everything not on the allow-list is refused, including the D00x
+    /// devkits a hand-written list kept forgetting.
     #[test]
     fn rejects_ironwood_for_other_models() {
-        for model in [Model::T2T1, Model::T2B1, Model::T3T2] {
+        let rejected: Vec<Model> = Model::value_variants()
+            .iter()
+            .copied()
+            .filter(|model| !IRONWOOD_MODELS.contains(model))
+            .collect();
+        assert!(!rejected.is_empty());
+        for model in rejected {
             let error =
                 ResolvedBuildArgs::from_build_args(&ironwood_build_args(Project::Firmware, model))
                     .unwrap_err();
-            assert_eq!(
-                error.to_string(),
-                "--ironwood is supported only for Safe 3/T3B1, Safe 5/T3T1 and Safe 7/T3W1 firmware builds"
-            );
+            assert_eq!(error.to_string(), ironwood_unsupported_message());
         }
     }
 
@@ -303,10 +315,21 @@ mod tests {
         let error =
             ResolvedBuildArgs::from_build_args(&ironwood_build_args(Project::Kernel, Model::T3T1))
                 .unwrap_err();
-        assert_eq!(
-            error.to_string(),
-            "--ironwood is supported only for Safe 3/T3B1, Safe 5/T3T1 and Safe 7/T3W1 firmware builds"
-        );
+        assert_eq!(error.to_string(), ironwood_unsupported_message());
+    }
+
+    /// The message names every allowed model, so a user reading it does not
+    /// have to guess which targets `--ironwood` accepts.
+    #[test]
+    fn the_rejection_message_lists_every_allowed_model() {
+        let message = ironwood_unsupported_message();
+        for model in IRONWOOD_MODELS {
+            assert!(
+                message.contains(model.model_id()),
+                "{message:?} must name {}",
+                model.model_id()
+            );
+        }
     }
 
     #[test]
