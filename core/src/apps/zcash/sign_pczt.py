@@ -46,11 +46,11 @@ EXPIRY_WINDOW = const(100)
 # closed by autolock and its secrets are wiped in the `finally` above. (2)
 # Survival of a legitimate long sign: Bitcoin keeps the idle timer alive across
 # its silent verification phase via `progress.report()` (which reaches
-# `workflow.idle_timer.touch()`); we do the equivalent by touching the idle timer
-# after each verified chunk in `_stream_and_sign` (see there), so autolock does
-# not kill an actively-progressing sign. Unlike Bitcoin we deliberately do NOT
-# set `autolock_interrupts_workflow = False`, because a truly abandoned
-# pre-consent sign must still be torn down.
+# `workflow.idle_timer.touch()`); we do exactly the same thing, reporting the
+# streaming progress layout after each verified step in `_stream_and_sign` (see
+# there), so autolock does not kill an actively-progressing sign. Unlike Bitcoin
+# we deliberately do NOT set `autolock_interrupts_workflow = False`, because a
+# truly abandoned pre-consent sign must still be torn down.
 CHUNK_TIMEOUT_MS = const(5_000)
 
 # Curated, non-secret native ValueError messages allowed to reach the host
@@ -307,9 +307,10 @@ async def _stream_and_sign(
     account_label: str,
     path: str,
 ) -> ZcashSpendAuthSignatures:
-    from trezor import utils, wire, workflow
+    from trezor import TR, utils, wire
     from trezor.crypto import random
     from trezor.messages import ZcashPcztAck, ZcashPcztRequest, ZcashSpendAuthSignatures
+    from trezor.ui.layouts.progress import progress
     from trezorironwood import (
         session_approve,
         session_begin,
@@ -331,6 +332,17 @@ async def _stream_and_sign(
         timings = Timings()
     except ImportError:
         timings = None
+
+    # Bitcoin shows its progress screen for the whole of sign_tx — while it
+    # waits for host data and while it verifies silently — and never a blank
+    # one. Same here, and it has to be up *before* `session_begin`, because
+    # that call prewarms the Pasta/Sinsemilla generators and is itself seconds
+    # of blocking native work. The bar is driven by PCZT bytes verified: the
+    # action count is not known until the final review step arrives, but
+    # `pczt_length` is known up front, is monotonic, and the per-action
+    # verification cost is what consumes those bytes.
+    progress_layout = progress(TR.progress__loading_transaction)
+    progress_layout.report(0)
 
     if timings is not None:
         timings.begin_start()
@@ -374,6 +386,18 @@ async def _stream_and_sign(
                 timings.feed_done()
             utils.zero_unused_stack()
             fed += consumed
+            # One report per verified step — in practice one per action, since
+            # an action is what a `session_feed` call consumes before it
+            # returns. This is the only thing on screen during the silent
+            # phase, and it is also what keeps the idle timer alive: it is
+            # `ProgressLayout.report` (trezor/ui/__init__.py) that calls
+            # `workflow.idle_timer.touch()`, which is why `_stream_and_sign` no
+            # longer touches the timer itself. Reporting per step is strictly
+            # more often than the per-chunk touch it replaces, so the guarantee
+            # in the CHUNK_TIMEOUT_MS note above is unchanged: an actively
+            # progressing sign never autolocks, and a sign parked at a
+            # ButtonRequest — where no report fires — still does.
+            progress_layout.report(1000 * (offset + fed) // pczt_length)
             if kind == _STEP_OUTPUT:
                 _action_index, receiver, value, is_change, memo_kind, memo = payload
                 if is_change:
@@ -396,30 +420,25 @@ async def _stream_and_sign(
                 raise wire.ProcessError("Zcash PCZT rejected")
         offset += length
         del data
-        # Keep the idle timer alive across the silent verification phase, the way
-        # Bitcoin sign_tx keeps it alive via progress.report(): change/padding/
-        # dummy actions (and the final review) are verified after the last payment
-        # is confirmed and show no layout, so nothing else resets the timer and a
-        # short-autolock device (e.g. T3W1 battery default ~40 s) could otherwise
-        # kill a legitimate in-progress sign. `workflow.idle_timer.touch()` is the
-        # same call ProgressLayout.report makes (trezor/ui/__init__.py). Bounded:
-        # at most MAX_PCZT_BYTES/CHUNK_BYTES (64) chunks, each read capped by
-        # CHUNK_TIMEOUT_MS, so a trickling host cannot extend the sign
-        # indefinitely; a genuine walk-away (parked at a ButtonRequest, or an
-        # abandoned stream caught by CHUNK_TIMEOUT_MS) still reaches autolock.
-        workflow.idle_timer.touch()
 
     if totals is None:
         raise wire.ProcessError("Zcash PCZT rejected")
     await _confirm_totals(totals, coin_name, network_label, account_label, path)
     ironwood_account.require_session(session)
     session_approve()
+    # Post-consent signing is another multi-second blocking native call, one
+    # RedPallas signature per real spend. Bitcoin switches its progress screen
+    # from "Loading transaction..." to "Signing transaction..." at exactly this
+    # point (progress.init_signing / report_init); so do we.
+    progress_layout = progress(TR.progress__signing_transaction)
+    progress_layout.report(0)
     if timings is not None:
         timings.sign_start()
     try:
         records = session_sign(wallet_seed)
     finally:
         utils.zero_unused_stack()
+    progress_layout.report(1000)
     if timings is not None:
         timings.sign_done()
     if type(records) is not bytes or len(records) == 0 or len(records) % RECORD_LEN:

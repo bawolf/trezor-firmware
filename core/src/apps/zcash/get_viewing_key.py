@@ -47,6 +47,7 @@ async def get_viewing_key(msg: ZcashGetViewingKey) -> ZcashViewingKey:
     from trezor.enums import ButtonRequestType
     from trezor.messages import ZcashViewingKey
     from trezor.ui.layouts import confirm_action, show_warning
+    from trezor.ui.layouts.progress import progress
 
     from apps.common import coininfo, seed
 
@@ -103,6 +104,13 @@ async def get_viewing_key(msg: ZcashGetViewingKey) -> ZcashViewingKey:
     # one-way hash), derived only when the request asked for it and the user
     # acknowledged the extra warning above.
     fingerprint = bytearray(32) if include_fingerprint else None
+    # The native Pallas derivation runs for seconds behind a single blocking
+    # call. Trezor never leaves the screen blank while it works: show the same
+    # generic progress layout Bitcoin (`bitcoin_progress`) and Monero
+    # (`monero_*_progress`) use. Indeterminate because one native call has no
+    # intermediate steps to report — it is a spinner, not a lie about a bar.
+    progress_layout = progress(indeterminate=True)
+    progress_layout.report(0)
     try:
         ironwood_account.require_session(session)
         try:

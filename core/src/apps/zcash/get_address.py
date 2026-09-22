@@ -52,6 +52,7 @@ async def get_address(msg: ZcashGetAddress) -> ZcashAddress:
     from trezor.enums import ButtonRequestType
     from trezor.messages import ZcashAddress
     from trezor.ui.layouts import show_address, show_warning
+    from trezor.ui.layouts.progress import progress
 
     from apps.common import coininfo, seed
 
@@ -92,6 +93,12 @@ async def get_address(msg: ZcashGetAddress) -> ZcashAddress:
         ironwood_account.require_session(session)
 
     wallet_seed = await seed.get_seed()
+    # The native Pallas derivation runs for seconds behind a single blocking
+    # call; show the generic progress layout rather than a blank screen, the
+    # way every other app does. The address screen below starts its own layout,
+    # which stops this one, so the consent screen appears exactly as before.
+    progress_layout = progress(indeterminate=True)
+    progress_layout.report(0)
     try:
         ironwood_account.require_session(session)
         try:
