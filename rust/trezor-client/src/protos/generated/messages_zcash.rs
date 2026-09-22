@@ -34,6 +34,8 @@ pub struct ZcashGetAddress {
     pub account: ::std::option::Option<u32>,
     // @@protoc_insertion_point(field:hw.trezor.messages.zcash.ZcashGetAddress.diversifier_index)
     pub diversifier_index: ::std::option::Option<::std::vec::Vec<u8>>,
+    // @@protoc_insertion_point(field:hw.trezor.messages.zcash.ZcashGetAddress.chunkify)
+    pub chunkify: ::std::option::Option<bool>,
     // special fields
     // @@protoc_insertion_point(special_field:hw.trezor.messages.zcash.ZcashGetAddress.special_fields)
     pub special_fields: ::protobuf::SpecialFields,
@@ -127,8 +129,27 @@ impl ZcashGetAddress {
         self.diversifier_index.take().unwrap_or_else(|| ::std::vec::Vec::new())
     }
 
+    // optional bool chunkify = 4;
+
+    pub fn chunkify(&self) -> bool {
+        self.chunkify.unwrap_or(false)
+    }
+
+    pub fn clear_chunkify(&mut self) {
+        self.chunkify = ::std::option::Option::None;
+    }
+
+    pub fn has_chunkify(&self) -> bool {
+        self.chunkify.is_some()
+    }
+
+    // Param is passed by value, moved
+    pub fn set_chunkify(&mut self, v: bool) {
+        self.chunkify = ::std::option::Option::Some(v);
+    }
+
     fn generated_message_descriptor_data() -> ::protobuf::reflect::GeneratedMessageDescriptorData {
-        let mut fields = ::std::vec::Vec::with_capacity(3);
+        let mut fields = ::std::vec::Vec::with_capacity(4);
         let mut oneofs = ::std::vec::Vec::with_capacity(0);
         fields.push(::protobuf::reflect::rt::v2::make_option_accessor::<_, _>(
             "network",
@@ -144,6 +165,11 @@ impl ZcashGetAddress {
             "diversifier_index",
             |m: &ZcashGetAddress| { &m.diversifier_index },
             |m: &mut ZcashGetAddress| { &mut m.diversifier_index },
+        ));
+        fields.push(::protobuf::reflect::rt::v2::make_option_accessor::<_, _>(
+            "chunkify",
+            |m: &ZcashGetAddress| { &m.chunkify },
+            |m: &mut ZcashGetAddress| { &mut m.chunkify },
         ));
         ::protobuf::reflect::GeneratedMessageDescriptorData::new_2::<ZcashGetAddress>(
             "ZcashGetAddress",
@@ -181,6 +207,9 @@ impl ::protobuf::Message for ZcashGetAddress {
                 26 => {
                     self.diversifier_index = ::std::option::Option::Some(is.read_bytes()?);
                 },
+                32 => {
+                    self.chunkify = ::std::option::Option::Some(is.read_bool()?);
+                },
                 tag => {
                     ::protobuf::rt::read_unknown_or_skip_group(tag, is, self.special_fields.mut_unknown_fields())?;
                 },
@@ -202,6 +231,9 @@ impl ::protobuf::Message for ZcashGetAddress {
         if let Some(v) = self.diversifier_index.as_ref() {
             my_size += ::protobuf::rt::bytes_size(3, &v);
         }
+        if let Some(v) = self.chunkify {
+            my_size += 1 + 1;
+        }
         my_size += ::protobuf::rt::unknown_fields_size(self.special_fields.unknown_fields());
         self.special_fields.cached_size().set(my_size as u32);
         my_size
@@ -216,6 +248,9 @@ impl ::protobuf::Message for ZcashGetAddress {
         }
         if let Some(v) = self.diversifier_index.as_ref() {
             os.write_bytes(3, v)?;
+        }
+        if let Some(v) = self.chunkify {
+            os.write_bool(4, v)?;
         }
         os.write_unknown_fields(self.special_fields.unknown_fields())?;
         ::std::result::Result::Ok(())
@@ -237,6 +272,7 @@ impl ::protobuf::Message for ZcashGetAddress {
         self.network = ::std::option::Option::None;
         self.account = ::std::option::Option::None;
         self.diversifier_index = ::std::option::Option::None;
+        self.chunkify = ::std::option::Option::None;
         self.special_fields.clear();
     }
 
@@ -245,6 +281,7 @@ impl ::protobuf::Message for ZcashGetAddress {
             network: ::std::option::Option::None,
             account: ::std::option::Option::None,
             diversifier_index: ::std::option::Option::None,
+            chunkify: ::std::option::Option::None,
             special_fields: ::protobuf::SpecialFields::new(),
         };
         &instance
@@ -1969,32 +2006,33 @@ impl ZcashNetwork {
 }
 
 static file_descriptor_proto_data: &'static [u8] = b"\
-    \n\x14messages-zcash.proto\x12\x18hw.trezor.messages.zcash\"\x9a\x01\n\
+    \n\x14messages-zcash.proto\x12\x18hw.trezor.messages.zcash\"\xb6\x01\n\
     \x0fZcashGetAddress\x12@\n\x07network\x18\x01\x20\x02(\x0e2&.hw.trezor.m\
     essages.zcash.ZcashNetworkR\x07network\x12\x18\n\x07account\x18\x02\x20\
     \x02(\rR\x07account\x12+\n\x11diversifier_index\x18\x03\x20\x02(\x0cR\
-    \x10diversifierIndex\"(\n\x0cZcashAddress\x12\x18\n\x07address\x18\x01\
-    \x20\x02(\tR\x07address\"\xb1\x01\n\x12ZcashGetViewingKey\x12@\n\x07netw\
-    ork\x18\x01\x20\x02(\x0e2&.hw.trezor.messages.zcash.ZcashNetworkR\x07net\
-    work\x12\x18\n\x07account\x18\x02\x20\x02(\rR\x07account\x12?\n\x18inclu\
-    de_seed_fingerprint\x18\x03\x20\x01(\x08:\x05falseR\x16includeSeedFinger\
-    print\"N\n\x0fZcashViewingKey\x12\x10\n\x03key\x18\x01\x20\x02(\tR\x03ke\
-    y\x12)\n\x10seed_fingerprint\x18\x02\x20\x01(\x0cR\x0fseedFingerprint\"\
-    \xc0\x01\n\rZcashSignPczt\x12@\n\x07network\x18\x01\x20\x02(\x0e2&.hw.tr\
-    ezor.messages.zcash.ZcashNetworkR\x07network\x12\x18\n\x07account\x18\
-    \x02\x20\x02(\rR\x07account\x12\x1f\n\x0bpczt_length\x18\x03\x20\x02(\rR\
-    \npcztLength\x122\n\x15host_reference_height\x18\x04\x20\x02(\rR\x13host\
-    ReferenceHeight\"c\n\x10ZcashPcztRequest\x12\x1f\n\x0btransfer_id\x18\
-    \x01\x20\x02(\x0cR\ntransferId\x12\x16\n\x06offset\x18\x02\x20\x02(\rR\
-    \x06offset\x12\x16\n\x06length\x18\x03\x20\x02(\rR\x06length\"[\n\x0cZca\
-    shPcztAck\x12\x1f\n\x0btransfer_id\x18\x01\x20\x02(\x0cR\ntransferId\x12\
-    \x16\n\x06offset\x18\x02\x20\x02(\rR\x06offset\x12\x12\n\x04data\x18\x03\
-    \x20\x02(\x0cR\x04data\"z\n\x18ZcashSpendAuthSignatures\x12\x1f\n\x0btra\
-    nsfer_id\x18\x01\x20\x02(\x0cR\ntransferId\x12\x18\n\x07records\x18\x02\
-    \x20\x02(\x0cR\x07records\x12#\n\rdebug_timings\x18\x03\x20\x01(\x0cR\
-    \x0cdebugTimings*B\n\x0cZcashNetwork\x12\x18\n\x14ZcashNetwork_Mainnet\
-    \x10\0\x12\x18\n\x14ZcashNetwork_Testnet\x10\x01B9\n#com.satoshilabs.tre\
-    zor.lib.protobufB\x12TrezorMessageZcash\
+    \x10diversifierIndex\x12\x1a\n\x08chunkify\x18\x04\x20\x01(\x08R\x08chun\
+    kify\"(\n\x0cZcashAddress\x12\x18\n\x07address\x18\x01\x20\x02(\tR\x07ad\
+    dress\"\xb1\x01\n\x12ZcashGetViewingKey\x12@\n\x07network\x18\x01\x20\
+    \x02(\x0e2&.hw.trezor.messages.zcash.ZcashNetworkR\x07network\x12\x18\n\
+    \x07account\x18\x02\x20\x02(\rR\x07account\x12?\n\x18include_seed_finger\
+    print\x18\x03\x20\x01(\x08:\x05falseR\x16includeSeedFingerprint\"N\n\x0f\
+    ZcashViewingKey\x12\x10\n\x03key\x18\x01\x20\x02(\tR\x03key\x12)\n\x10se\
+    ed_fingerprint\x18\x02\x20\x01(\x0cR\x0fseedFingerprint\"\xc0\x01\n\rZca\
+    shSignPczt\x12@\n\x07network\x18\x01\x20\x02(\x0e2&.hw.trezor.messages.z\
+    cash.ZcashNetworkR\x07network\x12\x18\n\x07account\x18\x02\x20\x02(\rR\
+    \x07account\x12\x1f\n\x0bpczt_length\x18\x03\x20\x02(\rR\npcztLength\x12\
+    2\n\x15host_reference_height\x18\x04\x20\x02(\rR\x13hostReferenceHeight\
+    \"c\n\x10ZcashPcztRequest\x12\x1f\n\x0btransfer_id\x18\x01\x20\x02(\x0cR\
+    \ntransferId\x12\x16\n\x06offset\x18\x02\x20\x02(\rR\x06offset\x12\x16\n\
+    \x06length\x18\x03\x20\x02(\rR\x06length\"[\n\x0cZcashPcztAck\x12\x1f\n\
+    \x0btransfer_id\x18\x01\x20\x02(\x0cR\ntransferId\x12\x16\n\x06offset\
+    \x18\x02\x20\x02(\rR\x06offset\x12\x12\n\x04data\x18\x03\x20\x02(\x0cR\
+    \x04data\"z\n\x18ZcashSpendAuthSignatures\x12\x1f\n\x0btransfer_id\x18\
+    \x01\x20\x02(\x0cR\ntransferId\x12\x18\n\x07records\x18\x02\x20\x02(\x0c\
+    R\x07records\x12#\n\rdebug_timings\x18\x03\x20\x01(\x0cR\x0cdebugTimings\
+    *B\n\x0cZcashNetwork\x12\x18\n\x14ZcashNetwork_Mainnet\x10\0\x12\x18\n\
+    \x14ZcashNetwork_Testnet\x10\x01B9\n#com.satoshilabs.trezor.lib.protobuf\
+    B\x12TrezorMessageZcash\
 ";
 
 /// `FileDescriptorProto` object which was a source for this generated file

@@ -299,6 +299,51 @@ def test_viewing_key_response_has_fixed_small_wire_size(
 
 
 @pytest.mark.parametrize("network", NETWORKS)
+def test_chunkify_is_optional_and_absent_means_not_chunkified(
+    network: messages.ZcashNetwork,
+) -> None:
+    """`chunkify` is presentation-only and must never be required.
+
+    A host that predates the field omits it, the device reads `None`, and
+    `bool(None)` is the unchunked screen it always drew. Same shape as
+    Bitcoin's `GetAddress.chunkify`.
+    """
+    field = next(
+        f for f in messages.ZcashGetAddress.FIELDS.values() if f.name == "chunkify"
+    )
+    assert not field.required
+    assert field.default is None
+
+    omitted = messages.ZcashGetAddress(
+        network=network, account=0, diversifier_index=bytes(11)
+    )
+    assert omitted.chunkify is None
+    assert bool(omitted.chunkify) is False
+    assert _roundtrip(omitted) == omitted
+
+    for asked in (False, True):
+        msg = messages.ZcashGetAddress(
+            network=network, account=0, diversifier_index=bytes(11), chunkify=asked
+        )
+        assert _roundtrip(msg) == msg
+
+    # Presentation only: it is not part of what the device derives, so the
+    # request is otherwise byte-identical.
+    def _encoded(msg: protobuf.MessageType) -> bytes:
+        buf = BytesIO()
+        protobuf.dump_message(buf, msg)
+        return buf.getvalue()
+
+    on = messages.ZcashGetAddress(
+        network=network, account=0, diversifier_index=bytes(11), chunkify=True
+    )
+    off = messages.ZcashGetAddress(
+        network=network, account=0, diversifier_index=bytes(11), chunkify=False
+    )
+    assert len(_encoded(on)) == len(_encoded(off)) == len(_encoded(omitted)) + 2
+
+
+@pytest.mark.parametrize("network", NETWORKS)
 def test_seed_fingerprint_is_optional_in_both_directions(
     network: messages.ZcashNetwork,
 ) -> None:

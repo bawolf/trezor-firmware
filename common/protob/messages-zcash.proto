@@ -25,8 +25,12 @@ option java_package = "com.satoshilabs.trezor.lib.protobuf";
 //   RECORD_BYTES      = 66     (one spend authorization signature record)
 //   MAX_ACTIONS       = 32
 //
-// Every field below is required so that an omitted scalar cannot silently
-// select network, account, height, offset, or length zero.
+// Every field that selects what the device derives, reviews, or signs is
+// required, so that an omitted scalar cannot silently select network,
+// account, height, offset, or length zero. The only optional fields are
+// opt-ins that add something on top of that: an extra export
+// (include_seed_fingerprint) or a screen-formatting preference (chunkify).
+// Absent means off, which is what the device did before the field existed.
 
 /**
  * Network selecting firmware-owned consensus and encoding constants.
@@ -47,10 +51,11 @@ enum ZcashNetwork {
  * @next Failure
  */
 message ZcashGetAddress {
-    required ZcashNetwork network = 1;    // selects coin type and address encoding
-    required uint32 account = 2;          // ZIP-32 account index in 0..2^31-1; the device
-                                          // derives m/32'/coin_type'/account' itself
+    required ZcashNetwork network = 1;     // selects coin type and address encoding
+    required uint32 account = 2;           // ZIP-32 account index in 0..2^31-1; the device
+                                           // derives m/32'/coin_type'/account' itself
     required bytes diversifier_index = 3;  // exactly 11 bytes, little-endian
+    optional bool chunkify = 4;            // display the address in chunks of 4 characters
 }
 
 /**

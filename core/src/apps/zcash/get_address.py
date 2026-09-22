@@ -127,6 +127,12 @@ async def get_address(msg: ZcashGetAddress) -> ZcashAddress:
         case_sensitive=False,
         br_name="ironwood_receive",
         br_code=ButtonRequestType.Address,
+        # A unified address is 106 characters; unbroken it is hard to compare
+        # against the one in the wallet. Same opt-in as Bitcoin's GetAddress
+        # (`chunkify=bool(msg.chunkify)`), and off by default for the same
+        # reason: the host decides, and an old host that does not know the
+        # field gets exactly the screen it got before.
+        chunkify=bool(msg.chunkify),
     )
     ironwood_account.require_session(session)
     return ZcashAddress(address=address)

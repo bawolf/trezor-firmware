@@ -168,12 +168,18 @@ def get_address(
     network: messages.ZcashNetwork,
     account: int,
     diversifier_index: bytes,
+    chunkify: bool = False,
 ) -> str:
     """Return a wallet-owned Zcash Unified Address.
 
     The device always confirms the complete canonical address on screen; there
     is no unconfirmed path. The returned UA contains the receiver shared by
     Orchard and Ironwood.
+
+    `chunkify` asks the device to break the 106-character address into groups
+    of four on screen so it can be compared against the wallet's copy. It is
+    the same opt-in as `btc.get_address(..., chunkify=...)`; the address the
+    device returns is identical either way.
     """
     _check_network(network)
     _check_account(account)
@@ -186,6 +192,7 @@ def get_address(
             network=network,
             account=account,
             diversifier_index=diversifier_index,
+            chunkify=chunkify,
         ),
     )
     address = _expect(session, response, messages.ZcashAddress).address

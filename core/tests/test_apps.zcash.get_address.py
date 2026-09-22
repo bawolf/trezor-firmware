@@ -77,11 +77,14 @@ class TestIronwoodGetAddress(unittest.TestCase):
         self.calls.append(("address", args, kwargs))
 
     @staticmethod
-    def _message(network=ZcashNetwork.Mainnet, account=0, index=bytes(11)):
+    def _message(
+        network=ZcashNetwork.Mainnet, account=0, index=bytes(11), chunkify=None
+    ):
         return ZcashGetAddress(
             network=network,
             account=account,
             diversifier_index=index,
+            chunkify=chunkify,
         )
 
     def test_mainnet_and_testnet_addresses_and_exact_ui(self):
@@ -121,6 +124,31 @@ class TestIronwoodGetAddress(unittest.TestCase):
             self.assertEqual(kwargs["path"], path)
             self.assertEqual(kwargs["br_code"], ButtonRequestType.Address)
             self.assertFalse(kwargs["case_sensitive"])
+            self.assertEqual(
+                [call[0] for call in self.calls],
+                ["seed", "native", "stack_clear", "address"],
+            )
+
+    def test_chunkify_is_off_unless_the_host_asks(self):
+        """Presentation only, and the old screen is what an old host gets.
+
+        A 106-character unified address is hard to compare unbroken, so the
+        host may ask for it in groups of four -- the same opt-in as Bitcoin's
+        `GetAddress.chunkify`. An absent field is `None`, and `bool(None)` is
+        the screen the device drew before the field existed.
+        """
+        for asked, expected in ((None, False), (False, False), (True, True)):
+            self.calls.clear()
+            response = await_result(
+                get_address.get_address(self._message(chunkify=asked))
+            )
+            address_calls = [call for call in self.calls if call[0] == "address"]
+            self.assertEqual(len(address_calls), 1)
+            kwargs = address_calls[0][2]
+            self.assertEqual(kwargs["chunkify"], expected)
+            # The flag reaches the screen and nothing else: same address, same
+            # call sequence, so no ButtonRequest moves.
+            self.assertEqual(kwargs["address"], response.address)
             self.assertEqual(
                 [call[0] for call in self.calls],
                 ["seed", "native", "stack_clear", "address"],

@@ -8122,6 +8122,7 @@ if TYPE_CHECKING:
         network: "ZcashNetwork"
         account: "int"
         diversifier_index: "AnyBytes"
+        chunkify: "bool | None"
 
         def __init__(
             self,
@@ -8129,6 +8130,7 @@ if TYPE_CHECKING:
             network: "ZcashNetwork",
             account: "int",
             diversifier_index: "AnyBytes",
+            chunkify: "bool | None" = None,
         ) -> None:
             pass
 

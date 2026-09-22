@@ -264,7 +264,36 @@ def test_get_address(network: messages.ZcashNetwork, account: int) -> None:
     assert zcash.get_address(session, network, account, DIVERSIFIER_INDEX) == address
     assert sent(session) == [
         messages.ZcashGetAddress(
-            network=network, account=account, diversifier_index=DIVERSIFIER_INDEX
+            network=network,
+            account=account,
+            diversifier_index=DIVERSIFIER_INDEX,
+            chunkify=False,
+        )
+    ]
+    assert not remaining(session)
+
+
+@pytest.mark.parametrize("chunkify", [False, True])
+def test_get_address_chunkify_is_asked_for_and_changes_nothing_else(
+    chunkify: bool,
+) -> None:
+    """`chunkify` is a screen-formatting request, like btc.get_address's.
+
+    It reaches the device as an explicit bool (the same shape Bitcoin sends),
+    and the address that comes back is the same either way.
+    """
+    address = "u1example"
+    session = scripted(messages.ZcashAddress(address=address))
+    assert (
+        zcash.get_address(session, MAINNET, 0, DIVERSIFIER_INDEX, chunkify=chunkify)
+        == address
+    )
+    assert sent(session) == [
+        messages.ZcashGetAddress(
+            network=MAINNET,
+            account=0,
+            diversifier_index=DIVERSIFIER_INDEX,
+            chunkify=chunkify,
         )
     ]
     assert not remaining(session)

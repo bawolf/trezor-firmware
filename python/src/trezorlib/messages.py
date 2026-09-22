@@ -10190,6 +10190,7 @@ class ZcashGetAddress(protobuf.MessageType):
         1: protobuf.Field("network", "ZcashNetwork", repeated=False, required=True),
         2: protobuf.Field("account", "uint32", repeated=False, required=True),
         3: protobuf.Field("diversifier_index", "bytes", repeated=False, required=True),
+        4: protobuf.Field("chunkify", "bool", repeated=False, required=False, default=None),
     }
 
     def __init__(
@@ -10198,10 +10199,12 @@ class ZcashGetAddress(protobuf.MessageType):
         network: "ZcashNetwork",
         account: "int",
         diversifier_index: "bytes",
+        chunkify: Optional["bool"] = None,
     ) -> None:
         self.network = network
         self.account = account
         self.diversifier_index = diversifier_index
+        self.chunkify = chunkify
 
 
 class ZcashAddress(protobuf.MessageType):
