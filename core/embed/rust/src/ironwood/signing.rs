@@ -26,6 +26,7 @@ use core::ptr;
 
 use ironwood::{
     Account, Event, Hedged, Limits, Memo, Network, Policy, RequestContext, Result, Review, Session,
+    TransparentKind,
 };
 use orchard::keys::{FullViewingKey, SpendAuthorizingKey, SpendingKey};
 use rand_core::{CryptoRng, Error as RngError, RngCore};
@@ -80,6 +81,9 @@ pub enum Step {
     Continue,
     /// A verified payment output to confirm before streaming continues.
     Output(Output),
+    /// A transparent output to confirm. Its own step because the handler must
+    /// warn about it and render a Base58Check address, not a unified one.
+    TransparentOutput(TransparentOutput),
     /// The whole PCZT verified; the totals may be shown and approved.
     Review(Totals),
 }
@@ -94,6 +98,22 @@ pub struct Output {
     pub memo: Memo,
 }
 
+/// Base58Check version selector of a transparent output, as the handler sees
+/// it: 0 is a public key hash (`t1…`/`tm…`), 1 a script hash (`t3…`/`t2…`).
+/// Mirrored by `_T_P2PKH` / `_T_P2SH` in core/src/apps/zcash/sign_pczt.py;
+/// the two lists must move together.
+pub const T_P2PKH: u8 = 0;
+pub const T_P2SH: u8 = 1;
+
+pub struct TransparentOutput {
+    pub index: usize,
+    /// [`T_P2PKH`] or [`T_P2SH`].
+    pub kind: u8,
+    /// The 20 bytes the address encodes, solved from the signed script.
+    pub hash: [u8; 20],
+    pub value: u64,
+}
+
 /// The digest-bound totals of the review projection. Network, account and
 /// host height are omitted: the handler supplied them and shows its own copy.
 pub struct Totals {
@@ -103,8 +123,11 @@ pub struct Totals {
     pub payment_total: u64,
     pub change_total: u64,
     pub fee: u64,
+    /// What the transparent outputs total: the public part of the payment.
+    pub transparent_total: u64,
     pub padding_outputs: usize,
     pub payment_outputs: usize,
+    pub transparent_outputs: usize,
     /// Total Orchard actions in the bundle (payments + change + padding). This
     /// is the quantity the MAX_ACTIONS = 32 cap bounds; the handler shows it so
     /// the user sees the true size of what they authorize, not just the visible
@@ -399,6 +422,15 @@ pub fn feed(handle: u32, chunk: &[u8]) -> core::result::Result<(usize, Step), Fa
         let (consumed, event) = signing.session.feed(chunk, &signing.fvk)?;
         let step = match event {
             Event::None => Step::Continue,
+            Event::ConfirmTransparentOutput(output) => Step::TransparentOutput(TransparentOutput {
+                index: output.index,
+                kind: match output.kind {
+                    TransparentKind::P2pkh => T_P2PKH,
+                    TransparentKind::P2sh => T_P2SH,
+                },
+                hash: output.hash,
+                value: output.value,
+            }),
             Event::ConfirmOutput(output) => {
                 // The session offers only payments for confirmation; change
                 // and padding are proved to be the device's own and are never
@@ -424,6 +456,7 @@ pub fn feed(handle: u32, chunk: &[u8]) -> core::result::Result<(usize, Step), Fa
                     input_total: projection.input_total,
                     payment_total: projection.payment_total,
                     change_total: projection.change_total,
+                    transparent_total: projection.transparent_total,
                     fee: projection.fee,
                     padding_outputs: projection.padding_outputs,
                     payment_outputs: projection
@@ -431,6 +464,7 @@ pub fn feed(handle: u32, chunk: &[u8]) -> core::result::Result<(usize, Step), Fa
                         .iter()
                         .filter(|output| output.kind == ironwood::OutputKind::Payment)
                         .count(),
+                    transparent_outputs: projection.transparent_outputs.len(),
                     // One Orchard action per output; `outputs` holds every
                     // payment and change output, `padding_outputs` counts the
                     // rest. Their sum is the declared action count the wire

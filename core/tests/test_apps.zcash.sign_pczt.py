@@ -28,8 +28,9 @@ CHUNKS = 4
 PCZT_LENGTH = CHUNK * CHUNKS
 
 _RECEIVER = bytes(range(43))
+_HASH160 = bytes(range(20))
 # The review payload `_confirm_totals` is handed; it is patched out here.
-_TOTALS = (10_000_040, 40, 500_000, 300_000, 180_000, 20_000, 2, 2, 8)
+_TOTALS = (10_000_040, 40, 500_000, 300_000, 180_000, 50_000, 20_000, 2, 2, 1, 8)
 
 
 class _FakeIronwood:
@@ -115,6 +116,10 @@ class TestIronwoodSignPcztProgress(unittest.TestCase):
         self._patch(progress_module, "progress", self._progress)
         self._patch(sign_pczt, "_call", self._call)
         self._patch(sign_pczt, "_confirm_output", self._confirm_output)
+        self._patch(
+            sign_pczt, "_confirm_transparent_output", self._confirm_transparent_output
+        )
+        self._patch(sign_pczt, "_warn_transparent", self._warn_transparent)
         self._patch(sign_pczt, "_confirm_memo", self._confirm_memo)
         self._patch(sign_pczt, "_confirm_totals", self._confirm_totals)
         self._patch(ironwood_account, "require_session", lambda session: None)
@@ -135,11 +140,17 @@ class TestIronwoodSignPcztProgress(unittest.TestCase):
 
     @staticmethod
     def _steps():
-        """Eight feeds over four chunks: outputs at 2 and 5, review last.
+        """Eight feeds over four chunks: outputs at 1, 2 and 5, review last.
 
-        One of the outputs carries a memo, so the run covers the two-screen
-        case as well as the one-screen one.
+        The transparent output comes first, as the encoding puts it, and one
+        of the shielded outputs carries a memo, so the run covers the
+        two-screen case as well as the one-screen one.
         """
+        transparent = (
+            CONSUMED,
+            sign_pczt._STEP_TRANSPARENT_OUTPUT,
+            (0, sign_pczt._T_P2PKH, _HASH160, 50_000),
+        )
         plain = (
             CONSUMED,
             sign_pczt._STEP_OUTPUT,
@@ -152,7 +163,7 @@ class TestIronwoodSignPcztProgress(unittest.TestCase):
         )
         silent = (CONSUMED, 0, None)
         review = (CONSUMED, sign_pczt._STEP_REVIEW, _TOTALS)
-        return [silent, plain, silent, silent, with_memo, silent, silent, review]
+        return [transparent, plain, silent, silent, with_memo, silent, silent, review]
 
     def _progress(
         self, description=None, title=None, indeterminate=False, danger=False
@@ -177,6 +188,12 @@ class TestIronwoodSignPcztProgress(unittest.TestCase):
 
     async def _confirm_output(self, *args, **kwargs):
         await self._park("output")
+
+    async def _confirm_transparent_output(self, *args, **kwargs):
+        await self._park("transparent_output")
+
+    async def _warn_transparent(self, *args, **kwargs):
+        await self._park("transparent_warning")
 
     async def _confirm_memo(self, *args, **kwargs):
         await self._park("memo")
@@ -245,6 +262,17 @@ class TestIronwoodSignPcztProgress(unittest.TestCase):
         # `session_begin`, plus the signing layout's 0 and 1000.
         self.assertTrue(len(reports) >= CHUNKS)
         self.assertEqual(len(reports), len(self._steps()) + 3)
+
+    def test_the_transparent_warning_precedes_the_first_transparent_output(self):
+        """One warning per transaction, before any transparent amount."""
+        self._run()
+
+        parks = [payload for kind, payload in self.events if kind == PARK_IN]
+        self.assertEqual(parks.count("transparent_warning"), 1)
+        self.assertEqual(parks.index("transparent_warning"), 0)
+        self.assertEqual(parks[1], "transparent_output")
+        # And the shielded outputs still follow, in their own order.
+        self.assertEqual(parks[2:], ["output", "output", "memo", "totals"])
 
     def test_no_report_while_parked_on_a_button_request(self):
         """An abandoned sign must still reach autolock."""

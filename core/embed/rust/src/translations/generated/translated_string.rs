@@ -1691,6 +1691,8 @@ pub enum TranslatedString {
     zcash__memo = 1301,  // "Memo (text)"
     #[cfg(feature = "universal_fw")]
     zcash__memo_hash = 1302,  // "Memo (hash)"
+    #[cfg(feature = "universal_fw")]
+    zcash__transparent_payment_warning = 1303,  // "This payment is transparent: amount and recipient are public."
 }
 
 impl TranslatedString {
@@ -3001,6 +3003,7 @@ impl TranslatedString {
                 "This also reveals a fingerprint of your recovery seed, which links all of your Zcash accounts.",
                 "Memo (text)",
                 "Memo (hash)",
+                "This payment is transparent: amount and recipient are public.",
             );
 
             #[cfg(all(feature = "debug", feature = "universal_fw"))]
@@ -4309,6 +4312,7 @@ impl TranslatedString {
                 19408,
                 19419,
                 19430,
+                19491,
             ];
 
             #[cfg(all(feature = "debug", not(feature = "universal_fw")))]
@@ -5616,6 +5620,7 @@ impl TranslatedString {
                 "This also reveals a fingerprint of your recovery seed, which links all of your Zcash accounts.",
                 "Memo (text)",
                 "Memo (hash)",
+                "This payment is transparent: amount and recipient are public.",
             );
 
             #[cfg(all(feature = "debug", not(feature = "universal_fw")))]
@@ -6924,6 +6929,7 @@ impl TranslatedString {
                 19408,
                 19419,
                 19430,
+                19491,
             ];
 
             #[cfg(all(not(feature = "debug"), feature = "universal_fw"))]
@@ -8231,6 +8237,7 @@ impl TranslatedString {
                 "This also reveals a fingerprint of your recovery seed, which links all of your Zcash accounts.",
                 "Memo (text)",
                 "Memo (hash)",
+                "This payment is transparent: amount and recipient are public.",
             );
 
             #[cfg(all(not(feature = "debug"), feature = "universal_fw"))]
@@ -9539,6 +9546,7 @@ impl TranslatedString {
                 19408,
                 19419,
                 19430,
+                19491,
             ];
 
             #[cfg(all(not(feature = "debug"), not(feature = "universal_fw")))]
@@ -10846,6 +10854,7 @@ impl TranslatedString {
                 "This also reveals a fingerprint of your recovery seed, which links all of your Zcash accounts.",
                 "Memo (text)",
                 "Memo (hash)",
+                "This payment is transparent: amount and recipient are public.",
             );
 
             #[cfg(all(not(feature = "debug"), not(feature = "universal_fw")))]
@@ -12154,6 +12163,7 @@ impl TranslatedString {
                 19408,
                 19419,
                 19430,
+                19491,
             ];
 
         } else if #[cfg(feature = "layout_caesar")] {
@@ -13462,6 +13472,7 @@ impl TranslatedString {
                 "This also reveals a fingerprint of your recovery seed, which links all of your Zcash accounts.",
                 "Memo (text)",
                 "Memo (hash)",
+                "This payment is transparent: amount and recipient are public.",
             );
 
             #[cfg(all(feature = "debug", feature = "universal_fw"))]
@@ -14770,6 +14781,7 @@ impl TranslatedString {
                 17269,
                 17280,
                 17291,
+                17352,
             ];
 
             #[cfg(all(feature = "debug", not(feature = "universal_fw")))]
@@ -16077,6 +16089,7 @@ impl TranslatedString {
                 "This also reveals a fingerprint of your recovery seed, which links all of your Zcash accounts.",
                 "Memo (text)",
                 "Memo (hash)",
+                "This payment is transparent: amount and recipient are public.",
             );
 
             #[cfg(all(feature = "debug", not(feature = "universal_fw")))]
@@ -17385,6 +17398,7 @@ impl TranslatedString {
                 17269,
                 17280,
                 17291,
+                17352,
             ];
 
             #[cfg(all(not(feature = "debug"), feature = "universal_fw"))]
@@ -18692,6 +18706,7 @@ impl TranslatedString {
                 "This also reveals a fingerprint of your recovery seed, which links all of your Zcash accounts.",
                 "Memo (text)",
                 "Memo (hash)",
+                "This payment is transparent: amount and recipient are public.",
             );
 
             #[cfg(all(not(feature = "debug"), feature = "universal_fw"))]
@@ -20000,6 +20015,7 @@ impl TranslatedString {
                 17269,
                 17280,
                 17291,
+                17352,
             ];
 
             #[cfg(all(not(feature = "debug"), not(feature = "universal_fw")))]
@@ -21307,6 +21323,7 @@ impl TranslatedString {
                 "This also reveals a fingerprint of your recovery seed, which links all of your Zcash accounts.",
                 "Memo (text)",
                 "Memo (hash)",
+                "This payment is transparent: amount and recipient are public.",
             );
 
             #[cfg(all(not(feature = "debug"), not(feature = "universal_fw")))]
@@ -22615,6 +22632,7 @@ impl TranslatedString {
                 17269,
                 17280,
                 17291,
+                17352,
             ];
 
         } else if #[cfg(feature = "layout_delizia")] {
@@ -23923,6 +23941,7 @@ impl TranslatedString {
                 "This also reveals a fingerprint of your recovery seed, which links all of your Zcash accounts.",
                 "Memo (text)",
                 "Memo (hash)",
+                "This payment is transparent: amount and recipient are public.",
             );
 
             #[cfg(all(feature = "debug", feature = "universal_fw"))]
@@ -25231,6 +25250,7 @@ impl TranslatedString {
                 19351,
                 19362,
                 19373,
+                19434,
             ];
 
             #[cfg(all(feature = "debug", not(feature = "universal_fw")))]
@@ -26538,6 +26558,7 @@ impl TranslatedString {
                 "This also reveals a fingerprint of your recovery seed, which links all of your Zcash accounts.",
                 "Memo (text)",
                 "Memo (hash)",
+                "This payment is transparent: amount and recipient are public.",
             );
 
             #[cfg(all(feature = "debug", not(feature = "universal_fw")))]
@@ -27846,6 +27867,7 @@ impl TranslatedString {
                 19351,
                 19362,
                 19373,
+                19434,
             ];
 
             #[cfg(all(not(feature = "debug"), feature = "universal_fw"))]
@@ -29153,6 +29175,7 @@ impl TranslatedString {
                 "This also reveals a fingerprint of your recovery seed, which links all of your Zcash accounts.",
                 "Memo (text)",
                 "Memo (hash)",
+                "This payment is transparent: amount and recipient are public.",
             );
 
             #[cfg(all(not(feature = "debug"), feature = "universal_fw"))]
@@ -30461,6 +30484,7 @@ impl TranslatedString {
                 19351,
                 19362,
                 19373,
+                19434,
             ];
 
             #[cfg(all(not(feature = "debug"), not(feature = "universal_fw")))]
@@ -31768,6 +31792,7 @@ impl TranslatedString {
                 "This also reveals a fingerprint of your recovery seed, which links all of your Zcash accounts.",
                 "Memo (text)",
                 "Memo (hash)",
+                "This payment is transparent: amount and recipient are public.",
             );
 
             #[cfg(all(not(feature = "debug"), not(feature = "universal_fw")))]
@@ -33076,6 +33101,7 @@ impl TranslatedString {
                 19351,
                 19362,
                 19373,
+                19434,
             ];
 
         } else if #[cfg(feature = "layout_eckhart")] {
@@ -34384,6 +34410,7 @@ impl TranslatedString {
                 "This also reveals a fingerprint of your recovery seed, which links all of your Zcash accounts.",
                 "Memo (text)",
                 "Memo (hash)",
+                "This payment is transparent: amount and recipient are public.",
             );
 
             #[cfg(all(feature = "debug", feature = "universal_fw"))]
@@ -35692,6 +35719,7 @@ impl TranslatedString {
                 20804,
                 20815,
                 20826,
+                20887,
             ];
 
             #[cfg(all(feature = "debug", not(feature = "universal_fw")))]
@@ -36999,6 +37027,7 @@ impl TranslatedString {
                 "This also reveals a fingerprint of your recovery seed, which links all of your Zcash accounts.",
                 "Memo (text)",
                 "Memo (hash)",
+                "This payment is transparent: amount and recipient are public.",
             );
 
             #[cfg(all(feature = "debug", not(feature = "universal_fw")))]
@@ -38307,6 +38336,7 @@ impl TranslatedString {
                 20804,
                 20815,
                 20826,
+                20887,
             ];
 
             #[cfg(all(not(feature = "debug"), feature = "universal_fw"))]
@@ -39614,6 +39644,7 @@ impl TranslatedString {
                 "This also reveals a fingerprint of your recovery seed, which links all of your Zcash accounts.",
                 "Memo (text)",
                 "Memo (hash)",
+                "This payment is transparent: amount and recipient are public.",
             );
 
             #[cfg(all(not(feature = "debug"), feature = "universal_fw"))]
@@ -40922,6 +40953,7 @@ impl TranslatedString {
                 20804,
                 20815,
                 20826,
+                20887,
             ];
 
             #[cfg(all(not(feature = "debug"), not(feature = "universal_fw")))]
@@ -42229,6 +42261,7 @@ impl TranslatedString {
                 "This also reveals a fingerprint of your recovery seed, which links all of your Zcash accounts.",
                 "Memo (text)",
                 "Memo (hash)",
+                "This payment is transparent: amount and recipient are public.",
             );
 
             #[cfg(all(not(feature = "debug"), not(feature = "universal_fw")))]
@@ -43537,6 +43570,7 @@ impl TranslatedString {
                 20804,
                 20815,
                 20826,
+                20887,
             ];
 
         }
@@ -45221,6 +45255,8 @@ impl TranslatedString {
         (Qstr::MP_QSTR_zcash__memo_hash, Self::zcash__memo_hash),
         #[cfg(feature = "universal_fw")]
         (Qstr::MP_QSTR_zcash__seed_fingerprint_warning, Self::zcash__seed_fingerprint_warning),
+        #[cfg(feature = "universal_fw")]
+        (Qstr::MP_QSTR_zcash__transparent_payment_warning, Self::zcash__transparent_payment_warning),
         #[cfg(feature = "universal_fw")]
         (Qstr::MP_QSTR_zcash__viewing_key_warning, Self::zcash__viewing_key_warning),
         #[cfg(feature = "universal_fw")]

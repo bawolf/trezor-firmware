@@ -1203,6 +1203,7 @@ class TR:
     zcash__memo: str = "Memo (text)"
     zcash__memo_hash: str = "Memo (hash)"
     zcash__seed_fingerprint_warning: str = "This also reveals a fingerprint of your recovery seed, which links all of your Zcash accounts."
+    zcash__transparent_payment_warning: str = "This payment is transparent: amount and recipient are public."
     zcash__viewing_key_warning: str = "The connected app will be able to see and link all activity for this account, but cannot spend."
     zcash__weak_backup_warning: str = "This wallet uses a weaker backup. Move funds to a new wallet with a stronger backup."
 

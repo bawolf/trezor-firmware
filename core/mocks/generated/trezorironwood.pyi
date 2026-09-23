@@ -55,7 +55,11 @@ def session_feed(handle: int, chunk: AnyBytes) -> tuple[int, int, tuple | None]:
     bytes, at most 256) and 2 a memo not shown verbatim (memo: the 32-byte
     BLAKE2b-256 of the memo); kind 2 is the review, payload
     (expiry_height, blocks_until_expiry, input_total, payment_total,
-    change_total, fee, padding_outputs, payment_outputs, action_count).
+    change_total, transparent_total, fee, padding_outputs,
+    payment_outputs, transparent_outputs, action_count); kind 3 is a
+    transparent output to confirm, payload (index, kind, hash, value)
+    where kind 0 is a public key hash and 1 a script hash, and hash is
+    the 20 bytes the Base58Check address encodes.
     Unconsumed bytes must be fed again. ValueError: malformed / too many
     actions; RuntimeError: rejected."""
 

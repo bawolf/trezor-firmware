@@ -64,6 +64,14 @@ _AMOUNT_OUT_OF_RANGE = "Zcash amount out of range"
 # session_feed step kinds.
 _STEP_OUTPUT = const(1)
 _STEP_REVIEW = const(2)
+_STEP_TRANSPARENT_OUTPUT = const(3)
+
+# Base58Check version selector of a transparent output. Emitted by
+# `session_feed` in core/embed/rust/src/micropython/ironwood.rs, which picks
+# the same 0/1 (`T_P2PKH` / `T_P2SH` in core/embed/rust/src/ironwood/
+# signing.rs); the two lists must move together.
+_T_P2PKH = const(0)
+_T_P2SH = const(1)
 
 # Memo kinds of an output step. Emitted by `session_feed` in
 # core/embed/rust/src/micropython/ironwood.rs, which picks the same 0/1/2;
@@ -141,6 +149,76 @@ async def _confirm_output(
     )
 
 
+def _transparent_address(kind: int, hash160: bytes, coin_name: str) -> str:
+    """The `t1…`/`t3…` (`tm…`/`t2…` on testnet) address of a transparent
+    output, from the 20-byte hash the device solved out of the signed
+    `scriptPubKey`. The version bytes are `coininfo`'s (7352/7357 mainnet,
+    7461/7354 testnet) and the encoder is the one Bitcoin signing already
+    uses; no new crypto ships for this screen."""
+    from trezor.crypto import base58
+
+    from apps.common import address_type, coininfo
+
+    coin = coininfo.by_name(coin_name)
+    if kind == _T_P2PKH:
+        version = coin.address_type
+    elif kind == _T_P2SH:
+        version = coin.address_type_p2sh
+    else:
+        raise ValueError(_MALFORMED)
+    if version is None:
+        raise ValueError(_MALFORMED)
+    return base58.encode_check(address_type.tobytes(version) + hash160, coin.b58_hash)
+
+
+async def _confirm_transparent_output(
+    kind: int,
+    hash160: bytes,
+    value: int,
+    number: int,
+    coin_name: str,
+    account_label: str,
+    path: str,
+) -> None:
+    from trezor.ui import layouts
+
+    from apps.common import coininfo
+
+    coin = coininfo.by_name(coin_name)
+    await layouts.confirm_output(
+        _transparent_address(kind, hash160, coin_name),
+        _amount(value, coin.coin_shortcut),
+        output_index=number,
+        # A transparent address is 35 characters, not 106, but grouping it in
+        # fours is how `ZcashGetAddress` and `_confirm_output` already render
+        # what the user must compare, and the screen must not change its
+        # habits between the shielded and transparent halves of one payment.
+        chunkify=True,
+        source_account=account_label,
+        source_account_path=path,
+    )
+
+
+async def _warn_transparent(session: SessionIdentity) -> None:
+    """One screen per transaction, before the first transparent output.
+
+    Not per output: a deshield with several recipients is still one decision
+    about privacy. Its own ButtonRequest name so a host can neither suppress
+    it nor mistake it for an output confirmation."""
+    from trezor import TR
+    from trezor.enums import ButtonRequestType
+    from trezor.ui.layouts import show_warning
+
+    from . import ironwood_account
+
+    await show_warning(
+        br_name="zcash_transparent_payment",
+        content=TR.zcash__transparent_payment_warning,
+        br_code=ButtonRequestType.Warning,
+    )
+    ironwood_account.require_session(session)
+
+
 async def _confirm_memo(memo_kind: int, memo: bytes, number: int) -> None:
     from trezor import TR
     from trezor.enums import ButtonRequestType
@@ -194,29 +272,40 @@ async def _confirm_totals(
         _input_total,
         payment_total,
         _change_total,
+        transparent_total,
         fee,
         _padding_outputs,
         payment_outputs,
+        transparent_outputs,
         action_count,
     ) = totals
+    fee_items = [
+        ("Expires at block", str(expiry_height), None),
+        (TR.words__outputs, str(payment_outputs + transparent_outputs), None),
+        # ZIP-317 counts a standard transparent output as one logical action,
+        # and the device charges it against the same 32-action hard cap, so
+        # this is the sum. Shown so the user sees the true size of what they
+        # authorize (payments + change + padding + transparent outputs), not
+        # just the visible payments.
+        ("Total actions", str(action_count + transparent_outputs), None),
+    ]
+    if transparent_outputs:
+        # How much of the payment is public. Repeated here because the warning
+        # screen came before the amounts did.
+        fee_items.insert(
+            1, ("Public amount", _amount(transparent_total, coin.coin_shortcut), None)
+        )
     # Bitcoin's totals screen: what leaves the wallet (payments plus fee), the
     # fee, and the source account. The host reference height is a policy input
     # only and is deliberately not shown; the digest-bound expiry height is.
     await layouts.confirm_total(
-        _amount(payment_total + fee, coin.coin_shortcut),
+        _amount(payment_total + transparent_total + fee, coin.coin_shortcut),
         _amount(fee, coin.coin_shortcut),
         account_items=[
             (TR.words__account, f"Zcash {network_label} {account_label}", None),
             (TR.address_details__derivation_path, path, None),
         ],
-        fee_items=[
-            ("Expires at block", str(expiry_height), None),
-            (TR.words__outputs, str(payment_outputs), None),
-            # The full bundle size the device signs (payments + change +
-            # padding), i.e. the count bounded by the 32-action hard cap. Shown
-            # so the user sees the true size, not just the visible payments.
-            ("Total actions", str(action_count), None),
-        ],
+        fee_items=fee_items,
     )
 
 
@@ -377,7 +466,11 @@ async def _stream_and_sign(
     handle_out.append(handle)
     transfer_id = random.bytes(TRANSFER_ID_BYTES)
     offset = 0
+    # One running number across both halves of the payment: the transparent
+    # outputs stream before the shielded actions, so they are outputs #1..#N
+    # and the shielded payments continue from there.
     payments = 0
+    warned_transparent = False
     totals = None
     while offset < pczt_length:
         length = min(CHUNK_BYTES, pczt_length - offset)
@@ -424,7 +517,17 @@ async def _stream_and_sign(
             consumed, kind, payload = session_feed(handle, data[fed:])
             utils.zero_unused_stack()
             fed += consumed
-            if kind == _STEP_OUTPUT:
+            if kind == _STEP_TRANSPARENT_OUTPUT:
+                _index, t_kind, hash160, value = payload
+                if not warned_transparent:
+                    await _warn_transparent(session)
+                    warned_transparent = True
+                await _confirm_transparent_output(
+                    t_kind, hash160, value, payments, coin_name, account_label, path
+                )
+                payments += 1
+                ironwood_account.require_session(session)
+            elif kind == _STEP_OUTPUT:
                 _action_index, receiver, value, memo_kind, memo = payload
                 await _confirm_output(
                     receiver, value, payments, coin_name, account_label, path

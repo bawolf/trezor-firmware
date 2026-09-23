@@ -1301,5 +1301,6 @@
   "1299": "zcash__viewing_key_warning",
   "1300": "zcash__seed_fingerprint_warning",
   "1301": "zcash__memo",
-  "1302": "zcash__memo_hash"
+  "1302": "zcash__memo_hash",
+  "1303": "zcash__transparent_payment_warning"
 }

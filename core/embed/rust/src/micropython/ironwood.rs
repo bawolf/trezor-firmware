@@ -255,6 +255,16 @@ extern "C" fn session_feed(n_args: usize, args: *const Obj) -> Obj {
                     .into(),
                 )
             }
+            Step::TransparentOutput(output) => (
+                3,
+                Tuple::alloc(&[
+                    Obj::try_from(output.index)?,
+                    Obj::from(output.kind),
+                    Obj::try_from(&output.hash[..])?,
+                    Obj::try_from(output.value)?,
+                ])?
+                .into(),
+            ),
             Step::Review(totals) => (
                 2,
                 Tuple::alloc(&[
@@ -263,9 +273,11 @@ extern "C" fn session_feed(n_args: usize, args: *const Obj) -> Obj {
                     Obj::try_from(totals.input_total)?,
                     Obj::try_from(totals.payment_total)?,
                     Obj::try_from(totals.change_total)?,
+                    Obj::try_from(totals.transparent_total)?,
                     Obj::try_from(totals.fee)?,
                     Obj::try_from(totals.padding_outputs)?,
                     Obj::try_from(totals.payment_outputs)?,
+                    Obj::try_from(totals.transparent_outputs)?,
                     Obj::try_from(totals.action_count)?,
                 ])?
                 .into(),
@@ -362,7 +374,11 @@ pub static mp_module_trezorironwood: Module = obj_module! {
     ///     bytes, at most 256) and 2 a memo not shown verbatim (memo: the 32-byte
     ///     BLAKE2b-256 of the memo); kind 2 is the review, payload
     ///     (expiry_height, blocks_until_expiry, input_total, payment_total,
-    ///     change_total, fee, padding_outputs, payment_outputs, action_count).
+    ///     change_total, transparent_total, fee, padding_outputs,
+    ///     payment_outputs, transparent_outputs, action_count); kind 3 is a
+    ///     transparent output to confirm, payload (index, kind, hash, value)
+    ///     where kind 0 is a public key hash and 1 a script hash, and hash is
+    ///     the 20 bytes the Base58Check address encodes.
     ///     Unconsumed bytes must be fed again. ValueError: malformed / too many
     ///     actions; RuntimeError: rejected."""
     Qstr::MP_QSTR_session_feed => obj_fn_var!(2, 2, session_feed).as_obj(),
