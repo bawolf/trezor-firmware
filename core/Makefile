@@ -2,8 +2,9 @@
 .PHONY: help \
 	vendor \
 	run emu \
-	test test_rust \
+	test test_rust test_rust_ironwood test_rust_ironwood_corpus \
 	test_emu_sanity test_emu test_emu_multicore test_emu_monero \
+	test_emu_zcash test_emu_zcash_ui test_emu_zcash_ui_record \
 	test_emu_u2f test_emu_fido2 \
 	test_emu_click test_emu_click_ui test_emu_click_ui_multicore \
 	test_emu_persistence test_emu_persistence_ui test_emu_upgrade \
@@ -69,6 +70,9 @@ XTASK_BUILD_OPTS += --bootloader-devel
 endif
 ifeq ($(MINISCRIPT),1)
 XTASK_BUILD_OPTS += --miniscript
+endif
+ifeq ($(IRONWOOD),1)
+XTASK_BUILD_OPTS += --ironwood
 endif
 ifeq ($(N1W1),1)
 XTASK_BUILD_OPTS += --n1w1
@@ -136,6 +140,14 @@ test_rust: ## run rs unit tests
 	# TODO:
 	# xtask test all
 
+test_rust_ironwood: ## run the host Ironwood (Zcash) crate tests, without the long corpus
+	cd embed ; cargo test -p ironwood --all-targets --features test --release \
+		-- --skip corpus_ --skip sampled_
+
+test_rust_ironwood_corpus: ## run the long Ironwood corpus and mutation sweeps (~15 min)
+	cd embed ; cargo test -p ironwood --all-targets --features test --release \
+		-- corpus_ sampled_
+
 test_emu_sanity: ## make sure the emulator doesn't crash on startup
 	timeout -v 10 $(EMU) --disable-animation --headless --temporary-profile --command true
 
@@ -146,6 +158,18 @@ test_emu_multicore: ## run device tests using multiple cores
 	$(PYTEST) -n $(MULTICORE) $(TESTPATH)/device_tests $(TESTOPTS) --timeout $(PYTEST_TIMEOUT) \
 		--control-emulators --model=core --random-order-seed=$(RANDOM) \
 		--lang=$(TEST_LANG)
+
+test_emu_zcash: ## run Zcash Ironwood device tests (needs an IRONWOOD=1 emulator)
+	$(EMU_TEST) $(PYTEST) $(TESTPATH)/device_tests/zcash --ironwood $(TESTOPTS) \
+		--lang=$(TEST_LANG)
+
+test_emu_zcash_ui: ## run Zcash Ironwood device tests with UI testing
+	$(EMU_TEST) $(PYTEST) $(TESTPATH)/device_tests/zcash --ironwood $(TESTOPTS) \
+		--ui=test --lang=$(TEST_LANG)
+
+test_emu_zcash_ui_record: ## record screens for the Zcash Ironwood device tests
+	$(EMU_TEST) $(PYTEST) $(TESTPATH)/device_tests/zcash --ironwood $(TESTOPTS) \
+		--ui=record --lang=$(TEST_LANG)
 
 test_emu_monero: ## run selected monero device tests from monero-agent
 	cd tests ; $(EMU_TEST) ./run_tests_device_emu_monero.sh $(TESTOPTS)

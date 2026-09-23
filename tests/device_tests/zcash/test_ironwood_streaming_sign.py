@@ -35,6 +35,8 @@ NETWORKS = {
 
 pytestmark = [
     pytest.mark.altcoin,
+    pytest.mark.zcash,
+    pytest.mark.ironwood,
     pytest.mark.models("t3b1", "t3t1", "t3w1"),
     pytest.mark.setup_client(mnemonic=MNEMONIC),
 ]

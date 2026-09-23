@@ -1,1 +1,0 @@
-Zcash: Added provisional `trezorlib.zcash` host bindings for address, Orchard-only viewing-key, and chunked PCZT workflows. Device handlers remain follow-up work.

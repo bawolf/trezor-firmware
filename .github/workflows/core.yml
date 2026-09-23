@@ -61,7 +61,7 @@ jobs:
       - run: nix-shell --run "cd core/embed && cargo clippy -p xtask -p xbuild --all-targets -- -D warnings"
 
   core_firmware:
-    name: Build firmware (${{ matrix.model }}, ${{ matrix.coins }}, ${{ matrix.type }}${{ matrix.miniscript && ', miniscript' || '' }}${{matrix.n1w1 && ', n1w1' || '' }})
+    name: Build firmware (${{ matrix.model }}, ${{ matrix.coins }}, ${{ matrix.type }}${{ matrix.miniscript && ', miniscript' || '' }}${{matrix.n1w1 && ', n1w1' || '' }}${{ matrix.ironwood && ', ironwood' || '' }})
     runs-on: ubuntu-latest
     timeout-minutes: 15
     strategy:
@@ -72,6 +72,7 @@ jobs:
         type: ${{ fromJSON(github.event_name == 'schedule' && '["normal", "debuglink", "production"]' || '["normal", "debuglink"]') }}
         miniscript: [false]
         n1w1: [false]
+        ironwood: [false]
         include:
           - model: D001
             coins: universal
@@ -90,6 +91,21 @@ jobs:
             coins: universal
             type: debuglink
             n1w1: true  # currently N1W1 is not supported for normal builds
+          # Zcash/Ironwood is off by default and builds only for these three
+          # models (xtask `IRONWOOD_MODELS`). The flash margin is the thing to
+          # watch, so build all three.
+          - model: T3B1
+            coins: universal
+            type: normal
+            ironwood: true
+          - model: T3T1
+            coins: universal
+            type: normal
+            ironwood: true
+          - model: T3W1
+            coins: universal
+            type: normal
+            ironwood: true
         exclude:
           - model: T3W1
             type: production
@@ -99,6 +115,7 @@ jobs:
       PYOPT: ${{ matrix.type == 'debuglink' && '0' || '1' }}
       MINISCRIPT: ${{ matrix.miniscript && '1' || '0' }}
       N1W1: ${{ matrix.n1w1 && '1' || '0' }}
+      IRONWOOD: ${{ matrix.ironwood && '1' || '0' }}
       PRODUCTION: ${{ matrix.type == 'production' && '1' || '0' }}
       BOOTLOADER_DEVEL: ${{ matrix.model == 'T3W1' && '1' || '0' }}
     steps:
@@ -125,7 +142,7 @@ jobs:
         if: matrix.coins == 'btconly' && matrix.type != 'debuglink'
       - uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f  # actions/upload-artifact@v7.0.0
         with:
-          name: core-firmware-${{ matrix.model }}-${{ matrix.coins }}-${{ matrix.type }}${{ matrix.miniscript && '-miniscript' || '' }}${{ matrix.n1w1 && '-n1w1' || '' }}
+          name: core-firmware-${{ matrix.model }}-${{ matrix.coins }}-${{ matrix.type }}${{ matrix.miniscript && '-miniscript' || '' }}${{ matrix.n1w1 && '-n1w1' || '' }}${{ matrix.ironwood && '-ironwood' || '' }}
           path: |
             core/build-xtask/artifacts/latest/*.bin
             core/build-xtask/artifacts/latest/*.elf
@@ -133,7 +150,7 @@ jobs:
           retention-days: 7
 
   core_emu:
-    name: Build emu (${{ matrix.model }}, ${{ matrix.coins }}, ${{ matrix.type }}, ${{ matrix.asan }}${{ matrix.miniscript && ', miniscript' || '' }}${{matrix.n1w1 && ', n1w1' || '' }})
+    name: Build emu (${{ matrix.model }}, ${{ matrix.coins }}, ${{ matrix.type }}, ${{ matrix.asan }}${{ matrix.miniscript && ', miniscript' || '' }}${{matrix.n1w1 && ', n1w1' || '' }}${{ matrix.ironwood && ', ironwood' || '' }})
     runs-on: ubuntu-latest
     timeout-minutes: 15
     needs: param
@@ -147,6 +164,7 @@ jobs:
         asan: ${{ fromJSON(needs.param.outputs.asan) }}
         miniscript: [false]
         n1w1: [false]
+        ironwood: [false]
         exclude:
           - type: normal
             asan: asan
@@ -161,12 +179,21 @@ jobs:
             type: debuglink
             asan: noasan
             n1w1: true  # currently N1W1 is not supported for normal builds
+          # The emulator the Zcash device tests and the Zcash core unit tests
+          # need. One model is enough for behaviour; the other two Ironwood
+          # models are covered by the firmware builds above.
+          - model: T3T1
+            coins: universal
+            type: debuglink
+            asan: noasan
+            ironwood: true
     env:
       TREZOR_MODEL: ${{ matrix.model }}
       BITCOIN_ONLY: ${{ matrix.coins == 'universal' && '0' || '1' }}
       PYOPT: ${{ matrix.type == 'debuglink' && '0' || '1' }}
       MINISCRIPT: ${{ matrix.miniscript && '1' || '0' }}
       N1W1: ${{ matrix.n1w1 && '1' || '0' }}
+      IRONWOOD: ${{ matrix.ironwood && '1' || '0' }}
       ADDRESS_SANITIZER: ${{ matrix.asan == 'asan' && '1' || '0' }}
       LSAN_OPTIONS: "suppressions=../../asan_suppressions.txt"
     steps:
@@ -179,10 +206,10 @@ jobs:
       - run: nix-shell --run "uv run make -C core build_unix_frozen"
       - run: nix-shell --run "uv run ./tools/check-insecure-prng.py --present --model $TREZOR_MODEL core/build-xtask/artifacts/latest/firmware-emu"
       - run: nix-shell --run "uv run make -C core test_emu_sanity"
-      - run: cp core/build-xtask/artifacts/latest/firmware-emu core/build-xtask/artifacts/latest/firmware-emu-${{ matrix.model }}-${{ matrix.coins }}${{ matrix.miniscript && '-miniscript' || '' }}${{ matrix.n1w1 && '-n1w1' || '' }}
+      - run: cp core/build-xtask/artifacts/latest/firmware-emu core/build-xtask/artifacts/latest/firmware-emu-${{ matrix.model }}-${{ matrix.coins }}${{ matrix.miniscript && '-miniscript' || '' }}${{ matrix.n1w1 && '-n1w1' || '' }}${{ matrix.ironwood && '-ironwood' || '' }}
       - uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f  # actions/upload-artifact@v7.0.0
         with:
-          name: core-emu-${{ matrix.model }}-${{ matrix.coins }}-${{ matrix.type }}-${{ matrix.asan }}${{ matrix.miniscript && '-miniscript' || '' }}${{ matrix.n1w1 && '-n1w1' || '' }}
+          name: core-emu-${{ matrix.model }}-${{ matrix.coins }}-${{ matrix.type }}-${{ matrix.asan }}${{ matrix.miniscript && '-miniscript' || '' }}${{ matrix.n1w1 && '-n1w1' || '' }}${{ matrix.ironwood && '-ironwood' || '' }}
           path: |
             core/build-xtask/artifacts/latest/firmware-emu*
             core/build-xtask/artifacts/latest/bootloader-emu
@@ -679,6 +706,100 @@ jobs:
           retention-days: 7
         if: always()
       - uses: ./.github/actions/upload-coverage
+
+  # Zcash / Ironwood tests.
+  #
+  # The signing core is a host-testable Rust crate, so most of the correctness
+  # argument runs without an emulator. The fast suites run on every PR; the
+  # corpus and mutation sweeps take about fifteen minutes and run nightly.
+  core_ironwood_rust_test:
+    name: Zcash Ironwood crate tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # actions/checkout@v6.0.2
+        with:
+          submodules: recursive
+          persist-credentials: false
+      - uses: ./.github/actions/environment
+      - run: nix-shell --run "uv run make -C core test_rust_ironwood"
+      - run: nix-shell --run "cd core/embed && cargo clippy -p ironwood --all-targets --features test -- -D warnings"
+
+  core_ironwood_corpus_test:
+    if: github.event_name == 'schedule'
+    name: Zcash Ironwood corpus and mutation sweeps
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # actions/checkout@v6.0.2
+        with:
+          submodules: recursive
+          persist-credentials: false
+      - uses: ./.github/actions/environment
+      - run: nix-shell --run "uv run make -C core test_rust_ironwood_corpus"
+
+  # Device tests for the Zcash Ironwood flows. They need an `--ironwood`
+  # emulator, which is why they are their own job and their own artifact:
+  # the tests carry `pytest.mark.ironwood` and skip unless `--ironwood` is
+  # passed, so the stock device-test jobs above are unaffected.
+  core_zcash_test:
+    name: Zcash device tests (${{ matrix.model }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    needs: core_emu
+    strategy:
+      fail-fast: false
+      matrix:
+        model: [T3T1]
+    env:
+      TREZOR_MODEL: ${{ matrix.model }}
+      PYTEST_TIMEOUT: 600
+      TESTOPTS: "--durations 10"
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # actions/checkout@v6.0.2
+        with:
+          submodules: recursive
+      - uses: actions/download-artifact@70fc10c6e5e1ce46ad2ea6f2b72d43f7d47b13c3  # actions/download-artifact@v8.0.0
+        with:
+          name: core-emu-${{ matrix.model }}-universal-debuglink-noasan-ironwood
+          path: core/build-xtask/artifacts/latest
+      - run: chmod +x core/build-xtask/artifacts/latest/firmware-emu*
+      - uses: ./.github/actions/environment
+      - run: nix-shell --run "uv run make -C core test_emu_zcash_ui"
+      - run: tail -v -n50 tests/trezor*.log || true
+        if: failure()
+      - uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f  # actions/upload-artifact@v7.0.0
+        with:
+          name: core-test-zcash-${{ matrix.model }}
+          path: |
+            tests/trezor*.log
+            tests/ui_tests/reports/test
+          retention-days: 7
+        if: always()
+
+  # The Zcash core unit tests (`core/tests/test_apps.zcash.*`,
+  # `test_trezorironwood.py`) skip themselves on a stock build, so they need a
+  # non-frozen `--ironwood` emulator to actually run.
+  core_zcash_unit_test:
+    name: Zcash unit tests (${{ matrix.model }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        model: [T3T1]
+    env:
+      TREZOR_MODEL: ${{ matrix.model }}
+      BITCOIN_ONLY: 0
+      IRONWOOD: 1
+      PYOPT: 0
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # actions/checkout@v6.0.2
+        with:
+          submodules: recursive
+      - uses: ./.github/actions/environment
+      - run: nix-shell --run "uv run make -C core build_unix"
+      - run: nix-shell --run "uv run make -C core test"
 
 
   # Tests for U2F and HID.
