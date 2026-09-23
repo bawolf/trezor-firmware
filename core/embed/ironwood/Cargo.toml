@@ -44,9 +44,3 @@ rand_core = { workspace = true, features = ["getrandom"] }
 serde_json.workspace = true
 zcash_protocol = { workspace = true, features = ["local-consensus"] }
 zip32.workspace = true
-
-# Host-side generator for the emulator signing fixtures. Requires `test`, so no
-# firmware build can reach it.
-[[example]]
-name = "ironwood_fixture"
-required-features = ["test"]
