@@ -489,7 +489,17 @@ pub fn sign(handle: u32, seed: &[u8], records: &mut [u8]) -> core::result::Resul
     result
 }
 
-/// Ends the request, if any. Idempotent.
-pub fn cancel() {
-    *active() = None;
+/// Ends the request. Idempotent.
+///
+/// `Some(handle)` ends it only if it is that handle's request: a workflow that
+/// still holds its handle cannot tear down a request that is no longer its
+/// own. `None` ends whatever is live, which is what blind teardown needs --
+/// `sign_pczt`'s `finally` runs before `session_begin` on the paths that fail
+/// early, and autolock unwinds it with a `GeneratorExit` from outside. Blind
+/// cancel is fail-closed where blind adoption would not be.
+pub fn cancel(handle: Option<u32>) {
+    match handle {
+        Some(handle) if !owns(handle) => (),
+        _ => *active() = None,
+    }
 }

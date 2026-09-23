@@ -45,6 +45,7 @@ class _FakeIronwood:
         self.steps = list(steps)
         self.begun = False
         self.approved = False
+        self.cancelled = []
         self.handle = 0
 
     def session_begin(self, *args) -> int:
@@ -67,8 +68,11 @@ class _FakeIronwood:
         self.events.append((SIGN, None))
         return bytes(sign_pczt.RECORD_LEN)
 
-    def session_cancel(self) -> None:
-        pass
+    def session_cancel(self, handle=None) -> None:
+        # The handler cancels by name once it has one: a teardown that named
+        # someone else's session would be a way to cancel the running one.
+        assert handle in (None, self.handle), "cancel named another session"
+        self.cancelled.append(handle)
 
 
 class _RecordingProgress:
@@ -181,6 +185,7 @@ class TestIronwoodSignPcztProgress(unittest.TestCase):
         await self._park("totals")
 
     def _run(self):
+        self.handle_out = []
         return await_result(
             sign_pczt._stream_and_sign(
                 self.wallet_seed,
@@ -193,8 +198,28 @@ class TestIronwoodSignPcztProgress(unittest.TestCase):
                 "Mainnet",
                 "ZEC #1",
                 "m/32'/133'/0'",
+                self.handle_out,
             )
         )
+
+    def test_the_handle_reaches_the_caller_that_has_to_cancel(self):
+        """`sign_pczt`'s `finally` cancels by name, so it needs the handle.
+
+        Without this the teardown is blind: it ends whatever session is live,
+        which after an unwind may belong to a later workflow. The handle is
+        published as soon as `session_begin` returns, before anything that can
+        fail.
+        """
+        self._run()
+
+        self.assertEqual(self.handle_out, [self.native.handle])
+        sign_pczt._cancel_native(self.handle_out[0])
+        self.assertEqual(self.native.cancelled, [self.native.handle])
+
+    def test_teardown_before_begin_cancels_blind(self):
+        """A failure before `session_begin` leaves no handle to name."""
+        sign_pczt._cancel_native(None)
+        self.assertEqual(self.native.cancelled, [None])
 
     def test_a_report_precedes_every_feed(self):
         """Report first, verify second -- the screen is lit for the work.

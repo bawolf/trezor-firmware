@@ -92,5 +92,93 @@ class TestIronwoodReceiver(unittest.TestCase):
         self.assertFalse(hasattr(trezorironwood, "derive_spend_authorizing_key"))
 
 
+@unittest.skipUnless(utils.USE_IRONWOOD, "requires native Ironwood support")
+class TestIronwoodSessionHandle(unittest.TestCase):
+    """The handle binds a native signing request to the workflow that began it.
+
+    `feed`, `approve` and `sign` refuse any other handle, and refuse it
+    *without touching the live request*: destroying it there would turn a stray
+    call from an already-dead workflow into a way to cancel the running one.
+    The same argument applies to `cancel` once a handle is given.
+    """
+
+    SEED = bytes(range(32))
+    NETWORK = 1  # Testnet
+    ACCOUNT = 0
+    HEIGHT = 10_000_000
+    MAXIMUM_FEE = 100_000
+    EXPIRY_WINDOW = 40
+    PCZT_LENGTH = 4096
+
+    def setUp(self):
+        import trezorironwood
+
+        self.native = trezorironwood
+        self.handle = self._begin()
+
+    def tearDown(self):
+        self.native.session_cancel()
+
+    def _begin(self):
+        return self.native.session_begin(
+            self.SEED,
+            self.NETWORK,
+            self.ACCOUNT,
+            self.HEIGHT,
+            self.MAXIMUM_FEE,
+            self.EXPIRY_WINDOW,
+            self.PCZT_LENGTH,
+        )
+
+    def _assert_alive(self, handle):
+        """Feed a byte the live session accepts as "not enough yet"."""
+        consumed, kind, payload = self.native.session_feed(handle, b"\x00")
+        self.assertEqual(kind, 0)
+        self.assertIsNone(payload)
+        self.assertEqual(consumed, 1)
+
+    def test_handle_is_never_zero(self):
+        self.assertNotEqual(self.handle, 0)
+        with self.assertRaises(ValueError):
+            self.native.session_feed(0, b"\x00")
+
+    def test_a_foreign_handle_is_refused_and_leaves_the_request_alone(self):
+        foreign = self.handle ^ 0xFFFF
+        for call in (
+            lambda: self.native.session_feed(foreign, b"\x00"),
+            lambda: self.native.session_approve(foreign),
+            lambda: self.native.session_sign(foreign, self.SEED),
+        ):
+            with self.assertRaises(RuntimeError) as raised:
+                call()
+            self.assertEqual(str(raised.value), "Invalid signing state")
+            # The live request survived every one of them.
+            self._assert_alive(self.handle)
+
+    def test_cancel_with_a_foreign_handle_does_not_tear_down_the_request(self):
+        self.native.session_cancel(self.handle ^ 0xFFFF)
+        self._assert_alive(self.handle)
+
+    def test_cancel_with_the_owning_handle_ends_the_request(self):
+        self.native.session_cancel(self.handle)
+        with self.assertRaises(RuntimeError):
+            self.native.session_feed(self.handle, b"\x00")
+
+    def test_cancel_without_a_handle_ends_whatever_is_live(self):
+        self.native.session_cancel()
+        with self.assertRaises(RuntimeError):
+            self.native.session_feed(self.handle, b"\x00")
+        # Idempotent: teardown runs from a `finally` that may run twice.
+        self.native.session_cancel()
+        self.native.session_cancel(self.handle)
+
+    def test_a_second_begin_retires_the_first_handle(self):
+        second = self._begin()
+        self.assertNotEqual(second, self.handle)
+        with self.assertRaises(RuntimeError):
+            self.native.session_feed(self.handle, b"\x00")
+        self._assert_alive(second)
+
+
 if __name__ == "__main__":
     unittest.main()

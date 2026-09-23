@@ -33,10 +33,13 @@
 
 use blake2b_simd::Params;
 use rand_core::{CryptoRng, Error as RngError, RngCore};
-use zeroize::Zeroize;
+use zeroize::{Zeroize, Zeroizing};
 
 /// BLAKE2b personalization of the hedge. 16 bytes, the maximum.
 const PERSONAL: &[u8; 16] = b"TrezorIrnwdNonce";
+
+/// `0x01 ‖ secret[32] ‖ entropy[32] ‖ counter[8] ‖ block_index[4]`.
+const INPUT_BYTES: usize = 1 + 32 + 32 + 8 + 4;
 
 /// An RNG whose output no longer depends on entropy alone.
 ///
@@ -65,6 +68,10 @@ impl<R: RngCore> Hedged<R> {
             .finalize();
         let mut secret = [0u8; 32];
         secret.copy_from_slice(digest.as_bytes());
+        // `blake2b_simd::Hash` is 64 bytes by value and implements no
+        // `Zeroize`, so the half this did not take stays on the frame; the
+        // caller wipes it (`sign_pczt.py` runs `zero_unused_stack()` after
+        // `session_begin`, which is the only thing that lends the seed).
         Self {
             inner,
             secret,
@@ -103,26 +110,36 @@ impl<R: RngCore> RngCore for Hedged<R> {
         let counter = self.counter;
         self.counter = self.counter.wrapping_add(1);
 
+        // The hash input is assembled once, in a buffer this function owns and
+        // wipes, rather than streamed through `update`: what `update` copies
+        // into the hasher's internal block buffer is not reachable to wipe.
+        let mut input = Zeroizing::new([0u8; INPUT_BYTES]);
+        input[0] = 0x01;
+        input[1..33].copy_from_slice(&self.secret);
+        input[33..65].copy_from_slice(&entropy);
+        input[65..73].copy_from_slice(&counter.to_le_bytes());
+        entropy.zeroize();
+
         let mut written = 0;
         let mut block_index = 0u32;
         while written < destination.len() {
-            let digest = Params::new()
-                .hash_length(64)
-                .personal(PERSONAL)
-                .to_state()
-                .update(&[0x01])
-                .update(&self.secret)
-                .update(&entropy)
-                .update(&counter.to_le_bytes())
-                .update(&block_index.to_le_bytes())
-                .finalize();
-            let block = digest.as_bytes();
+            input[73..77].copy_from_slice(&block_index.to_le_bytes());
+            // The output is copied out and wiped too, so the only 64-byte
+            // keystream block left after this call is the part the caller
+            // asked for.
+            let mut block = Zeroizing::new([0u8; 64]);
+            block.copy_from_slice(
+                Params::new()
+                    .hash_length(64)
+                    .personal(PERSONAL)
+                    .hash(input.as_slice())
+                    .as_bytes(),
+            );
             let take = core::cmp::min(block.len(), destination.len() - written);
             destination[written..written + take].copy_from_slice(&block[..take]);
             written += take;
             block_index += 1;
         }
-        entropy.zeroize();
     }
 
     fn try_fill_bytes(&mut self, destination: &mut [u8]) -> core::result::Result<(), RngError> {

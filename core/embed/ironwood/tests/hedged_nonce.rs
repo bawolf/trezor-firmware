@@ -96,6 +96,14 @@ fn only_signature(records: &[SignatureRecord]) -> [u8; 64] {
     records[0].signature
 }
 
+/// The nonce commitment: a RedPallas signature is `R ‖ s`, and `R = [T]B` is
+/// the only half that depends on the nonce alone. Two signatures over
+/// *different* messages under a reused nonce share `R` and differ in `s`, so
+/// comparing all 64 bytes would not see the reuse these tests exist to catch.
+fn only_nonce_commitment(records: &[SignatureRecord]) -> [u8; 32] {
+    only_signature(records)[..32].try_into().unwrap()
+}
+
 /// A dead TRNG must not stop the device signing, and what it produces must
 /// still be a valid RedPallas signature over this transaction's sighash.
 #[test]
@@ -121,9 +129,11 @@ fn two_transactions_do_not_share_a_nonce_without_entropy() {
 
     verify_as_a_wallet(&first, &first_records, &first_sighash);
     verify_as_a_wallet(&second, &second_records, &second_sighash);
+    // `R`, not the whole signature: the messages differ, so `s` would differ
+    // even under a reused nonce and the 64-byte comparison would pass.
     assert_ne!(
-        only_signature(&first_records),
-        only_signature(&second_records)
+        only_nonce_commitment(&first_records),
+        only_nonce_commitment(&second_records)
     );
 }
 
@@ -139,6 +149,7 @@ fn two_wallets_do_not_share_a_nonce_without_entropy() {
 
     verify_as_a_wallet(&bytes, &mine, &sighash);
     verify_as_a_wallet(&bytes, &theirs, &other_sighash);
+    assert_ne!(only_nonce_commitment(&mine), only_nonce_commitment(&theirs));
     assert_ne!(only_signature(&mine), only_signature(&theirs));
 }
 

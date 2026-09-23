@@ -263,6 +263,12 @@ async def sign_pczt(msg: ZcashSignPczt) -> ZcashSpendAuthSignatures:
     wallet_seed = await seed.get_seed()
     ironwood_account.require_session(session)
 
+    # `_stream_and_sign` writes the native handle here as soon as it has one,
+    # so the `finally` below can cancel *its* session rather than whatever is
+    # live. Before `session_begin` returns the list is empty and the cancel is
+    # blind, which is what a pre-begin failure needs.
+    handle_out: list[int] = []
+
     try:
         return await _stream_and_sign(
             wallet_seed,
@@ -275,6 +281,7 @@ async def sign_pczt(msg: ZcashSignPczt) -> ZcashSpendAuthSignatures:
             network_label,
             account_label,
             path,
+            handle_out,
         )
     except ValueError as exc:
         # Only the two curated native messages reach the host verbatim; any other
@@ -292,16 +299,16 @@ async def sign_pczt(msg: ZcashSignPczt) -> ZcashSpendAuthSignatures:
         # Runs on normal return, on host-cancel, and on autolock: when the idle
         # timer closes this workflow the GeneratorExit unwinds through here, so
         # the native session (and its secrets) is always torn down.
-        _cancel_native()
+        _cancel_native(handle_out[0] if handle_out else None)
         del wallet_seed
 
 
-def _cancel_native() -> None:
+def _cancel_native(handle: int | None) -> None:
     from trezor import utils
     from trezorironwood import session_cancel
 
     try:
-        session_cancel()
+        session_cancel(handle)
     finally:
         # Clear completed native stack frames before any await.
         utils.zero_unused_stack()
@@ -318,6 +325,7 @@ async def _stream_and_sign(
     network_label: str,
     account_label: str,
     path: str,
+    handle_out: list[int],
 ) -> ZcashSpendAuthSignatures:
     from trezor import TR, utils, wire
     from trezor.crypto import random
@@ -363,6 +371,10 @@ async def _stream_and_sign(
         )
     finally:
         utils.zero_unused_stack()
+    # Hand the handle to the caller's `finally` before anything can fail: from
+    # here on a teardown cancels this session by name, not by "whatever is
+    # live".
+    handle_out.append(handle)
     transfer_id = random.bytes(TRANSFER_ID_BYTES)
     offset = 0
     payments = 0

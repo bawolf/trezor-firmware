@@ -195,7 +195,7 @@ extern "C" fn session_begin(n_args: usize, args: *const Obj) -> Obj {
             return Err(Error::TypeError);
         }
         // Any earlier request must release its blocks before the new one begins.
-        signing::cancel();
+        signing::cancel(None);
         // Root (or reuse) the boot-lifetime signing region. It is a native
         // `.buf` static, not a Python object, so nothing needs to be kept
         // referenced across the session and it survives every session for the
@@ -302,9 +302,17 @@ extern "C" fn session_sign(handle: Obj, seed: Obj) -> Obj {
     unsafe { util::try_or_raise(block) }
 }
 
-extern "C" fn session_cancel() -> Obj {
-    signing::cancel();
-    Obj::const_none()
+extern "C" fn session_cancel(n_args: usize, args: *const Obj) -> Obj {
+    let block = |args: &[Obj], _kwargs: &Map| {
+        let handle = match args.first() {
+            None => None,
+            Some(value) if *value == Obj::const_none() => None,
+            Some(value) => Some(parse_handle(*value)?),
+        };
+        signing::cancel(handle);
+        Ok(Obj::const_none())
+    };
+    unsafe { util::try_with_args_and_kwargs(n_args, args, &Map::EMPTY, block) }
 }
 
 #[no_mangle]
@@ -365,10 +373,11 @@ pub static mp_module_trezorironwood: Module = obj_module! {
     ///     """Sign every real spend and end the session. Returns concatenated
     ///     66-byte records: pool (0x03) | action_index | signature[64]."""
     Qstr::MP_QSTR_session_sign => obj_fn_2!(session_sign).as_obj(),
-    /// def session_cancel() -> None:
-    ///     """End the session, if any, and wipe its state. Takes no handle: it is
-    ///     teardown, it runs from a `finally` that may not have one (autolock
-    ///     unwinds the workflow with a GeneratorExit), and cancelling is
-    ///     fail-closed where adopting a session is not."""
-    Qstr::MP_QSTR_session_cancel => obj_fn_0!(session_cancel).as_obj(),
+    /// def session_cancel(handle: int | None = None) -> None:
+    ///     """End the session and wipe its state. With a handle, only that
+    ///     handle's session is ended, so a workflow cannot tear down a session
+    ///     that is no longer its own. Without one, whatever is live is ended:
+    ///     teardown runs from a `finally` that may have no handle yet, and
+    ///     autolock unwinds the workflow with a GeneratorExit from outside."""
+    Qstr::MP_QSTR_session_cancel => obj_fn_var!(0, 1, session_cancel).as_obj(),
 };

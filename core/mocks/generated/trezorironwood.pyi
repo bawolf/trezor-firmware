@@ -72,8 +72,9 @@ def session_sign(handle: int, seed: bytes) -> bytes:
 
 
 # rust/src/micropython/ironwood.rs
-def session_cancel() -> None:
-    """End the session, if any, and wipe its state. Takes no handle: it is
-    teardown, it runs from a `finally` that may not have one (autolock
-    unwinds the workflow with a GeneratorExit), and cancelling is
-    fail-closed where adopting a session is not."""
+def session_cancel(handle: int | None = None) -> None:
+    """End the session and wipe its state. With a handle, only that
+    handle's session is ended, so a workflow cannot tear down a session
+    that is no longer its own. Without one, whatever is live is ended:
+    teardown runs from a `finally` that may have no handle yet, and
+    autolock unwinds the workflow with a GeneratorExit from outside."""
