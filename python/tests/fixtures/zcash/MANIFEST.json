@@ -1,7 +1,7 @@
 {
   "schema": "trezor-ironwood-host-fixture-manifest/1",
   "purpose": "Host-side PCZT transfer-shape vectors for trezorlib.zcash.sign_pczt. The host never parses PCZT bytes, so these exercise the chunked transfer protocol only. They are NOT positive signing coverage; the contract's positive signing controls belong to the firmware/native lane. The per-fixture PCZT structure fields (signature, output and padding counts, shielded_sighash) are recorded as provenance for the firmware lane; the host tests read only file, byte_length, sha256, chunks_at_1024 and action_count.",
-  "provisional_wire_id_revision": "32100-32106 and 32109 (local-only, not upstream-assigned; 32107 and 32108 are reserved, never reused)",
+  "provisional_wire_id_revision": "2300-2306 and 2309 (requested, not upstream-assigned; 2307 and 2308 are reserved, never reused)",
   "contract": "common/protob/messages-zcash.proto and trezorlib.zcash transfer constants",
   "source_evidence": "preserved arena-peak-8action-01 synthetic fixture corpus",
   "source_dir": "inputs/pczt",

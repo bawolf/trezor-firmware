@@ -846,14 +846,14 @@ class MessageType(IntEnum):
     BenchmarkResult = 9103
     TelemetryGet = 1100
     Telemetry = 1101
-    ZcashGetAddress = 32100
-    ZcashAddress = 32101
-    ZcashGetViewingKey = 32102
-    ZcashViewingKey = 32103
-    ZcashSignPczt = 32104
-    ZcashPcztRequest = 32105
-    ZcashPcztAck = 32106
-    ZcashSpendAuthSignatures = 32109
+    ZcashGetAddress = 2300
+    ZcashAddress = 2301
+    ZcashGetViewingKey = 2302
+    ZcashViewingKey = 2303
+    ZcashSignPczt = 2304
+    ZcashPcztRequest = 2305
+    ZcashPcztAck = 2306
+    ZcashSpendAuthSignatures = 2309
 
 
 class BenchmarkListNames(protobuf.MessageType):
@@ -10185,7 +10185,7 @@ class WebAuthnCredential(protobuf.MessageType):
 
 
 class ZcashGetAddress(protobuf.MessageType):
-    MESSAGE_WIRE_TYPE = 32100
+    MESSAGE_WIRE_TYPE = 2300
     FIELDS = {
         1: protobuf.Field("network", "ZcashNetwork", repeated=False, required=True),
         2: protobuf.Field("account", "uint32", repeated=False, required=True),
@@ -10208,7 +10208,7 @@ class ZcashGetAddress(protobuf.MessageType):
 
 
 class ZcashAddress(protobuf.MessageType):
-    MESSAGE_WIRE_TYPE = 32101
+    MESSAGE_WIRE_TYPE = 2301
     FIELDS = {
         1: protobuf.Field("address", "string", repeated=False, required=True),
     }
@@ -10222,7 +10222,7 @@ class ZcashAddress(protobuf.MessageType):
 
 
 class ZcashGetViewingKey(protobuf.MessageType):
-    MESSAGE_WIRE_TYPE = 32102
+    MESSAGE_WIRE_TYPE = 2302
     FIELDS = {
         1: protobuf.Field("network", "ZcashNetwork", repeated=False, required=True),
         2: protobuf.Field("account", "uint32", repeated=False, required=True),
@@ -10242,7 +10242,7 @@ class ZcashGetViewingKey(protobuf.MessageType):
 
 
 class ZcashViewingKey(protobuf.MessageType):
-    MESSAGE_WIRE_TYPE = 32103
+    MESSAGE_WIRE_TYPE = 2303
     FIELDS = {
         1: protobuf.Field("key", "string", repeated=False, required=True),
         2: protobuf.Field("seed_fingerprint", "bytes", repeated=False, required=False, default=None),
@@ -10259,7 +10259,7 @@ class ZcashViewingKey(protobuf.MessageType):
 
 
 class ZcashSignPczt(protobuf.MessageType):
-    MESSAGE_WIRE_TYPE = 32104
+    MESSAGE_WIRE_TYPE = 2304
     FIELDS = {
         1: protobuf.Field("network", "ZcashNetwork", repeated=False, required=True),
         2: protobuf.Field("account", "uint32", repeated=False, required=True),
@@ -10282,7 +10282,7 @@ class ZcashSignPczt(protobuf.MessageType):
 
 
 class ZcashPcztRequest(protobuf.MessageType):
-    MESSAGE_WIRE_TYPE = 32105
+    MESSAGE_WIRE_TYPE = 2305
     FIELDS = {
         1: protobuf.Field("transfer_id", "bytes", repeated=False, required=True),
         2: protobuf.Field("offset", "uint32", repeated=False, required=True),
@@ -10302,7 +10302,7 @@ class ZcashPcztRequest(protobuf.MessageType):
 
 
 class ZcashPcztAck(protobuf.MessageType):
-    MESSAGE_WIRE_TYPE = 32106
+    MESSAGE_WIRE_TYPE = 2306
     FIELDS = {
         1: protobuf.Field("transfer_id", "bytes", repeated=False, required=True),
         2: protobuf.Field("offset", "uint32", repeated=False, required=True),
@@ -10322,7 +10322,7 @@ class ZcashPcztAck(protobuf.MessageType):
 
 
 class ZcashSpendAuthSignatures(protobuf.MessageType):
-    MESSAGE_WIRE_TYPE = 32109
+    MESSAGE_WIRE_TYPE = 2309
     FIELDS = {
         1: protobuf.Field("transfer_id", "bytes", repeated=False, required=True),
         2: protobuf.Field("records", "bytes", repeated=False, required=True),

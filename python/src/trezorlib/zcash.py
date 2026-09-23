@@ -16,9 +16,9 @@
 
 """Zcash Ironwood host API.
 
-The wire identifiers backing these calls are PROVISIONAL and local-only; they
-are not assigned or reserved upstream, and they may change once maintainers
-coordinate an allocation.
+The wire identifiers backing these calls are PROVISIONAL: the 2300 block is
+the lowest unused one, but it is not assigned or reserved upstream yet and may
+change once maintainers confirm the allocation.
 
 The host is untrusted by the device, and the device is untrusted by the host.
 Every transfer field is validated against the declared transfer before it is

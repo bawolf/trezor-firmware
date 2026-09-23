@@ -41,26 +41,28 @@ requires_repo_schema = pytest.mark.skipif(
     reason="protobuf sources are not included in the trezorlib sdist",
 )
 
-# The provisional local-only allocation from the contract, section 2.2.
+# The requested allocation: the 2300 block, the lowest unused one per
+# `common/protob/protocol.md`. Provisional until maintainers confirm it.
 PROVISIONAL = {
-    "ZcashGetAddress": (32100, "in"),
-    "ZcashAddress": (32101, "out"),
-    "ZcashGetViewingKey": (32102, "in"),
-    "ZcashViewingKey": (32103, "out"),
-    "ZcashSignPczt": (32104, "in"),
-    "ZcashPcztRequest": (32105, "out"),
-    "ZcashPcztAck": (32106, "in"),
-    "ZcashSpendAuthSignatures": (32109, "out"),
+    "ZcashGetAddress": (2300, "in"),
+    "ZcashAddress": (2301, "out"),
+    "ZcashGetViewingKey": (2302, "in"),
+    "ZcashViewingKey": (2303, "out"),
+    "ZcashSignPczt": (2304, "in"),
+    "ZcashPcztRequest": (2305, "out"),
+    "ZcashPcztAck": (2306, "in"),
+    "ZcashSpendAuthSignatures": (2309, "out"),
 }
+
+# The block is 100 wide; everything past the last message stays unclaimed.
+BLOCK = range(2300, 2400)
 
 # Freed by the collapse to a single response shape: they carried the removed
 # whole-PCZT download pair (signed chunk + ack). Nothing may reclaim them
 # without coordination.
-FREED_WIRE_IDS = (32107, 32108)
+FREED_WIRE_IDS = (2307, 2308)
 
-# Numbers the contract names only as candidates for a future coordinated
-# allocation. Nothing may claim them yet, so the tests assert they are FREE.
-CANDIDATE_WIRE_IDS = range(2300, 2309)
+# No Capability bit is claimed for Zcash either.
 CANDIDATE_CAPABILITY = 30
 
 # The donor's private identifiers, which must remain entirely unimplemented.
@@ -124,7 +126,7 @@ def test_freed_download_ids_stay_unclaimed() -> None:
         assert f"= {value} " not in proto
     # protoc enforces the freeing: a `reserved` statement makes any reuse of
     # the numbers a compile error, the enum's own idiom (cf. `reserved 219;`).
-    assert re.search(r"^\s*reserved 32107, 32108;", proto, re.M)
+    assert re.search(r"^\s*reserved 2307, 2308;", proto, re.M)
     # No download-shaped message survives, by name or by field.
     schema = ZCASH_PROTO.read_text()
     assert not re.search(r"^message Zcash\w*Signed\w*", schema, re.M)
@@ -142,10 +144,13 @@ def test_signing_has_exactly_one_response_shape() -> None:
     assert "pczt_length" not in fields and "data" not in fields
 
 
-def test_candidate_allocation_is_still_free() -> None:
-    """The coordinated candidates are unclaimed, and we do not claim them."""
-    taken = {int(m) for m in messages.MessageType}
-    assert taken.isdisjoint(CANDIDATE_WIRE_IDS)
+def test_the_block_is_ours_alone_and_no_capability_is_claimed() -> None:
+    """Nothing but Zcash lives in the 2300 block, and we claim no Capability bit."""
+    ours = {value for value, _ in PROVISIONAL.values()} | set(FREED_WIRE_IDS)
+    for message in messages.MessageType:
+        if int(message) in BLOCK:
+            assert message.name.startswith("Zcash"), message.name
+            assert int(message) in ours
     assert CANDIDATE_CAPABILITY not in {int(c) for c in messages.Capability}
     assert not hasattr(messages.Capability, "Zcash")
 
@@ -175,8 +180,8 @@ def test_wire_ids_fit_the_firmware_codec() -> None:
     """
     for name, (value, _) in PROVISIONAL.items():
         assert value < 0x7FFF, f"{name} = {value} exceeds the 15-bit wire ID space"
-    # The candidate coordinated block must satisfy the same ceiling.
-    assert max(CANDIDATE_WIRE_IDS) < 0x7FFF
+    # The whole block must satisfy the same ceiling, not just what it holds now.
+    assert max(BLOCK) < 0x7FFF
 
 
 def test_no_diagnostic_or_memory_trace_messages() -> None:

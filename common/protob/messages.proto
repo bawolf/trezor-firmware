@@ -409,17 +409,16 @@ enum MessageType {
     MessageType_Telemetry = 1101 [(bitcoin_only) = true, (wire_out) = true];
 
     // Zcash
-    // PROVISIONAL local-only identifiers. Not assigned or reserved upstream.
-    // They are isolated from the public application blocks on purpose and may
-    // change once maintainers coordinate an allocation. Do not describe any of
-    // them as final, and never ship provisional and final IDs as aliases.
-    MessageType_ZcashGetAddress = 32100 [(wire_in) = true];
-    MessageType_ZcashAddress = 32101 [(wire_out) = true];
-    MessageType_ZcashGetViewingKey = 32102 [(wire_in) = true];
-    MessageType_ZcashViewingKey = 32103 [(wire_out) = true];
-    MessageType_ZcashSignPczt = 32104 [(wire_in) = true];
-    MessageType_ZcashPcztRequest = 32105 [(wire_out) = true];
-    MessageType_ZcashPcztAck = 32106 [(wire_in) = true];
-    reserved 32107, 32108;  // omitted: whole-PCZT download pair (signed chunk + ack)
-    MessageType_ZcashSpendAuthSignatures = 32109 [(wire_out) = true];
+    // PROVISIONAL: 2300 is the lowest unused block, per protocol.md, but the
+    // allocation is not assigned or reserved upstream yet. Confirm it before
+    // release; do not describe these identifiers as final.
+    MessageType_ZcashGetAddress = 2300 [(wire_in) = true];
+    MessageType_ZcashAddress = 2301 [(wire_out) = true];
+    MessageType_ZcashGetViewingKey = 2302 [(wire_in) = true];
+    MessageType_ZcashViewingKey = 2303 [(wire_out) = true];
+    MessageType_ZcashSignPczt = 2304 [(wire_in) = true];
+    MessageType_ZcashPcztRequest = 2305 [(wire_out) = true];
+    MessageType_ZcashPcztAck = 2306 [(wire_in) = true];
+    reserved 2307, 2308;  // omitted: whole-PCZT download pair (signed chunk + ack)
+    MessageType_ZcashSpendAuthSignatures = 2309 [(wire_out) = true];
 }

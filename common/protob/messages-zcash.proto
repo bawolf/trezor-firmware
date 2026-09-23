@@ -8,9 +8,9 @@ option java_package = "com.satoshilabs.trezor.lib.protobuf";
 // PROVISIONAL, LOCAL-ONLY SCHEMA.
 //
 // These messages and the wire identifiers registered for them in
-// messages.proto are not assigned or reserved upstream. They are a local
-// proposal pending maintainer coordination and may change. Do not describe
-// any of them as final.
+// messages.proto (the 2300 block, the lowest unused one) are not assigned or
+// reserved upstream. They are a proposal pending maintainer coordination and
+// may change. Do not describe any of them as final.
 //
 // Message names and the ZcashViewingKey.key response field preserve the
 // historical Trezor Zcash API. The chunked PCZT transfer shapes preserve the
