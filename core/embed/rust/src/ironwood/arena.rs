@@ -8,11 +8,12 @@
 //! [`UNIT`] bytes and prefixed by a [`HEADER`]-byte header carrying its total
 //! length and a free flag. Payloads are 16-byte aligned because the base is and
 //! every block length is. Allocation splits a block when the remainder can hold
-//! one; `free` zeroes the payload, marks the block free and sweeps the whole
-//! arena once, merging every maximal run of adjacent free blocks. The sweep
-//! starts at the base, so a freed block merges with a free predecessor as well
-//! as a free successor — backward coalescing with no per-block footer — and no
-//! two adjacent free blocks ever remain, which makes first-fit
+//! one; `realloc` resizes in place when the block, or the free block after it,
+//! has room. `free` zeroes the payload, marks the block free and sweeps the
+//! whole arena once, merging every maximal run of adjacent free blocks. The
+//! sweep starts at the base, so a freed block merges with a free predecessor as
+//! well as a free successor — backward coalescing with no per-block footer —
+//! and no two adjacent free blocks ever remain, which makes first-fit
 //! order-independent.
 //!
 //! A malformed header (zero length, off the UNIT grid, or running past the
@@ -304,6 +305,101 @@ impl Arenas {
         ptr::null_mut()
     }
 
+    /// Resizes `payload` to `new_size`, in place when the block allows it and
+    /// by allocate-copy-free otherwise; null when it can do neither.
+    ///
+    /// In place is what keeps a growing `Vec` from fragmenting the arena.
+    /// Pasta builds its square-root table by collecting four 256-element
+    /// `Vec<Fp>` from iterators with no size hint, so each doubles its way up
+    /// to 8 KB; moving on every doubling left a hole the size of each
+    /// earlier buffer in front of every table, and the rooted tier refused
+    /// the last 8 KB with room to spare in total.
+    ///
+    /// # Safety
+    ///
+    /// `payload` must be a live pointer [`Arenas::alloc`] returned for
+    /// `old_size` bytes, and `align` the alignment it was requested with.
+    pub unsafe fn realloc(
+        &mut self,
+        payload: *mut u8,
+        old_size: usize,
+        new_size: usize,
+        align: usize,
+    ) -> *mut u8 {
+        // SAFETY: forwarded from the caller.
+        if unsafe { self.resize_in_place(payload, new_size) } {
+            return payload;
+        }
+        // SAFETY: as above; the new block is distinct from the old one.
+        unsafe {
+            let moved = self.alloc(new_size, align);
+            if !moved.is_null() {
+                ptr::copy_nonoverlapping(payload, moved, old_size.min(new_size));
+                self.dealloc(payload);
+            }
+            moved
+        }
+    }
+
+    /// Fits `payload`'s block to `new_size` without moving it: a shrink, or a
+    /// growth into the free block right after it. Only in the tier `alloc`
+    /// would use now, so a session never spends the rooted tier by growing a
+    /// rooted block.
+    unsafe fn resize_in_place(&mut self, payload: *mut u8, new_size: usize) -> bool {
+        // SAFETY: the header sits HEADER bytes before any payload we handed out.
+        let block = unsafe { payload.sub(HEADER) };
+        let span = if self.scratch.live() {
+            &mut self.scratch
+        } else {
+            &mut self.persist
+        };
+        if !span.holds(block) {
+            return false;
+        }
+        let need = block_size(new_size);
+        // SAFETY: the block is inside the span; every header read is checked
+        // before it is followed.
+        unsafe {
+            let end = span.base.add(span.len);
+            let blen = block_len(block);
+            if !block_ok(block, blen, end) || block_free(block) {
+                return false;
+            }
+            let mut total = blen;
+            if need > blen {
+                let next = block.add(blen);
+                if next >= end || !block_free(next) {
+                    return false;
+                }
+                let nlen = block_len(next);
+                if !block_ok(next, nlen, end) || blen + nlen < need {
+                    return false;
+                }
+                // The absorbed header becomes payload.
+                ptr::write_bytes(next, 0, HEADER);
+                total = blen + nlen;
+            }
+            // Split the remainder off as `alloc` does. It is wiped first: on a
+            // shrink it held the tail of the old payload.
+            let taken = if total - need >= UNIT + HEADER {
+                let tail = block.add(need);
+                ptr::write_bytes(tail, 0, total - need);
+                core::sync::atomic::compiler_fence(core::sync::atomic::Ordering::SeqCst);
+                set_block(tail, total - need, true);
+                set_block(block, need, false);
+                need
+            } else {
+                set_block(block, total, false);
+                total
+            };
+            span.in_use = span.in_use - blen + taken;
+            if taken < total {
+                coalesce(span.base, span.len);
+            }
+        }
+        true
+    }
+
     /// Returns `payload`'s block to whichever tier it came from. A pointer into
     /// neither — a block from a scratch that is already released — is dropped
     /// rather than written through.
@@ -507,6 +603,79 @@ mod tests {
         let whole = unsafe { arenas.alloc(ROOTED - HEADER, 16) };
         assert!(!whole.is_null());
         unsafe { arenas.dealloc(whole) };
+    }
+
+    #[test]
+    fn a_growing_block_extends_in_place_and_a_shrinking_one_wipes_its_tail() {
+        let mut region = Buffer::new(ROOTED);
+        let mut arenas = rooted(&mut region);
+
+        let grown = unsafe { arenas.alloc(64, 16) };
+        let secret = [0xa5u8; 64];
+        unsafe { ptr::copy_nonoverlapping(secret.as_ptr(), grown, secret.len()) };
+        let wider = unsafe { arenas.realloc(grown, 64, 1_024, 16) };
+        assert_eq!(wider, grown, "the free space after the block was not used");
+        assert_eq!(arenas.in_use(), (block_size(1_024), 0));
+        assert_eq!(arenas.in_use(), arenas.audit());
+        let kept = unsafe { core::slice::from_raw_parts(wider, secret.len()) };
+        assert_eq!(kept, secret);
+
+        let narrower = unsafe { arenas.realloc(wider, 1_024, 32, 16) };
+        assert_eq!(narrower, wider);
+        assert_eq!(arenas.in_use(), (block_size(32), 0));
+        assert_eq!(arenas.in_use(), arenas.audit());
+        // What the shrink gave back holds none of the old payload: past the
+        // new free block's header, the rest of the secret is gone.
+        let tail = unsafe { core::slice::from_raw_parts(narrower.add(32 + HEADER), 16) };
+        assert!(tail.iter().all(|byte| *byte == 0));
+        // And it merged with the free space after it: the rest of the arena is
+        // one block again.
+        let rest = unsafe { arenas.alloc(ROOTED - block_size(32) - HEADER, 16) };
+        assert!(!rest.is_null());
+        unsafe { arenas.dealloc(rest) };
+        unsafe { arenas.dealloc(narrower) };
+        assert_eq!(arenas.in_use(), (0, 0));
+    }
+
+    #[test]
+    fn a_block_that_cannot_grow_in_place_moves_and_frees_the_old_one() {
+        let mut region = Buffer::new(ROOTED);
+        let mut arenas = rooted(&mut region);
+
+        let first = unsafe { arenas.alloc(64, 16) };
+        let wall = unsafe { arenas.alloc(64, 16) };
+        let secret = [0x5au8; 64];
+        unsafe { ptr::copy_nonoverlapping(secret.as_ptr(), first, secret.len()) };
+        let moved = unsafe { arenas.realloc(first, 64, 512, 16) };
+        assert!(!moved.is_null());
+        assert_ne!(moved, first);
+        assert_eq!(unsafe { core::slice::from_raw_parts(moved, 64) }, secret);
+        assert_eq!(arenas.in_use(), (block_size(64) + block_size(512), 0));
+        // The old block went back wiped.
+        let old = unsafe { core::slice::from_raw_parts(first, 64) };
+        assert!(old.iter().all(|byte| *byte == 0));
+
+        unsafe { arenas.dealloc(wall) };
+        unsafe { arenas.dealloc(moved) };
+        assert_eq!(arenas.in_use(), (0, 0));
+    }
+
+    #[test]
+    fn a_session_does_not_grow_a_rooted_block_into_the_rooted_tier() {
+        let mut region = Buffer::new(ROOTED);
+        let mut buffer = Buffer::new(SCRATCH);
+        let mut arenas = rooted(&mut region);
+        let rooted_block = unsafe { arenas.alloc(64, 16) };
+
+        let (base, len) = (buffer.base(), buffer.len());
+        assert!(unsafe { arenas.install_scratch(base, len, SCRATCH) });
+        let grown = unsafe { arenas.realloc(rooted_block, 64, 256, 16) };
+        // Moved into the scratch, as any allocation during a session is; the
+        // rooted tier gave nothing.
+        assert_ne!(grown, rooted_block);
+        assert_eq!(arenas.in_use(), (0, block_size(256)));
+        unsafe { arenas.dealloc(grown) };
+        assert!(arenas.release_scratch().is_ok());
     }
 
     #[test]

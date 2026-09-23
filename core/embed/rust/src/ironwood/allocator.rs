@@ -151,18 +151,33 @@ pub fn region_info() -> (usize, usize, usize, usize) {
     unsafe { (persist, PERSIST_PEAK, scratch, SCRATCH_PEAK) }
 }
 
+/// A tier that cannot serve a request is fatal, and says so here: the release
+/// profile's `panic = "immediate-abort"` compiles `handle_alloc_error` to a
+/// bare `udf`, so a null returned to `alloc` never reaches
+/// `allocation_error` below and shows only as a UsageFault at a `RawVec` PC.
+fn served(payload: *mut u8) -> *mut u8 {
+    if payload.is_null() {
+        rtl::system_exit_fatal("Ironwood allocation failed", file!(), line!());
+    }
+    #[cfg(feature = "debuglink")]
+    mark_peaks();
+    payload
+}
+
 struct FreeListAllocator;
 
 // SAFETY: the firmware is single-threaded; every block is carved from one of
 // the two installed tiers, payloads are UNIT-aligned, and only blocks handed
-// out by `alloc` are freed.
+// out by `alloc` are resized or freed.
 unsafe impl GlobalAlloc for FreeListAllocator {
     unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
         // SAFETY: the tiers installed above are valid for the call.
-        let payload = unsafe { arenas().alloc(layout.size(), layout.align()) };
-        #[cfg(feature = "debuglink")]
-        mark_peaks();
-        payload
+        served(unsafe { arenas().alloc(layout.size(), layout.align()) })
+    }
+
+    unsafe fn realloc(&self, pointer: *mut u8, layout: Layout, new_size: usize) -> *mut u8 {
+        // SAFETY: `pointer` came from `alloc` with `layout` and is still live.
+        served(unsafe { arenas().realloc(pointer, layout.size(), new_size, layout.align()) })
     }
 
     unsafe fn dealloc(&self, pointer: *mut u8, _layout: Layout) {
