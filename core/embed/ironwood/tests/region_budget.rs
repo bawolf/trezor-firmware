@@ -41,7 +41,7 @@ use rand_chacha::rand_core::SeedableRng;
 /// `ironwood::allocator::REGION_BYTES`: the rooted tier in `.zcash_region`.
 const ROOTED_BYTES: usize = 40 * 1024;
 /// `sign_pczt.SCRATCH_BYTES`: the per-session tier taken from the GC heap.
-const SCRATCH_BYTES: usize = 24 * 1024;
+const SCRATCH_BYTES: usize = 48 * 1024;
 
 const HEADER: usize = 16;
 const UNIT: usize = 16;

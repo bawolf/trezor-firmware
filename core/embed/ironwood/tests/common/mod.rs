@@ -472,6 +472,14 @@ pub const CORPUS_MAX_ACTIONS: usize = 8;
 /// Synthetic local-consensus fixture covering every admitted action count.
 pub fn build_actions(outputs: usize) -> Vec<u8> {
     assert!((1..=CORPUS_MAX_ACTIONS).contains(&outputs));
+    build_wide(outputs)
+}
+
+/// [`build_actions`] up to the device cap: one real spend and `outputs`
+/// outputs, so `max(outputs, 2)` actions. For the allocation traces, which
+/// must cover the widest bundle the device admits.
+pub fn build_wide(outputs: usize) -> Vec<u8> {
+    assert!((1..=ironwood::MAX_ACTIONS).contains(&outputs));
     let mut rng = ChaCha20Rng::from_seed([outputs as u8; 32]);
     let (fvk, _) = keys();
     let other = FullViewingKey::from(&SpendingKey::from_bytes([1; 32]).unwrap());
@@ -688,11 +696,33 @@ impl zcash_primitives::transaction::fees::FeeRule for FixedFee {
 /// what signs the dummy spend, and a dummy signature is over the sighash the
 /// transparent outputs are part of.
 pub fn build_deshield(outputs: &[(u64, Vec<u8>)], funded: u64) -> Vec<u8> {
+    deshield(outputs, funded, true)
+}
+
+/// A balanced deshield of ONE Ironwood action -- the spend and its shielded
+/// change -- paying `values` transparently: with 31 values, the most
+/// transparent outputs the joint cap admits.
+pub fn build_one_action_deshield(values: &[u64]) -> Vec<u8> {
+    let outputs: Vec<(u64, Vec<u8>)> = values
+        .iter()
+        .enumerate()
+        .map(|(i, value)| (*value, transparent_script_for(i)))
+        .collect();
+    deshield(&outputs, values.iter().sum(), false)
+}
+
+/// [`build_deshield`], with the shielded payment and the two-action padding
+/// only when `shielded_payment`.
+fn deshield(outputs: &[(u64, Vec<u8>)], funded: u64, shielded_payment: bool) -> Vec<u8> {
     let mut rng = ChaCha20Rng::from_seed([0xd0 ^ outputs.len() as u8; 32]);
     let (fvk, _) = keys();
     let other = FullViewingKey::from(&SpendingKey::from_bytes([1; 32]).unwrap());
-    let input =
-        TRANSPARENT_FIXTURE_PAYMENT + TRANSPARENT_FIXTURE_CHANGE + TRANSPARENT_FIXTURE_FEE + funded;
+    let payment = if shielded_payment {
+        TRANSPARENT_FIXTURE_PAYMENT
+    } else {
+        0
+    };
+    let input = payment + TRANSPARENT_FIXTURE_CHANGE + TRANSPARENT_FIXTURE_FEE + funded;
     let version = BundleVersion::ironwood_v3();
     let mut funding = orchard::builder::Builder::new(
         orchard::builder::BundleType::DEFAULT,
@@ -721,20 +751,26 @@ pub fn build_deshield(outputs: &[(u64, Vec<u8>)], funded: u64) -> Vec<u8> {
         local_network(),
         HEIGHT.into(),
         BundlePadding::DEFAULT,
-        BundlePadding::DEFAULT,
+        if shielded_payment {
+            BundlePadding::DEFAULT
+        } else {
+            BundlePadding::UNPADDED
+        },
     )
     .unwrap();
     builder
         .add_ironwood_spend::<zip317::FeeError>(fvk.clone(), note)
         .unwrap();
-    builder
-        .add_ironwood_output::<zip317::FeeError>(
-            Some(fvk.to_ovk(Scope::External)),
-            other.address_at(0u32, Scope::External),
-            Zatoshis::from_u64(TRANSPARENT_FIXTURE_PAYMENT).unwrap(),
-            MemoBytes::empty(),
-        )
-        .unwrap();
+    if shielded_payment {
+        builder
+            .add_ironwood_output::<zip317::FeeError>(
+                Some(fvk.to_ovk(Scope::External)),
+                other.address_at(0u32, Scope::External),
+                Zatoshis::from_u64(payment).unwrap(),
+                MemoBytes::empty(),
+            )
+            .unwrap();
+    }
     builder
         .add_ironwood_output::<zip317::FeeError>(
             Some(fvk.to_ovk(Scope::Internal)),
