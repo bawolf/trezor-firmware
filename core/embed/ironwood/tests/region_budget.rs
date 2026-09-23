@@ -11,28 +11,24 @@
 //! host test size arenas the emulator cannot: `allocator_unix.rs` is plain
 //! `malloc`, so no emulator run prices either tier.
 //!
-//! Three budgets are asserted, in one test because the traces are
+//! This is the persistent-set audit, in one test because the traces are
 //! process-global (Pasta's square-root table and orchard's `OnceBox` caches
 //! build once per process, exactly as they do once per boot):
 //!
 //! 1. the persistent arena must hold the whole `prewarm` transient peak,
-//! 2. the persistent set must not grow across sessions,
-//! 3. a session's transient demand must fit the scratch arena, at the two
-//!    widest shapes the wire admits as well as at the corpus sizes.
+//! 2. the persistent set must not grow across sessions, at the two widest
+//!    shapes the wire admits as well as at the corpus sizes,
+//! 3. a session's working set must be O(1) in the action count.
 //!
-//! What the model is and is not. It counts LIVE BYTES: every request priced
-//! with the device's block arithmetic, and every `Vec` growth as
-//! alloc-copy-free with both capacities live (`ArenaModel` keeps
-//! `GlobalAlloc::realloc` at its default). The device grows in place when the
-//! next block is free, and no Rust type is larger on the 32-bit target than
-//! on this host, so for live bytes the model is an upper bound on the device.
-//! It says nothing about FRAGMENTATION -- where first-fit puts each block, and
-//! whether a request finds one hole big enough -- or about the occasionally
-//! larger block first-fit hands out when a remainder is too small to split.
-//! A tier can refuse a request with bytes to spare in total, which is how the
-//! rooted tier failed on the first Safe 5 boot, and then the 24 KiB scratch
-//! tier on the first sign. `scratch_tier.rs` and the `rooted_tier*.rs`
-//! binaries answer that half by running the real arena.
+//! It counts LIVE BYTES: every request priced with the device's block
+//! arithmetic, and every `Vec` growth as alloc-copy-free with both capacities
+//! live (`ArenaModel` keeps `GlobalAlloc::realloc` at its default). It does
+//! not say whether a tier holds a session -- where first-fit puts each block,
+//! and whether a request finds a hole big enough, is what refused the rooted
+//! tier on the first Safe 5 boot. Whether the tiers hold is asserted where
+//! the real arena runs: `rooted_tier*.rs` for the rooted tier in every cold
+//! order, `scratch_tier.rs` for the scratch tier. The scratch figures printed
+//! here are for comparison only.
 
 mod common;
 
@@ -48,16 +44,6 @@ use ironwood_pasta_curves::pallas;
 
 /// `ironwood::allocator::REGION_BYTES`: the rooted tier in `.zcash_region`.
 const ROOTED_BYTES: usize = 40 * 1024;
-/// `sign_pczt.SCRATCH_BYTES`: the per-session tier taken from the GC heap.
-const SCRATCH_BYTES: usize = 48 * 1024;
-
-/// Bytes every session must leave unclaimed in the scratch tier, counted as
-/// live bytes: a quarter of it, the same margin `scratch_tier.rs` holds the
-/// real arena's furthest reach to. Live bytes are the lesser claim --
-/// fragmentation is what refused the 24 KiB tier on the Safe 5 with this
-/// model still showing 208 B spare -- so this floor is the one that should
-/// never be the first to go red.
-const MINIMUM_MARGIN: isize = (SCRATCH_BYTES / 4) as isize;
 
 const HEADER: usize = 16;
 const UNIT: usize = 16;
@@ -190,11 +176,10 @@ fn the_two_arenas_hold_what_the_device_puts_in_them() {
         MAX_TRANSPARENT_OUTPUTS
     );
 
-    // Phase 3 — five sessions, with the persistent set already rooted. The
-    // transient demand above `persistent` is what the scratch tier must hold,
-    // and `persistent` itself must be identical after each: the device asserts
-    // the same thing at `release_scratch`, where a non-zero scratch in-use
-    // means a Rust static was filled during a session and now dangles.
+    // Phase 3 — five sessions, with the persistent set already rooted.
+    // `persistent` must be identical after each: the device asserts the same
+    // thing at `release_scratch`, where a non-zero scratch in-use means a Rust
+    // static was filled during a session and now dangles.
     let (_, first_peak, after_first, _) = trace(|| sign_streamed(&small));
     let (_, second_peak, after_second, _) = trace(|| sign_streamed(&small));
     let (_, full_peak, after_full, _) = trace(|| sign_streamed(&corpus));
@@ -214,7 +199,7 @@ fn the_two_arenas_hold_what_the_device_puts_in_them() {
     let rooted_peak = table_peak.max(prewarm_peak);
     println!("  peak        : {rooted_peak}");
     println!("  slack       : {} B", ROOTED_BYTES as isize - rooted_peak);
-    println!("scratch tier  : {SCRATCH_BYTES} B");
+    println!("session live bytes (scratch_tier.rs asserts the tier):");
     for (label, peak) in [
         ("session 1", first_peak),
         ("session 2", second_peak),
@@ -222,11 +207,7 @@ fn the_two_arenas_hold_what_the_device_puts_in_them() {
         ("32 actions", shielded_peak),
         ("1 + 31 transparent", transparent_peak),
     ] {
-        let scratch = peak - persistent;
-        println!(
-            "  {label:<18}: peak {scratch}, margin {}",
-            SCRATCH_BYTES as isize - scratch
-        );
+        println!("  {label:<18}: {}", peak - persistent);
     }
 
     assert_eq!(
@@ -257,24 +238,7 @@ fn the_two_arenas_hold_what_the_device_puts_in_them() {
         assert_eq!(after, persistent, "{label} retained arena memory");
     }
 
-    // 3. A session's transient demand fits the scratch tier at every size, with
-    //    something left to argue about.
-    for (label, peak) in [
-        ("session 1", first_peak),
-        ("session 2", second_peak),
-        ("the corpus maximum", full_peak),
-        ("the widest shielded session", shielded_peak),
-        ("the widest deshield", transparent_peak),
-    ] {
-        let margin = SCRATCH_BYTES as isize - (peak - persistent);
-        assert!(
-            margin >= MINIMUM_MARGIN,
-            "{label} leaves {margin} B of the {SCRATCH_BYTES} B scratch tier, \
-             under the stated {MINIMUM_MARGIN} B floor"
-        );
-    }
-
-    // 4. The session working set is O(1) in the action count all the way to the
+    // 3. The session working set is O(1) in the action count all the way to the
     //    cap: the streaming session holds one action at a time, and the only
     //    per-bundle term is the 32 logical-action slots both projection vectors
     //    share. A widest-shielded peak above the corpus peak would mean something

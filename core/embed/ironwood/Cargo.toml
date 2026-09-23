@@ -56,3 +56,7 @@ required-features = ["test", "computed-generators"]
 [[test]]
 name = "rooted_tier_vk_first"
 required-features = ["test", "computed-generators"]
+
+[[test]]
+name = "scratch_tier"
+required-features = ["test", "computed-generators"]

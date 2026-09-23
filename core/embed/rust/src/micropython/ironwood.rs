@@ -397,11 +397,15 @@ extern "C" fn debug_region_info() -> Obj {
     unsafe { util::try_or_raise(block) }
 }
 
+const _: () = assert!(allocator::SCRATCH_BYTES <= u16::MAX as usize);
+
 #[no_mangle]
 #[rustfmt::skip]
 pub static mp_module_trezorironwood: Module = obj_module! {
     // Bytes of per-session scratch `session_begin` requires, mirrored by
-    // `apps.zcash.sign_pczt.SCRATCH_BYTES`.
+    // `apps.zcash.sign_pczt.SCRATCH_BYTES`. A small int, so asserted to fit
+    // below: past 65,535 the cast would wrap and Python would read a tier
+    // smaller than the one `install_scratch` demands.
     /// SCRATCH_BYTES: int
     Qstr::MP_QSTR_SCRATCH_BYTES => Obj::small_int(allocator::SCRATCH_BYTES as u16),
 

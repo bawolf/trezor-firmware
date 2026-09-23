@@ -4,26 +4,35 @@
 //! every chunk through `session_feed`, `session_approve`, `session_sign` and
 //! `session_cancel`, over a `SCRATCH_BYTES` scratch tier.
 //!
-//! `region_budget.rs` sums block sizes and so cannot see fragmentation, and
-//! it traced a bare `Session` rather than what `signing.rs` builds around one.
-//! It priced a 2-action session at 24,368 B of a 24,576 B tier; on the Safe 5
-//! the same session stopped on "Ironwood allocation failed". This test runs the
-//! real first-fit free list instead (`arena.rs`, included by path) and reports
-//! the furthest byte any session reached: first-fit makes the same choices in
-//! any tier at least that long, so that figure is the smallest tier the session
-//! runs in, fragmentation included.
+//! `region_budget.rs` used to trace a bare `Session` rather than what
+//! `signing.rs` builds around one. It priced a 2-action session at 24,368 B of
+//! a 24,576 B tier; on the Safe 5 the same session stopped on "Ironwood
+//! allocation failed". The missing term was the boxed request and the key
+//! derivation around it: with them the session reaches 25,008 B, 432 B over, in
+//! a tier that is packed at the refusal -- a shortfall, not fragmentation. This
+//! test runs the real first-fit free list instead (`arena.rs`, included by
+//! path) and reports the furthest byte any session reached: first-fit makes the
+//! same choices in any tier at least that long, so that figure is the smallest
+//! tier the session runs in, fragmentation included.
 //!
-//! Host sizes are the upper bound of the device's: a `Layout` here has 8-byte
-//! pointers and `usize`s where the device has 4, and every other field is the
-//! same size. Build with `computed-generators`, as the firmware does, to trace
-//! the device's Sinsemilla.
+//! The host over-prices the device only by its pointer-width fields -- a few
+//! hundred bytes of `usize`s, `Box`/`Vec` headers and boxed closures; the
+//! working set is mostly byte arrays, the same size on both. The margin is the
+//! quarter of the tier the ceiling below keeps free, not the host's width.
+//! Build with `computed-generators`, as the firmware does, to trace the
+//! device's Sinsemilla.
 //!
 //! One test in its own binary, for the reason `rooted_tier.rs` gives: the
 //! persistent set is process-global, as it is boot-global on the device.
 
+#[cfg(not(feature = "computed-generators"))]
+compile_error!("the scratch-tier trace runs the device's Sinsemilla: add `computed-generators`");
+
 mod common;
 
-#[allow(dead_code)]
+// The device's own source, linted by the `rust` crate's rules; this crate's
+// newer lints would ask for methods the device code does not need.
+#[allow(dead_code, clippy::manual_div_ceil, clippy::manual_is_multiple_of)]
 #[path = "../../rust/src/ironwood/arena.rs"]
 mod arena;
 

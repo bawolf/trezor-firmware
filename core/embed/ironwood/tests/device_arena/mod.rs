@@ -23,7 +23,9 @@
 //! the computed Sinsemilla, whose domain warm allocates differently from the
 //! precomputed table's, and fragmentation depends on the exact sequence.
 
-#[allow(dead_code)]
+// The device's own source, linted by the `rust` crate's rules; this crate's
+// newer lints would ask for methods the device code does not need.
+#[allow(dead_code, clippy::manual_div_ceil, clippy::manual_is_multiple_of)]
 #[path = "../../../rust/src/ironwood/arena.rs"]
 mod arena;
 
@@ -99,7 +101,7 @@ fn served(pointer: *mut u8, layout: Layout) -> Option<*mut u8> {
         }
         return None;
     }
-    if pointer as usize % layout.align() != 0 {
+    if !(pointer as usize).is_multiple_of(layout.align()) {
         MISALIGNED.fetch_add(1, Ordering::Relaxed);
     }
     SCRATCH_PEAK.fetch_max(arenas().in_use().1, Ordering::Relaxed);
