@@ -36,9 +36,7 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 
 use arena::{Arenas, HEADER};
 use common::*;
-use ironwood::{Event, Hedged, MAX_ACTIONS, MAX_TRANSPARENT_OUTPUTS, Network, Review, Session};
-use orchard::keys::FullViewingKey;
-use rand_core::OsRng;
+use ironwood::MAX_ACTIONS;
 
 /// `allocator::REGION_BYTES`.
 const ROOTED_BYTES: usize = 40 * 1024;
@@ -47,8 +45,6 @@ const SCRATCH_BYTES: usize = 48 * 1024;
 /// The furthest a session may reach into the scratch tier: 75 %, so a quarter
 /// of the tier is margin for what the host trace does not see.
 const SCRATCH_CEILING: usize = SCRATCH_BYTES / 4 * 3;
-/// `sign_pczt.CHUNK_BYTES`: what one `ZcashPcztAck` carries.
-const CHUNK_BYTES: usize = 1024;
 
 #[repr(align(16))]
 struct Tier<const N: usize>(UnsafeCell<[u8; N]>);
@@ -220,59 +216,6 @@ fn traced<T>(body: impl FnOnce() -> T) -> T {
     value
 }
 
-/// `signing::Signing`, which `signing::begin` boxes into the scratch tier.
-#[allow(dead_code)]
-struct Signing {
-    handle: u32,
-    session: Session<Hedged<OsRng>>,
-    fvk: FullViewingKey,
-    coin_type: u32,
-    account: u32,
-    review: Option<Review>,
-}
-
-/// Everything the firmware allocates between `install_scratch` and
-/// `release_scratch` for one PCZT, in its order. The corpus keys stand in for
-/// the seed-derived ones; `keys()` does the same key expansion
-/// `AccountKeys::derive` ends in.
-fn device_sign(pczt: &[u8]) -> usize {
-    let seed = [7u8; 64];
-    // `signing::begin`.
-    let (fvk, _) = keys();
-    let _ = ironwood::seed_fingerprint(&seed);
-    let mut session = Session::with_rng(
-        policy(Network::Testnet, 1_000_000),
-        Hedged::from_seed(OsRng, &seed),
-    )
-    .unwrap();
-    session.begin(pczt.len(), &fvk, &SEED_FINGERPRINT).unwrap();
-    let mut signing = Box::new(Signing {
-        handle: 1,
-        session,
-        fvk,
-        coin_type: 1,
-        account: ACCOUNT,
-        review: None,
-    });
-    // `session_feed`, one `ZcashPcztAck` at a time, each fed until consumed.
-    for chunk in pczt.chunks(CHUNK_BYTES) {
-        let mut fed = 0;
-        while fed < chunk.len() {
-            let (consumed, event) = signing.session.feed(&chunk[fed..], &signing.fvk).unwrap();
-            fed += consumed;
-            if let Event::Review(review) = event {
-                signing.review = Some(review);
-            }
-        }
-    }
-    // `session_approve`, then `session_sign`, which ends the request.
-    let review = signing.review.as_ref().expect("the PCZT reaches review");
-    signing.session.approve(review.token()).unwrap();
-    let (_, ask) = keys();
-    let signatures = signing.session.sign(review.token(), &ask).unwrap();
-    signatures.records().len()
-}
-
 /// One session in a fresh scratch tier: `(reach, peak, refusals)`.
 fn session(pczt: &[u8]) -> (usize, usize, usize) {
     REACH.store(0, Ordering::Relaxed);
@@ -280,7 +223,7 @@ fn session(pczt: &[u8]) -> (usize, usize, usize) {
     REFUSED.store(0, Ordering::Relaxed);
     // SAFETY: the tier is a 16-byte aligned static, lent for this session only.
     assert!(unsafe { arenas().install_scratch(SCRATCH.base(), SCRATCH_BYTES, SCRATCH_BYTES) });
-    let signed = traced(|| device_sign(pczt));
+    let signed = traced(|| sign_streamed(pczt));
     assert!(signed > 0, "nothing was signed");
     assert_eq!(
         arenas().release_scratch(),

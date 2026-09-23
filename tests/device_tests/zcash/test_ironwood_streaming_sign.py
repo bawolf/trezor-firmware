@@ -507,7 +507,7 @@ def test_cancel_at_totals_then_sign(session: Session) -> None:
 # `REGION_BYTES` is `ironwood::allocator::REGION_BYTES`, the `.zcash_region`
 # static. Pinned rather than imported because this file talks to a device
 # whose firmware may not be this tree's.
-SCRATCH_BYTES = 24 * 1024
+SCRATCH_BYTES = 48 * 1024
 REGION_BYTES = 40 * 1024
 
 REGION_KEYS = ("persist_in_use", "persist_peak", "scratch_in_use", "scratch_peak")

@@ -3,7 +3,7 @@
 use std::sync::atomic::{AtomicU64, Ordering};
 
 use ironwood::{
-    Account, Engine, Error, ErrorCode, Event, Limits, MAX_ACTIONS, MAX_TRANSPARENT_OUTPUTS,
+    Account, Engine, Error, ErrorCode, Event, Hedged, Limits, MAX_ACTIONS, MAX_TRANSPARENT_OUTPUTS,
     Network, Policy, RequestContext, Result, Review, Session,
 };
 use orchard::bundle::BundleVersion;
@@ -16,7 +16,7 @@ use pczt::roles::io_finalizer::IoFinalizer;
 use pczt::roles::redactor::Redactor;
 use rand_chacha::ChaCha20Rng;
 use rand_chacha::rand_core::SeedableRng;
-use rand_core::{CryptoRng, RngCore};
+use rand_core::{CryptoRng, OsRng, RngCore};
 use serde_json::Value;
 use zcash_note_encryption::try_note_decryption;
 use zcash_primitives::transaction::builder::{BundlePadding, DeferredPcztBuilder};
@@ -45,32 +45,63 @@ pub fn policy(network: Network, maximum_fee: u64) -> Policy {
     .unwrap()
 }
 
-/// Streams one PCZT through a fresh `Session` and signs it: everything the
-/// device does between `install_scratch` and `release_scratch`, which is what
-/// the arena tests put inside their scratch-tier window. The review is
-/// held to the end because the handler holds it too -- it owns the token the
-/// consent screen answers for.
-pub fn sign_streamed(bytes: &[u8], seed: u8, maximum_fee: u64) {
+/// `signing::Signing`, which `signing::begin` boxes into the scratch tier:
+/// the session, its key and its review live in the tier, not on a stack.
+#[allow(dead_code)]
+struct Signing {
+    handle: u32,
+    session: Session<Hedged<OsRng>>,
+    fvk: FullViewingKey,
+    coin_type: u32,
+    account: u32,
+    review: Option<Review>,
+}
+
+/// `sign_pczt.CHUNK_BYTES`: what one `ZcashPcztAck` carries.
+pub const CHUNK_BYTES: usize = 1024;
+
+/// Everything the firmware allocates between `install_scratch` and
+/// `release_scratch` for one PCZT, in its order: the boxed request, the PCZT
+/// fed one `ZcashPcztAck` at a time, approve, sign. Returns the number of
+/// signatures. The corpus keys stand in for the seed-derived ones; `keys()`
+/// does the same key expansion `AccountKeys::derive` ends in. The fee limit
+/// admits the widest bundle (ZIP-317: `5_000 * 32`).
+pub fn sign_streamed(pczt: &[u8]) -> usize {
+    let seed = [7u8; 64];
+    // `signing::begin`.
+    let (fvk, _) = keys();
+    let _ = ironwood::seed_fingerprint(&seed);
     let mut session = Session::with_rng(
-        policy(Network::Testnet, maximum_fee),
-        ChaCha20Rng::from_seed([seed; 32]),
+        policy(Network::Testnet, 1_000_000),
+        Hedged::from_seed(OsRng, &seed),
     )
     .unwrap();
-    session
-        .begin(bytes.len(), &keys().0, &SEED_FINGERPRINT)
-        .unwrap();
-    let mut review = None;
-    let mut rest = bytes;
-    while !rest.is_empty() {
-        let (consumed, event) = session.feed(rest, &keys().0).unwrap();
-        rest = &rest[consumed..];
-        if let Event::Review(reviewed) = event {
-            review = Some(reviewed);
+    session.begin(pczt.len(), &fvk, &SEED_FINGERPRINT).unwrap();
+    let mut signing = Box::new(Signing {
+        handle: 1,
+        session,
+        fvk,
+        coin_type: 1,
+        account: ACCOUNT,
+        review: None,
+    });
+    // `session_feed`, one `ZcashPcztAck` at a time, each fed until consumed.
+    for chunk in pczt.chunks(CHUNK_BYTES) {
+        let mut fed = 0;
+        while fed < chunk.len() {
+            let (consumed, event) = signing.session.feed(&chunk[fed..], &signing.fvk).unwrap();
+            fed += consumed;
+            if let Event::Review(review) = event {
+                signing.review = Some(review);
+            }
         }
     }
-    let review = review.expect("the corpus PCZT reaches its review");
-    session.approve(review.token()).unwrap();
-    let _ = session.sign(review.token(), &keys().1).unwrap();
+    // `session_approve`, then `session_sign`, which ends the request.
+    let review = signing.review.as_ref().expect("the PCZT reaches review");
+    signing.session.approve(review.token()).unwrap();
+    let (_, ask) = keys();
+    let signatures = signing.session.sign(review.token(), &ask).unwrap();
+    signatures.records().len()
 }
 
 pub fn assert_error(error: Error, code: ErrorCode) {

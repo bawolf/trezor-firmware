@@ -30,7 +30,8 @@
 //! whether a request finds one hole big enough -- or about the occasionally
 //! larger block first-fit hands out when a remainder is too small to split.
 //! A tier can refuse a request with bytes to spare in total, which is how the
-//! rooted tier failed on the first Safe 5 boot. The `rooted_tier*.rs`
+//! rooted tier failed on the first Safe 5 boot, and then the 24 KiB scratch
+//! tier on the first sign. `scratch_tier.rs` and the `rooted_tier*.rs`
 //! binaries answer that half by running the real arena.
 
 mod common;
@@ -51,14 +52,12 @@ const ROOTED_BYTES: usize = 40 * 1024;
 const SCRATCH_BYTES: usize = 48 * 1024;
 
 /// Bytes every session must leave unclaimed in the scratch tier, counted as
-/// live bytes (see the module note: fragmentation is `rooted_tier*.rs`'s).
-///
-/// Small, because the widest shielded session already spends all but 208 B
-/// of the tier here. The device spends less -- no type is larger there, and a
-/// growth there may extend in place -- but this is the figure a host can
-/// state, and below this floor the difference between the two widths would
-/// be the whole margin, which is not a margin worth quoting.
-const MINIMUM_MARGIN: isize = 128;
+/// live bytes: a quarter of it, the same margin `scratch_tier.rs` holds the
+/// real arena's furthest reach to. Live bytes are the lesser claim --
+/// fragmentation is what refused the 24 KiB tier on the Safe 5 with this
+/// model still showing 208 B spare -- so this floor is the one that should
+/// never be the first to go red.
+const MINIMUM_MARGIN: isize = (SCRATCH_BYTES / 4) as isize;
 
 const HEADER: usize = 16;
 const UNIT: usize = 16;
@@ -196,17 +195,11 @@ fn the_two_arenas_hold_what_the_device_puts_in_them() {
     // and `persistent` itself must be identical after each: the device asserts
     // the same thing at `release_scratch`, where a non-zero scratch in-use
     // means a Rust static was filled during a session and now dangles.
-    //
-    // ZIP-317 charges `5_000 * actions`, so the widest shielded bundle pays
-    // 160_000 and needs a `maximum_fee` that admits it; the deshield fixtures
-    // charge `TRANSPARENT_FIXTURE_FEE` whatever their bundle.
-    let (_, first_peak, after_first, _) = trace(|| sign_streamed(&small, 1, 100_000));
-    let (_, second_peak, after_second, _) = trace(|| sign_streamed(&small, 2, 100_000));
-    let (_, full_peak, after_full, _) = trace(|| sign_streamed(&corpus, 3, 100_000));
-    let (_, shielded_peak, after_shielded, _) =
-        trace(|| sign_streamed(&wide_shielded, 4, 5_000 * MAX_ACTIONS as u64));
-    let (_, transparent_peak, after_transparent, _) =
-        trace(|| sign_streamed(&wide_transparent, 5, 100_000));
+    let (_, first_peak, after_first, _) = trace(|| sign_streamed(&small));
+    let (_, second_peak, after_second, _) = trace(|| sign_streamed(&small));
+    let (_, full_peak, after_full, _) = trace(|| sign_streamed(&corpus));
+    let (_, shielded_peak, after_shielded, _) = trace(|| sign_streamed(&wide_shielded));
+    let (_, transparent_peak, after_transparent, _) = trace(|| sign_streamed(&wide_transparent));
 
     println!("rooted tier   : {ROOTED_BYTES} B");
     println!(
@@ -285,8 +278,7 @@ fn the_two_arenas_hold_what_the_device_puts_in_them() {
     //    cap: the streaming session holds one action at a time, and the only
     //    per-bundle term is the 32 logical-action slots both projection vectors
     //    share. A widest-shielded peak above the corpus peak would mean something
-    //    now scales with the count, which is the shape of growth the 208 B margin
-    //    cannot absorb.
+    //    now scales with the count, which no fixed tier absorbs.
     assert_eq!(
         shielded_peak, full_peak,
         "{MAX_ACTIONS} actions cost more than {CORPUS_MAX_ACTIONS}: the session \

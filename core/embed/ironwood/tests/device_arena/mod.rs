@@ -44,7 +44,7 @@ compile_error!("the device arena tests trace the device's Sinsemilla: add `compu
 /// `allocator::REGION_BYTES`.
 const REGION_BYTES: usize = 40 * 1024;
 /// `allocator::SCRATCH_BYTES`, the `bytearray` `sign_pczt` lends each session.
-const SCRATCH_BYTES: usize = 24 * 1024;
+const SCRATCH_BYTES: usize = 48 * 1024;
 
 #[repr(align(16))]
 struct Region(UnsafeCell<[u8; REGION_BYTES]>);
@@ -217,21 +217,19 @@ pub fn boot(order: &[Cold]) {
     let wide_transparent = build_wide_deshield();
 
     // Sessions, each in a freshly installed scratch as `session_begin` does.
-    // ZIP-317 charges `5_000 * actions`, so the widest shielded bundle needs a
-    // `maximum_fee` that admits its 160_000.
     let scratch = SCRATCH.0.get().cast::<u8>();
-    for (label, bytes, seed, maximum_fee) in [
-        ("sign 1", &small, 1, 100_000),
-        ("sign 2", &small, 2, 100_000),
-        ("32 actions", &wide_shielded, 3, 5_000 * MAX_ACTIONS as u64),
-        ("1 + 31 transparent", &wide_transparent, 4, 100_000),
+    for (label, bytes) in [
+        ("sign 1", &small),
+        ("sign 2", &small),
+        ("32 actions", &wide_shielded),
+        ("1 + 31 transparent", &wide_transparent),
     ] {
         // SAFETY: the scratch static outlives the session and is only
         // reached through the arena until `release_scratch`.
         assert!(unsafe { arenas().install_scratch(scratch, SCRATCH_BYTES, SCRATCH_BYTES) });
         SCRATCH_PEAK.store(0, Ordering::Relaxed);
         let refused = REFUSED.load(Ordering::Relaxed);
-        traced(|| sign_streamed(bytes, seed, maximum_fee));
+        traced(|| sign_streamed(bytes));
         println!(
             "scratch tier {SCRATCH_BYTES} B, {label:<18}: peak {} B, {} refused",
             SCRATCH_PEAK.load(Ordering::Relaxed),
