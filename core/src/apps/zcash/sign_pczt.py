@@ -56,7 +56,7 @@ CHUNK_TIMEOUT_MS = const(5_000)
 # Bytes of per-session scratch the native allocator carves the signing session
 # from. Must match `trezorironwood.SCRATCH_BYTES`, which is the minimum
 # `session_begin` accepts; the two move together.
-SCRATCH_BYTES = const(24 * 1024)
+SCRATCH_BYTES = const(48 * 1024)
 
 # Curated, non-secret native ValueError messages allowed to reach the host
 # verbatim. Any other ValueError (MicroPython unpack, parse_u32, format_amount,

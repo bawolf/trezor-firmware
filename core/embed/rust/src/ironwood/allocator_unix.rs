@@ -3,8 +3,8 @@
 //! C allocator, so the tiers the handler installs are accepted and ignored.
 //!
 //! This is why no emulator run prices either tier. The arenas are modelled on
-//! the host instead, by `ironwood/tests/region_budget.rs`, which applies the
-//! device block arithmetic to the real allocation traces.
+//! the host instead: `ironwood/tests/rooted_tier.rs` and `scratch_tier.rs` run
+//! the device's own arena code under the real allocation traces.
 
 use core::alloc::{GlobalAlloc, Layout};
 
@@ -15,7 +15,7 @@ unsafe extern "C" {
 
 /// Mirrors the device constant so the handler's buffer check is the same on
 /// both targets.
-pub const SCRATCH_BYTES: usize = 24 * 1024;
+pub const SCRATCH_BYTES: usize = 48 * 1024;
 
 /// Same entry points as the device allocator so the bindings are
 /// target-agnostic. The emulator's Rust statics live in the never-collected

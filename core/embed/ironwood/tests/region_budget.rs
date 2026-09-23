@@ -48,7 +48,7 @@ use ironwood_pasta_curves::pallas;
 /// `ironwood::allocator::REGION_BYTES`: the rooted tier in `.zcash_region`.
 const ROOTED_BYTES: usize = 40 * 1024;
 /// `sign_pczt.SCRATCH_BYTES`: the per-session tier taken from the GC heap.
-const SCRATCH_BYTES: usize = 24 * 1024;
+const SCRATCH_BYTES: usize = 48 * 1024;
 
 /// Bytes every session must leave unclaimed in the scratch tier, counted as
 /// live bytes (see the module note: fragmentation is `rooted_tier*.rs`'s).

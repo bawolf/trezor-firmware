@@ -46,7 +46,14 @@ const REGION_BYTES: usize = 40 * 1024;
 
 /// Smallest scratch tier a session may be given, and the size
 /// `apps.zcash.sign_pczt` allocates. The two must move together.
-pub const SCRATCH_BYTES: usize = 24 * 1024;
+///
+/// Sized by `ironwood/tests/scratch_tier.rs`, which runs this arena under a
+/// whole sign -- the boxed request included -- and requires every admitted
+/// shape to stay within three quarters of the tier. At 24 KiB a 2-action sign
+/// was refused on the Safe 5. The tier is borrowed from the GC heap only while
+/// a Zcash session is live: on T3T1 that leaves 240,368 - 49,152 = 191,216 B of
+/// heap for the Zcash workflow itself, and every other flow keeps all of it.
+pub const SCRATCH_BYTES: usize = 48 * 1024;
 
 /// 16-byte-aligned backing store so the free-list base is `UNIT`-aligned.
 #[repr(align(16))]
