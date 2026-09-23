@@ -306,6 +306,22 @@ build_options! {
 /// one-line change here.
 pub(crate) const IRONWOOD_MODELS: &[Model] = &[Model::T3B1, Model::T3T1, Model::T3W1];
 
+/// Bytes of AUX1_RAM an `--ironwood` build must leave free on a model whose
+/// `.zcash_region` shares a bank with `.bss`.
+///
+/// The 40 KiB signing region is linked into AUX1_RAM, which is also the bank
+/// `.bss` grows into, so unrelated `.bss` growth is what would push it out --
+/// as a bank overflow at link time, on a commit that has nothing to do with
+/// Zcash. This turns that into a named build error while there is still slack
+/// to argue about.
+pub(crate) const IRONWOOD_AUX1_FLOOR: u64 = 4096;
+
+/// Models that carry [`IRONWOOD_AUX1_FLOOR`]: the two-bank parts. T3W1 has one
+/// bank that ends in `.heap`, which is `ABSOLUTE(ORIGIN + LENGTH)`, so its
+/// AUX1 slack IS the heap and always reads zero -- a floor there would fail
+/// every build.
+pub(crate) const IRONWOOD_FLOOR_MODELS: &[Model] = &[Model::T3B1, Model::T3T1];
+
 /// The models `--ironwood` accepts, as the rejection message spells them.
 pub(crate) fn ironwood_models_phrase() -> String {
     IRONWOOD_MODELS
@@ -341,6 +357,24 @@ impl ResolvedBuildArgs {
             bail!("--ironwood cannot be combined with --btc-only");
         }
         Ok(())
+    }
+
+    /// The `REGION=BYTES` free-space floors this build must clear.
+    ///
+    /// The Ironwood AUX1 floor is applied by the build itself, not only by
+    /// the `core/Makefile` invocation that names it: a direct `cargo xtask
+    /// build --ironwood` is the same image on the same bank and has the same
+    /// way to fail. `--require-free` adds to this rather than replacing it,
+    /// and `print_memusage` holds a twice-named region to the larger floor,
+    /// so passing the same value from the Makefile is a no-op and passing a
+    /// smaller one cannot loosen it.
+    pub fn memory_requirements(&self) -> Vec<String> {
+        let mut requirements = Vec::new();
+        if self.ironwood && IRONWOOD_FLOOR_MODELS.contains(&self.model) {
+            requirements.push(format!("AUX1_RAM={IRONWOOD_AUX1_FLOOR}"));
+        }
+        requirements.extend(self.require_free.clone());
+        requirements
     }
 
     /// Determines the Cargo profile to use
@@ -470,5 +504,62 @@ mod tests {
     fn rejects_unknown_console_types() {
         let result: Result<OptionsMap, _> = toml::from_str(r#"dbg-console = { uart = ["x"] }"#);
         assert!(result.is_err());
+    }
+
+    /// The AUX1 floor is the build's, not the Makefile's: any entry point
+    /// that produces an Ironwood image on a two-bank model carries it.
+    #[test]
+    fn an_ironwood_build_floors_aux1_without_being_asked() {
+        for &model in IRONWOOD_FLOOR_MODELS {
+            let args = ResolvedBuildArgs {
+                model,
+                ironwood: true,
+                ..ResolvedBuildArgs::default()
+            };
+            assert_eq!(
+                args.memory_requirements(),
+                [format!("AUX1_RAM={IRONWOOD_AUX1_FLOOR}")],
+                "{model:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn a_floor_is_asked_for_only_where_it_means_something() {
+        // T3W1's AUX1 slack is its heap, so it reads zero free on a healthy
+        // build; and a non-Ironwood image has no `.zcash_region` to protect.
+        for args in [
+            ResolvedBuildArgs {
+                model: Model::T3W1,
+                ironwood: true,
+                ..ResolvedBuildArgs::default()
+            },
+            ResolvedBuildArgs {
+                model: Model::T3T1,
+                ironwood: false,
+                ..ResolvedBuildArgs::default()
+            },
+        ] {
+            assert!(args.memory_requirements().is_empty());
+        }
+    }
+
+    /// `core/Makefile` passes the same floor; both may be present and the
+    /// command line may add another region, but neither can drop the default.
+    #[test]
+    fn an_explicit_requirement_adds_to_the_floor_and_never_replaces_it() {
+        let args = ResolvedBuildArgs {
+            model: Model::T3T1,
+            ironwood: true,
+            require_free: Some("FLASH=1024".to_string()),
+            ..ResolvedBuildArgs::default()
+        };
+        assert_eq!(
+            args.memory_requirements(),
+            [
+                format!("AUX1_RAM={IRONWOOD_AUX1_FLOOR}"),
+                "FLASH=1024".to_string()
+            ]
+        );
     }
 }

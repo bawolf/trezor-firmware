@@ -33,9 +33,11 @@ fn is_nobits_section(name: &str) -> bool {
 }
 
 /// Prints a table of memory usage by region, based on the contents of
-/// the given map file. `require_free` is an optional `REGION=BYTES` floor the
-/// build must clear.
-pub fn print_memusage(mapfile: &Path, require_free: Option<&str>) -> Result<()> {
+/// the given map file. `requirements` are `REGION=BYTES` free-space floors
+/// the build must clear, in the order they should be reported; a region named
+/// twice is held to the larger of the two, so a default floor cannot be
+/// loosened by naming the same region on the command line.
+pub fn print_memusage(mapfile: &Path, requirements: &[String]) -> Result<()> {
     let content = fs::read_to_string(mapfile)
         .with_context(|| format!("Failed to read `{}`", mapfile.display()))?;
 
@@ -59,8 +61,15 @@ pub fn print_memusage(mapfile: &Path, require_free: Option<&str>) -> Result<()> 
         "Region", "Used", "Total", "Usage"
     );
 
-    let requirement = require_free.map(parse_requirement).transpose()?;
-    let mut satisfied = false;
+    let mut floors: Vec<(String, u64)> = Vec::new();
+    for requirement in requirements {
+        let (name, bytes) = parse_requirement(requirement)?;
+        match floors.iter_mut().find(|(known, _)| *known == name) {
+            Some((_, known)) => *known = (*known).max(bytes),
+            None => floors.push((name, bytes)),
+        }
+    }
+    let mut satisfied: Vec<&str> = Vec::new();
 
     for region in &regions {
         let mut used = used_bytes_for_region(region, &sections);
@@ -91,10 +100,8 @@ pub fn print_memusage(mapfile: &Path, require_free: Option<&str>) -> Result<()> 
             note
         );
 
-        if let Some((name, floor)) = &requirement
-            && region.name == *name
-        {
-            satisfied = true;
+        if let Some((name, floor)) = floors.iter().find(|(name, _)| region.name == *name) {
+            satisfied.push(name);
             let free = region.length.saturating_sub(used);
             if free < *floor {
                 bail!(
@@ -107,8 +114,9 @@ pub fn print_memusage(mapfile: &Path, require_free: Option<&str>) -> Result<()> 
         }
     }
 
-    if let Some((name, _)) = &requirement
-        && !satisfied
+    if let Some((name, _)) = floors
+        .iter()
+        .find(|(name, _)| !satisfied.contains(&name.as_str()))
     {
         bail!("Map file does not define a `{name}` region");
     }

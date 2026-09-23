@@ -77,6 +77,11 @@ XTASK_BUILD_OPTS += --ironwood
 # on the two-bank models, so unrelated .bss growth is what would push it out.
 # Fail while there is still slack to argue about rather than on the commit that
 # overflows the bank. T3W1 has one bank whose slack IS the heap, so no floor.
+#
+# `cargo xtask build --ironwood` applies this same floor on the same models by
+# itself (xtask/src/options.rs: IRONWOOD_AUX1_FLOOR), so it is enforced on
+# every build path, not only this one. Stated here as well because this is
+# what CI reads, and a twice-named region is held to the larger floor.
 ifneq (,$(filter $(TREZOR_MODEL),T3T1 T3B1))
 XTASK_BUILD_OPTS += --require-free AUX1_RAM=4096
 endif
