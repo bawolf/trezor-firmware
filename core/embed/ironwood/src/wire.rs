@@ -34,6 +34,9 @@ pub const MAX_TRANSPARENT_OUTPUTS: usize = MAX_ACTIONS - 1;
 /// section buffer without refusing any real address.
 pub const USER_ADDRESS_BUDGET: usize = 512;
 
+/// The `hash160` both admitted `scriptPubKey` shapes carry, and the only part
+/// of either that is not a fixed opcode.
+pub const HASH160_BYTES: usize = 20;
 /// Serialized length of the P2PKH `scriptPubKey`
 /// `OP_DUP OP_HASH160 <20> OP_EQUALVERIFY OP_CHECKSIG`.
 pub const P2PKH_SCRIPT_BYTES: usize = 25;
@@ -155,14 +158,21 @@ impl<'a> Reader<'a> {
 
     /// One `transparent::Output` (`stream.rs::transparent_output`).
     fn transparent_output(&mut self) -> Result<()> {
-        malformed(self.varint()? <= MAX_MONEY)?; // value
+        let value = self.varint()?;
+        malformed(value <= MAX_MONEY)?;
+        policy(value > 0)?;
         let length = self.varint()?;
         policy(length == P2PKH_SCRIPT_BYTES as u64 || length == P2SH_SCRIPT_BYTES as u64)?;
         let script = self.take(length as usize)?;
-        // Twin of `stream.rs::transparent_script`.
+        // Twin of `stream.rs::transparent_script`. The hash length is bound
+        // here too: an unbound `..` would admit a 23-byte script wearing P2PKH
+        // opcodes, or a 25-byte one wearing P2SH's, both of which the other
+        // twin refuses -- and the whole point of this reader is that the two
+        // accept the same language.
         policy(matches!(
             script,
-            [0x76, 0xa9, 0x14, .., 0x88, 0xac] | [0xa9, 0x14, .., 0x87]
+            [0x76, 0xa9, 0x14, hash @ .., 0x88, 0xac] | [0xa9, 0x14, hash @ .., 0x87]
+                if hash.len() == HASH160_BYTES
         ))?;
         self.absent()?; // redeem_script
         self.empty_map()?; // bip32_derivation

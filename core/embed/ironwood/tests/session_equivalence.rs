@@ -556,6 +556,12 @@ fn corpus() -> Vec<Case> {
         "transparent output at max money",
         build_deshield(&[(MAX_MONEY, p2pkh([0x33; 20]))], 0),
     ));
+    // A payment of nothing is not a payment: both twins refuse it as policy
+    // rather than show "0 ZEC" to a public address and count it as reviewed.
+    corpus.push(case(
+        "transparent output of zero",
+        build_deshield(&[(0, p2pkh([0x33; 20]))], 0),
+    ));
     // Both admitted script shapes on their own, so the P2SH branch of the
     // projection is exercised without the alternation.
     for (name, script) in [
@@ -968,6 +974,43 @@ fn seed(n: u64) -> [u8; 32] {
     seed
 }
 
+#[test]
+fn an_over_cap_deshield_is_refused_before_any_confirmation() {
+    // 31 transparent outputs and two Ironwood actions: 33 logical actions, one
+    // over the shared cap. The action count that decides it is behind the
+    // shielded prefix, which the encoding puts after every transparent output,
+    // so a session that confirmed each output as it arrived would walk the user
+    // through 31 addresses for a transaction it was always going to refuse.
+    let bytes = with_transparent_bundle(
+        &build_transparent(&transparent_values(1)),
+        (0..MAX_ACTIONS - 1)
+            .map(|i| transparent_output_json(1, &transparent_script_for(i)))
+            .collect(),
+    );
+    for chunk in CHUNKINGS {
+        let mut session = fresh_session();
+        session
+            .begin(bytes.len(), &keys().0, &SEED_FINGERPRINT)
+            .unwrap();
+        let mut rest = &bytes[..];
+        let error = loop {
+            assert!(!rest.is_empty(), "the stream ran out before the verdict");
+            let piece = &rest[..rest.len().min(chunk.max(1))];
+            match session.feed(piece, &keys().0) {
+                Ok((consumed, event)) => {
+                    assert!(
+                        matches!(event, Event::None),
+                        "a screen was offered before the cap was decided, chunking {chunk}"
+                    );
+                    rest = &rest[consumed..];
+                }
+                Err(error) => break error,
+            }
+        };
+        assert_eq!(error.code(), ErrorCode::Capacity, "chunking {chunk}");
+    }
+}
+
 fn engine_for(policy: Policy, seed: [u8; 32]) -> Engine<ChaCha20Rng> {
     Engine::with_rng(policy, ChaCha20Rng::from_seed(seed)).unwrap()
 }
@@ -1006,7 +1049,14 @@ fn stream_into(
         let mut rest = piece;
         while !rest.is_empty() {
             let (consumed, event) = session.feed(rest, &keys().0)?;
-            assert!(consumed > 0, "no progress on {} bytes", rest.len());
+            // A held-back transparent confirmation is the one call that
+            // consumes nothing; everything else must make progress or the loop
+            // would not terminate.
+            assert!(
+                consumed > 0 || matches!(event, Event::ConfirmTransparentOutput(_)),
+                "no progress on {} bytes",
+                rest.len()
+            );
             rest = &rest[consumed..];
             match event {
                 Event::None => {}

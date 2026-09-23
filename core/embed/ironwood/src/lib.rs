@@ -74,7 +74,7 @@ pub use wire::MAX_TRANSPARENT_OUTPUTS;
 /// Longest `output.user_address` string admitted on the wire.
 pub use wire::USER_ADDRESS_BUDGET;
 /// The only `scriptPubKey` lengths admitted on a transparent output.
-pub use wire::{MAX_SCRIPT_PUBKEY_BYTES, P2PKH_SCRIPT_BYTES, P2SH_SCRIPT_BYTES};
+pub use wire::{HASH160_BYTES, MAX_SCRIPT_PUBKEY_BYTES, P2PKH_SCRIPT_BYTES, P2SH_SCRIPT_BYTES};
 use zcash_note_encryption::Domain;
 use zcash_protocol::consensus::{
     BlockHeight, BranchId, MAIN_NETWORK, NetworkConstants, Parameters, TEST_NETWORK,
@@ -935,6 +935,9 @@ fn validate(
         let (kind, hash) =
             stream::transparent_script(output.script_pubkey()).ok_or(Error::policy())?;
         let value = *output.value();
+        // Twin of `stream::transparent_output`: a payment of nothing is not a
+        // payment (§13).
+        ensure_policy(value > 0)?;
         transparent_total = add(transparent_total, value)?;
         transparent_outputs.push(TransparentOutput {
             index,

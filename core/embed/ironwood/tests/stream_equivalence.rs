@@ -753,6 +753,42 @@ fn rejected_corpus() -> Vec<(String, Vec<u8>, ErrorCode)> {
             }),
             Policy,
         ),
+        // Both admitted lengths, both sets of opcodes, and the hash the wrong
+        // size for the opcodes around it. A reader that checks the length and
+        // the ends but not the middle takes these; neither twin may.
+        (
+            "transparent P2PKH opcodes around an 18-byte hash".into(),
+            with_transparent_bundle(&fixture(), {
+                let mut script = vec![0x76, 0xa9, 0x14];
+                script.extend([0xaa; P2SH_SCRIPT_BYTES - 5]);
+                script.extend([0x88, 0xac]);
+                assert_eq!(script.len(), P2SH_SCRIPT_BYTES);
+                vec![transparent_output_json(100_000, &script)]
+            }),
+            Policy,
+        ),
+        (
+            "transparent P2SH opcodes around a 22-byte hash".into(),
+            with_transparent_bundle(&fixture(), {
+                let mut script = vec![0xa9, 0x14];
+                script.extend([0xaa; P2PKH_SCRIPT_BYTES - 3]);
+                script.push(0x87);
+                assert_eq!(script.len(), P2PKH_SCRIPT_BYTES);
+                vec![transparent_output_json(100_000, &script)]
+            }),
+            Policy,
+        ),
+        // A payment of nothing is not a payment: it would put a public address
+        // and "0 ZEC" in front of the user and count as an output they
+        // reviewed.
+        (
+            "transparent value zero".into(),
+            with_transparent_bundle(
+                &fixture(),
+                vec![transparent_output_json(0, &p2pkh([0x33; 20]))],
+            ),
+            Policy,
+        ),
         (
             "transparent redeem_script".into(),
             with_transparent_bundle(&fixture(), {

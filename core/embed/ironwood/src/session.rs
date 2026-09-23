@@ -231,6 +231,9 @@ struct Body {
     /// refuses a zero count, so zero means "not yet declared".
     count: usize,
     seen: usize,
+    /// Transparent rows already confirmed. They are hashed as they arrive but
+    /// shown only once `count` is known, because the two share one cap.
+    confirmed: usize,
     nullifiers: [[u8; 32]; MAX_ACTIONS],
     records: Records,
     /// DEDUP LEVER 3: the device FVK's external+internal ivk cache, built once
@@ -377,10 +380,12 @@ impl<R: RngCore + CryptoRng> Session<R> {
     /// the event they completed. Bytes not consumed belong after that event
     /// and must be fed again, exactly as with `Scanner::feed`; this is how one
     /// chunk that completes several outputs yields one confirmation per call
-    /// without buffering events. `fvk` must be the key given to `begin`: the
-    /// session keeps only its encoding, so the caller lends the key for every
-    /// call and a different key is a `State` error. Any error, including
-    /// bytes after `Review`, resets the session.
+    /// without buffering events, except for the transparent rows that must
+    /// wait for the shared cap (see `advance`), which are released one per call
+    /// and are the only events that can consume no bytes. `fvk` must be the key
+    /// given to `begin`: the session keeps only its encoding, so the caller
+    /// lends the key for every call and a different key is a `State` error.
+    /// Any error, including bytes after `Review`, resets the session.
     pub fn feed(&mut self, chunk: &[u8], fvk: &FullViewingKey) -> Result<(usize, Event)> {
         let result = self.advance(chunk, fvk);
         if result.is_err() {
@@ -394,6 +399,13 @@ impl<R: RngCore + CryptoRng> Session<R> {
         let offered = Zeroizing::new(fvk.to_bytes());
         ensure_state(same_bytes(offered.as_slice(), bound.fvk.as_slice()))?;
         let mut consumed = 0;
+        // A row held back from an earlier call is shown before another byte is
+        // scanned, so the confirmations still arrive in bundle order and still
+        // ahead of every shielded one. This is the only return that consumes
+        // nothing.
+        if let Some(row) = self.next_transparent()? {
+            return Ok((0, Event::ConfirmTransparentOutput(row)));
+        }
         while consumed < chunk.len() {
             let stream = self.stream.as_deref_mut().ok_or(Error::state())?;
             let (used, item) = stream.scanner.feed(&chunk[consumed..])?;
@@ -412,12 +424,24 @@ impl<R: RngCore + CryptoRng> Session<R> {
                 }
                 Some(Item::TransparentOutput(output)) => {
                     let body = stream.body.as_deref_mut().ok_or(Error::internal())?;
-                    let row = body.transparent_output(&output)?;
-                    return Ok((consumed, Event::ConfirmTransparentOutput(row)));
+                    // Hashed and accounted now, shown later: the transparent
+                    // and Ironwood counts share one ZIP-317 cap, and the action
+                    // count is behind the shielded prefix, which the encoding
+                    // puts after every transparent output. Confirming as they
+                    // arrive would walk the user through up to 31 addresses for
+                    // a transaction the device is about to refuse as
+                    // `Capacity`.
+                    body.transparent_output(&output)?;
+                    continue;
                 }
                 Some(Item::Shielded(shielded)) => {
                     let body = stream.body.as_deref_mut().ok_or(Error::internal())?;
+                    // The scanner has decided the joint cap by now, so the held
+                    // rows are safe to show.
                     body.shielded(&shielded)?;
+                    if let Some(row) = body.next_transparent() {
+                        return Ok((consumed, Event::ConfirmTransparentOutput(row)));
+                    }
                     continue;
                 }
                 Some(Item::Action(action)) => {
@@ -437,6 +461,18 @@ impl<R: RngCore + CryptoRng> Session<R> {
             return Ok((consumed, Event::Review(review)));
         }
         Ok((consumed, Event::None))
+    }
+
+    /// The next transparent row still owed a confirmation, if the joint cap has
+    /// been decided and one is left.
+    fn next_transparent(&mut self) -> Result<Option<TransparentOutput>> {
+        let Some(stream) = self.stream.as_deref_mut() else {
+            return Err(Error::state());
+        };
+        Ok(stream
+            .body
+            .as_deref_mut()
+            .and_then(|body| body.next_transparent()))
     }
 
     /// Trailer, VerifyDummies and Totals of design §4, then the token. The
@@ -463,6 +499,11 @@ impl<R: RngCore + CryptoRng> Session<R> {
         if body.seen != body.count {
             return Err(Error::internal());
         }
+        // Consent covers what was shown, so nothing may still be owed a
+        // confirmation when the totals are offered.
+        if body.confirmed != body.projection.transparent_outputs.len() {
+            return Err(Error::internal());
+        }
         // The records are the only secret-bearing part of `Body`; once they
         // are out and their source zeroized, what stays behind is the digest
         // states, the projection and the nullifiers, all host-known.
@@ -485,6 +526,7 @@ impl<R: RngCore + CryptoRng> Session<R> {
             output_total,
             count,
             seen: _,
+            confirmed: _,
             nullifiers: _,
             records: _,
             scope_classifier: _,
@@ -758,6 +800,7 @@ impl Body {
             output_total: 0,
             count: 0,
             seen: 0,
+            confirmed: 0,
             nullifiers: [[0; 32]; MAX_ACTIONS],
             records: Records::default(),
             scope_classifier: None,
@@ -772,10 +815,7 @@ impl Body {
     /// the address shown is solved from the very `scriptPubKey` fed to the
     /// hash. The counterpart in [`crate::validate`] reads the same fields from
     /// the parsed PCZT.
-    fn transparent_output(
-        &mut self,
-        output: &stream::TransparentOutput<'_>,
-    ) -> Result<TransparentOutput> {
+    fn transparent_output(&mut self, output: &stream::TransparentOutput<'_>) -> Result<()> {
         let index = self.projection.transparent_outputs.len();
         if index >= MAX_TRANSPARENT_OUTPUTS {
             return Err(Error::internal());
@@ -790,7 +830,18 @@ impl Body {
             value: output.value,
         };
         self.projection.transparent_outputs.push(row);
-        Ok(row)
+        Ok(())
+    }
+
+    /// The next row to confirm, once `shielded` has accepted the joint action
+    /// cap. Before that `count` is zero and nothing is shown.
+    fn next_transparent(&mut self) -> Option<TransparentOutput> {
+        if self.count == 0 {
+            return None;
+        }
+        let row = *self.projection.transparent_outputs.get(self.confirmed)?;
+        self.confirmed += 1;
+        Some(row)
     }
 
     /// The declared Ironwood action count, which the encoding places after

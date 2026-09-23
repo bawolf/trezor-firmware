@@ -174,6 +174,17 @@ def test_transparent_outputs(session: Session, parameters: dict, result: dict) -
         * OUTPUT_SCREENS
         + [(B.SignTx, "confirm_total")]
     )
+    # The version bytes are the network's, not the wallet's: mainnet renders
+    # t1…/t3…, testnet tm…/t2…. Pinned here as well as in the vector, so a
+    # coininfo regeneration that moved either pair cannot pass by moving the
+    # expectation with it.
+    p2pkh_prefix, p2sh_prefix = {
+        "mainnet": ("t1", "t3"),
+        "testnet": ("tm", "t2"),
+    }[parameters["network"]]
+    for output in transparent:
+        prefix = p2pkh_prefix if output["kind"] == "p2pkh" else p2sh_prefix
+        assert output["address"].startswith(prefix), output
     # The transparent outputs come first, in bundle order, each shown as the
     # address the vector says, chunked in fours.
     for output, screen in zip(transparent, shown):

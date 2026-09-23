@@ -445,7 +445,9 @@ pub static mp_module_trezorironwood: Module = obj_module! {
     ///     transparent output to confirm, payload (index, kind, hash, value)
     ///     where kind 0 is a public key hash and 1 a script hash, and hash is
     ///     the 20 bytes the Base58Check address encodes.
-    ///     Unconsumed bytes must be fed again. ValueError: malformed / too many
+    ///     Unconsumed bytes must be fed again. A kind 3 may consume nothing:
+    ///     transparent outputs are held until the action count is known, and
+    ///     are then released one per call. ValueError: malformed / too many
     ///     actions; RuntimeError: rejected."""
     Qstr::MP_QSTR_session_feed => obj_fn_var!(2, 2, session_feed).as_obj(),
     /// def session_approve(handle: int) -> None:

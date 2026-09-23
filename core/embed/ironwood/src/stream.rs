@@ -443,6 +443,11 @@ fn transparent(r: &mut Reader<'_>) -> Parse<usize> {
 fn transparent_output<'a>(r: &mut Reader<'a>) -> Parse<TransparentOutput<'a>> {
     let value = r.varint()?;
     malformed(value <= MAX_MONEY)?;
+    // Every transparent output here is a payment (§13), and a payment of
+    // nothing is not one: it would put "0 ZEC" and a public address in front of
+    // the user, and satisfy "at least one value-bearing output the user
+    // reviewed" without bearing any value.
+    policy(value > 0)?;
     let length = r.varint()?;
     policy(length == P2PKH_SCRIPT_BYTES as u64 || length == P2SH_SCRIPT_BYTES as u64)?;
     let script_pubkey = r.slice(length as usize)?;

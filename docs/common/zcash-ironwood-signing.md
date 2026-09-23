@@ -278,12 +278,19 @@ Per output:
 
 | Field | Rule |
 |---|---|
-| `value` | required, at most `MAX_MONEY` (`Malformed` above it); displayed; enters the accounting |
+| `value` | required, at most `MAX_MONEY` (`Malformed` above it) and greater than zero (`Policy`); displayed; enters the accounting |
 | `script_pubkey` | exactly the 25-byte P2PKH `76 a9 14 <hash160> 88 ac` or the 23-byte P2SH `a9 14 <hash160> 87`; anything else is `Policy` |
 | `redeem_script` | must be absent (`Policy`) |
 | `bip32_derivation` | must be empty (`Policy`) |
 | `user_address` | admitted within `USER_ADDRESS_BUDGET`, required to be UTF-8, and **ignored** -- the same rule the Ironwood output has |
 | `proprietary` | must be empty (`Policy`) |
+
+A zero-value output is refused rather than shown. Every transparent output
+here is a payment (see **Change** below), and a payment of nothing is not one:
+it would put a public address and "0 ZEC" in front of the user, and it would
+satisfy the rule that at least one value-bearing output was reviewed without
+bearing any value. Zero-value outputs are consensus-valid; the device simply
+has no use the user could recognise for one.
 
 Only the two standard script shapes are admitted because an unrecognised
 script is an address the device cannot render, and an address it cannot render
@@ -298,6 +305,16 @@ signing already uses -- chunked in fours like every other address the device
 asks a user to compare. The 20-byte hash is solved out of the very
 `scriptPubKey` that is fed to the digest, so what is shown is what the
 signature covers.
+
+**When the confirmations are offered.** Each output is hashed into the digest
+and accounted for as it arrives, but shown only after the shielded prefix has
+declared the Ironwood action count -- because that is when the shared cap above
+can be decided. The encoding puts the action count after the whole transparent
+bundle, so confirming on arrival would walk a user through up to 31 addresses
+for a transaction the device is about to refuse as `Capacity`. The order the
+user sees is unchanged: the warning, then every transparent output in bundle
+order, then the shielded payments. A confirmation released this way is the one
+place where a `feed` returns an event without consuming any bytes.
 
 **The privacy warning.** Exactly one screen per transaction, before the first
 transparent output, under its own ButtonRequest name
