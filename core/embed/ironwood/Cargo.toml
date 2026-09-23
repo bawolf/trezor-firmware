@@ -40,3 +40,19 @@ rand_core = { workspace = true, features = ["getrandom"] }
 serde_json.workspace = true
 zcash_protocol = { workspace = true, features = ["local-consensus"] }
 zip32.workspace = true
+
+# The device-arena traces run the real `arena.rs` over the device's tiers, and
+# fragmentation depends on the exact allocation sequence, so they must link the
+# Sinsemilla the firmware links. Cargo builds them only with that feature;
+# `core/Makefile`'s `test_rust_ironwood` runs them with it.
+[[test]]
+name = "rooted_tier"
+required-features = ["test", "computed-generators"]
+
+[[test]]
+name = "rooted_tier_prewarm_first"
+required-features = ["test", "computed-generators"]
+
+[[test]]
+name = "rooted_tier_vk_first"
+required-features = ["test", "computed-generators"]

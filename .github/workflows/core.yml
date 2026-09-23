@@ -724,6 +724,7 @@ jobs:
       - uses: ./.github/actions/environment
       - run: nix-shell --run "uv run make -C core test_rust_ironwood"
       - run: nix-shell --run "cd core/embed && cargo clippy -p ironwood --all-targets --features test -- -D warnings"
+      - run: nix-shell --run "cd core/embed && cargo clippy -p ironwood --all-targets --features test,computed-generators -- -D warnings"
 
   core_ironwood_corpus_test:
     if: github.event_name == 'schedule'
