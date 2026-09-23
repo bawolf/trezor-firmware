@@ -45,9 +45,14 @@ def session_begin(
     `session_sign` require: it binds the native request to the workflow that
     began it, so a second request cannot adopt this one.
     `scratch` is a writable buffer of at least SCRATCH_BYTES that the
-    caller must keep referenced until it has called `session_cancel`;
-    the session's own allocations are carved from it, while what must
-    outlive the session stays in a boot-lifetime native region.
+    caller must keep referenced until it has called `session_cancel`,
+    and must not expose: the session's own allocations are carved from
+    it, so for the length of the session it holds the signing state,
+    the hedge secret, the viewing key and the decrypted note
+    plaintexts, and any Python holding the reference can read them.
+    What must outlive the session stays in a boot-lifetime native
+    region instead. `session_cancel` wipes the buffer before it gives
+    it back; calling `session_begin` again without it is fatal.
     ValueError: the scratch buffer is too small."""
 
 

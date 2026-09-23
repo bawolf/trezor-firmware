@@ -174,15 +174,29 @@ sighash is a different token and needs new consent.
 
 ## 7. Resource model
 
-The signing core is `no_std`. Everything it allocates comes from one
-boot-lifetime region owned by the handler, never from the MicroPython GC
-heap, because the collector does not scan Rust statics. Retained across a
-session: the header, one record per action, the live BLAKE2b states, the
-value accumulators, the token and pending slot, the session FVK and
-`expected_ak`. Peak transient: the scanner's single section buffer, one
-parsed action, one note plaintext, and hash-to-curve scratch. The Pasta
-square-root table is resident for the whole boot and is warmed at prewarm so
-it cannot fragment the region mid-action.
+The signing core is `no_std`, and everything it allocates comes from one of
+two arenas (`core/embed/rust/src/ironwood/arena.rs`). The **rooted tier** is a
+boot-lifetime `.zcash_region` static: it holds only what must outlive a
+session, which is what the collector cannot be allowed to free because it does
+not scan the Rust statics that reach it — the Pasta square-root table and
+orchard's two commitment-domain caches, warmed at prewarm so they cannot
+fragment the tier mid-action. The **scratch tier** is a MicroPython
+`bytearray` the handler allocates per session and the allocator borrows for
+its length. Retained across a session: the header, one record per action, the
+live BLAKE2b states, the value accumulators, the token and pending slot, the
+session FVK and `expected_ak`. Peak transient: the scanner's single section
+buffer, one parsed action, one note plaintext, and hash-to-curve scratch.
+
+**Boundary.** The scratch tier is a Python object, which the old
+`.buf`-resident region was not: for the length of a session the signing state,
+the hedge secret, the FVK, the per-action records and the decrypted note
+plaintexts all live in a pinned `bytearray` that Python owns and that
+MicroPython's conservative collector reads every word of on each collection.
+The `ask` and the seed never enter it — both are borrowed on the stack for the
+call that uses them, and only a BLAKE2b hash of the seed is kept. The buffer
+is wiped before it is released, on every exit path, while the handler still
+holds the only reference to it; a failure to give it back empty is fatal, not
+silent (`release_scratch`).
 
 ## 10. Handler and UI
 

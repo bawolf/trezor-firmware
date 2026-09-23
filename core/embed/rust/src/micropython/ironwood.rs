@@ -197,8 +197,15 @@ extern "C" fn session_begin(n_args: usize, args: *const Obj) -> Obj {
         if !unsafe { ffi::mp_type_bytes.is_type_of(args[0]) } {
             return Err(Error::TypeError);
         }
+        // Nothing may be installed at entry. The workflow releases its scratch
+        // in a `finally`, so a live one here means that `finally` never ran and
+        // the buffer behind it is no longer ours to touch; see
+        // `allocator::forbid_installed_scratch`.
+        allocator::forbid_installed_scratch();
         // Any earlier request must release its blocks while the tier they were
-        // carved from is still installed, and only then may that tier go.
+        // carved from is still installed, and only then may that tier go. With
+        // no scratch installed both calls are the idle no-op they look like,
+        // but the order still matters if a future path installs one.
         signing::cancel(None);
         allocator::release_scratch();
         // Root (or reuse) the boot-lifetime rooted tier. It is a native
@@ -427,9 +434,14 @@ pub static mp_module_trezorironwood: Module = obj_module! {
     ///     `session_sign` require: it binds the native request to the workflow that
     ///     began it, so a second request cannot adopt this one.
     ///     `scratch` is a writable buffer of at least SCRATCH_BYTES that the
-    ///     caller must keep referenced until it has called `session_cancel`;
-    ///     the session's own allocations are carved from it, while what must
-    ///     outlive the session stays in a boot-lifetime native region.
+    ///     caller must keep referenced until it has called `session_cancel`,
+    ///     and must not expose: the session's own allocations are carved from
+    ///     it, so for the length of the session it holds the signing state,
+    ///     the hedge secret, the viewing key and the decrypted note
+    ///     plaintexts, and any Python holding the reference can read them.
+    ///     What must outlive the session stays in a boot-lifetime native
+    ///     region instead. `session_cancel` wipes the buffer before it gives
+    ///     it back; calling `session_begin` again without it is fatal.
     ///     ValueError: the scratch buffer is too small."""
     Qstr::MP_QSTR_session_begin => obj_fn_var!(8, 8, session_begin).as_obj(),
     /// def session_feed(handle: int, chunk: AnyBytes) -> tuple[int, int, tuple | None]:

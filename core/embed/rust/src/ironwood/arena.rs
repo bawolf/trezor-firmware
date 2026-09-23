@@ -215,7 +215,8 @@ impl Arenas {
     /// `Err(bytes)` means a block was still in use — a Rust static first filled
     /// during the session, which would dangle the moment the buffer is
     /// collected. That is the inverse of the cross-session bug the rooted tier
-    /// exists to prevent, and the caller must treat it as fatal.
+    /// exists to prevent, and the caller must treat it as fatal. The span is
+    /// wiped either way, before the verdict is returned.
     pub fn release_scratch(&mut self) -> Result<(), usize> {
         let span = self.scratch;
         if !span.live() {
@@ -229,15 +230,34 @@ impl Arenas {
         // SAFETY: the span was installed by `install_scratch` and its owner
         // has not dropped it yet.
         let retained = span.in_use.max(unsafe { walk_in_use(span.base, span.len) });
-        if retained != 0 {
-            return Err(retained);
-        }
-        // SAFETY: as above; the span is ours until this returns.
+        // Wipe before reporting, not after deciding. A retained block is the
+        // one thing in the span `dealloc` has not already zeroed, and it is
+        // by definition live secret-class state, so leaving it for the
+        // caller's failure path would make the residue depend on which fatal
+        // continuation runs. Invalidating the retained pointer is sound only
+        // because the caller of `Err` does not return: `allocator::
+        // release_scratch` turns it into `system_exit_fatal`.
+        // SAFETY: the span was installed by `install_scratch` and is ours
+        // until this returns.
         unsafe {
             ptr::write_bytes(span.base, 0, span.len);
         }
         core::sync::atomic::compiler_fence(core::sync::atomic::Ordering::SeqCst);
+        if retained != 0 {
+            return Err(retained);
+        }
         Ok(())
+    }
+
+    /// Whether a scratch tier is currently lent to the allocator.
+    ///
+    /// `session_begin` asks before it touches anything: a scratch that is
+    /// still installed when a new session starts means the workflow that
+    /// installed it was dropped without running its `finally`, so the
+    /// `bytearray` behind the span may already have been collected and
+    /// handed to something else.
+    pub fn scratch_installed(&self) -> bool {
+        self.scratch.live()
     }
 
     /// Bytes handed out of each tier, as `(persist, scratch)`. O(1).
@@ -507,11 +527,134 @@ mod tests {
         // cannot see.
         let leaked = unsafe { arenas.alloc(64, 8) };
         assert!(!leaked.is_null());
+        unsafe { ptr::write_bytes(leaked, 0xA5, 64) };
+        assert!(arenas.scratch_installed());
         assert_eq!(arenas.release_scratch(), Err(block_size(64)));
+        // Reported AND wiped. The caller is fatal, so nothing reads the block
+        // again; what this rules out is the secret surviving in the buffer the
+        // collector is about to hand to arbitrary Python objects, on whichever
+        // continuation the fatal path takes.
+        assert!(buffer.0.iter().all(|word| *word == 0));
         // The tier is uninstalled either way, so a later free cannot write
         // through a buffer that has gone back to the collector.
+        assert!(!arenas.scratch_installed());
         assert_eq!(arenas.in_use(), (0, 0));
         unsafe { arenas.dealloc(leaked) };
+    }
+
+    /// Walks a span's block chain and returns every header address, failing
+    /// on anything that is off the grid or runs past the end.
+    fn chain(base: *mut u8, len: usize) -> Vec<*mut u8> {
+        let end = unsafe { base.add(len) };
+        let mut blocks = Vec::new();
+        let mut block = base;
+        while block < end {
+            assert_eq!(
+                block as usize % UNIT,
+                0,
+                "a block header left the {UNIT}-byte grid"
+            );
+            let blen = unsafe { block_len(block) };
+            assert!(
+                unsafe { block_ok(block, blen, end) },
+                "a block of {blen} B at {block:?} runs past the span"
+            );
+            // The header is two u32s at `block` and `block + 4`; both are
+            // inside the block because the smallest block is UNIT.
+            assert!(blen >= UNIT);
+            blocks.push(block);
+            block = unsafe { block.add(blen) };
+        }
+        assert_eq!(block, end, "the chain did not land exactly on the end");
+        blocks
+    }
+
+    /// Every pointer the arena hands out is aligned for what was asked, the
+    /// headers stay on the grid, and the chain always tiles the span exactly.
+    ///
+    /// On the device an unaligned payload is not a slow read, it is a
+    /// UsageFault (`UNALIGN_TRP`), and it would be the same offset on every
+    /// allocation of the boot -- so it is worth asserting here, where the
+    /// mechanism is, rather than discovering it as an address on a screen.
+    #[test]
+    fn every_payload_is_aligned_and_every_header_stays_on_the_grid() {
+        // Room for the whole sweep at once, so every block below is live
+        // together and the chain is walked over a genuinely fragmented span.
+        let mut region = Buffer::new(16 * 1024);
+        let mut arenas = rooted(&mut region);
+        let (base, len) = (region.base(), region.len());
+
+        let mut live = Vec::new();
+        // Sizes that straddle the grid in both directions, against every
+        // alignment the arena promises to serve.
+        for size in [0usize, 1, 15, 16, 17, 31, 32, 33, 48, 100, 255, 256] {
+            for align in [1usize, 2, 4, 8, 16] {
+                let payload = unsafe { arenas.alloc(size, align) };
+                assert!(!payload.is_null(), "{size}/{align} did not fit");
+                assert_eq!(
+                    payload as usize % align,
+                    0,
+                    "{size}/{align}: payload is not aligned for the request"
+                );
+                // Stronger than the request: the arena's contract is that
+                // every payload is UNIT-aligned, which is what lets it refuse
+                // `align > UNIT` outright instead of over-allocating.
+                assert_eq!(payload as usize % UNIT, 0, "{size}/{align}");
+                // And the payload is where the header says it is.
+                // SAFETY: `payload` came from this span, so its header and
+                // the span's end are both addresses inside it.
+                unsafe {
+                    let block = payload.sub(HEADER);
+                    assert!(block >= base && block.add(block_len(block)) <= base.add(len));
+                }
+                live.push(payload);
+                chain(base, len);
+            }
+        }
+        // `realloc` hands out pointers too -- in place, or moved -- and must
+        // keep the same promise. Grow every live block, then shrink it back,
+        // walking the chain after each.
+        let sizes = [0usize, 1, 15, 16, 17, 31, 32, 33, 48, 100, 255, 256];
+        for (i, payload) in live.iter_mut().enumerate() {
+            let size = sizes[i / 5];
+            let align = [1usize, 2, 4, 8, 16][i % 5];
+            for new_size in [size + 40, size] {
+                let old_size = if new_size == size { size + 40 } else { size };
+                let resized = unsafe { arenas.realloc(*payload, old_size, new_size, align) };
+                assert!(!resized.is_null(), "{size}/{align} -> {new_size}");
+                assert_eq!(resized as usize % UNIT, 0, "{size}/{align} -> {new_size}");
+                *payload = resized;
+                chain(base, len);
+            }
+        }
+        // Alignments the 16-byte grid cannot promise are refused, not
+        // mis-served by handing back a 16-aligned pointer anyway.
+        for align in [32usize, 64, 4096] {
+            assert!(unsafe { arenas.alloc(16, align) }.is_null(), "{align}");
+        }
+        for payload in live {
+            unsafe { arenas.dealloc(payload) };
+            chain(base, len);
+        }
+        assert_eq!(arenas.in_use(), (0, 0));
+        // Fully coalesced back to the single block `root` formatted.
+        assert_eq!(chain(base, len).len(), 1);
+    }
+
+    #[test]
+    fn a_scratch_is_reported_installed_for_exactly_its_session() {
+        let mut region = Buffer::new(ROOTED);
+        let mut buffer = Buffer::new(SCRATCH);
+        let mut arenas = rooted(&mut region);
+        // `session_begin` reads this before it touches the previous session's
+        // memory: true at entry means a workflow was dropped without running
+        // its `finally`, and the span may no longer be the caller's to write.
+        assert!(!arenas.scratch_installed());
+        let (base, len) = (buffer.base(), buffer.len());
+        assert!(unsafe { arenas.install_scratch(base, len, SCRATCH) });
+        assert!(arenas.scratch_installed());
+        assert!(arenas.release_scratch().is_ok());
+        assert!(!arenas.scratch_installed());
     }
 
     #[test]

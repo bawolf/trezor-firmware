@@ -104,6 +104,26 @@ pub fn install_region() {
     unsafe { arenas().root(base, REGION_BYTES) };
 }
 
+/// Fatal if a scratch tier is still installed.
+///
+/// `session_begin` calls this before anything else. A live scratch at that
+/// point means the workflow that installed it never reached the `finally`
+/// that releases it -- and the only way that happens is a generator that was
+/// dropped rather than closed, because the vendored MicroPython has no
+/// generator finaliser (`vendor/micropython/py/objgenerator.c`), so a
+/// collected generator never runs its `finally` at all. The span is then
+/// backed by a `bytearray` nothing holds a reference to, which the collector
+/// may already have handed to something else; releasing it would zero
+/// `SCRATCH_BYTES` of live heap, and freeing through it would rewrite block
+/// headers over whatever now lives there. There is no recovery from that, so
+/// refuse to start instead. No reachable path in `apps.zcash.sign_pczt` gets
+/// here -- this is the assertion that keeps it that way.
+pub fn forbid_installed_scratch() {
+    if arenas().scratch_installed() {
+        rtl::system_exit_fatal("Ironwood scratch not released", file!(), line!());
+    }
+}
+
 /// Lends `[base, base + len)` -- a MicroPython `bytearray` the caller keeps
 /// referenced -- to the allocator as this session's scratch tier. False means
 /// the buffer was refused (already one installed, or under `SCRATCH_BYTES`);
@@ -195,3 +215,17 @@ fn allocation_error(_layout: Layout) -> ! {
 }
 
 const _: () = assert!(REGION_BYTES % UNIT == 0);
+// The rooted tier's base is `&REGION`, and `Arenas::root` requires it on the
+// arena's grid: every payload it hands out is `base + k * UNIT + HEADER`, so
+// anything less than `UNIT` here makes every allocation unaligned by the same
+// offset -- which on this target is a UsageFault the moment a `u64` or a
+// `pallas::Base` limb lands on it, not a slow path. `#[repr(align(16))]` on
+// `Region` is what provides it; this is the assertion that it still does.
+const _: () = assert!(core::mem::align_of::<Region>() >= UNIT);
+// The scratch is a MicroPython `bytearray` of exactly `SCRATCH_BYTES`, and
+// `install_scratch` aligns its base up to `UNIT` before measuring it, so the
+// tier is the whole buffer only while the two grids agree. The other half of
+// that coupling -- that MicroPython really does place item data on a 16-byte
+// boundary -- is `_Static_assert`ed against `MICROPY_BYTES_PER_GC_BLOCK` in
+// `upymod/rustmods.c`, where the module is registered.
+const _: () = assert!(SCRATCH_BYTES % UNIT == 0);

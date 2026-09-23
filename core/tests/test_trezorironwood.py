@@ -206,7 +206,20 @@ class TestIronwoodSessionHandle(unittest.TestCase):
         self.native.session_cancel()
         self.native.session_cancel(self.handle)
 
-    def test_a_second_begin_retires_the_first_handle(self):
+    def test_a_second_begin_after_a_cancel_retires_the_first_handle(self):
+        """A new session invalidates the old handle, so a stray call from an
+        already-dead workflow cannot reach the live one.
+
+        The cancel first is the contract, not a convenience: on a device
+        `session_begin` refuses to start while a scratch is still installed,
+        because a scratch nobody released means the workflow that installed it
+        never ran its `finally` and the `bytearray` behind it may already have
+        been collected. That check is native and fatal, so it cannot be
+        asserted here -- the emulator has no arenas to install (see
+        `rust/src/ironwood/allocator_unix.rs`); the mechanism is unit-tested in
+        `ironwood::arena`.
+        """
+        self.native.session_cancel(self.handle)
         second = self._begin()
         self.assertNotEqual(second, self.handle)
         with self.assertRaises(RuntimeError):

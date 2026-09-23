@@ -22,6 +22,12 @@ pub const SCRATCH_BYTES: usize = 24 * 1024;
 /// process heap, so there is no tier to root, lend back or wipe.
 pub fn install_region() {}
 
+/// Nothing to forbid: the emulator installs no tier, so there is never one
+/// left over from a workflow that skipped its `finally`. The device's
+/// counterpart is fatal, and the mechanism behind it is unit-tested on the
+/// host in `ironwood::arena`.
+pub fn forbid_installed_scratch() {}
+
 /// # Safety
 ///
 /// Signature parity with the device allocator; the buffer is not retained.
