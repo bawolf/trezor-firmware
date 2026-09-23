@@ -750,6 +750,13 @@ impl Body {
     /// `session_feed` frame.
     #[inline(never)]
     fn new(header: stream::Header, policy: &Policy) -> Result<Box<Self>> {
+        // The scanner caps the declared transparent count before it hands the
+        // header over (`stream::transparent`), so this is a contract
+        // check, not a grammar rule -- and it is what makes the output
+        // capacity below a subtraction that cannot underflow.
+        if header.transparent_outputs > MAX_TRANSPARENT_OUTPUTS {
+            return Err(Error::internal());
+        }
         ensure_policy(header.version == V6_TX_VERSION && header.group == V6_VERSION_GROUP_ID)?;
         let request = policy.request;
         let expected_branch = request
@@ -791,7 +798,19 @@ impl Body {
             transparent_total: 0,
             fee: 0,
             padding_outputs: 0,
-            outputs: Vec::with_capacity(MAX_ACTIONS),
+            // Both vectors are pre-sized to their share of ONE budget, not to
+            // the whole of it: transparent outputs and Ironwood actions are
+            // logical actions of the same ZIP-317 cap, so a bundle that
+            // declares `t` transparent rows can carry at most
+            // `MAX_ACTIONS - t` actions and the scanner refuses more
+            // (`stream::shielded`). Reserving `MAX_ACTIONS` output slots
+            // regardless would cost 31 x size_of::<ReviewedOutput>() = 9,920 B
+            // of scratch in exactly the widest deshield -- the one shape that
+            // needs the transparent vector at its cap as well. Neither vector
+            // can outgrow what is reserved here, so neither ever grows: a
+            // growth the arena cannot extend in place moves the buffer, holds
+            // both copies at once and leaves the old one as a hole.
+            outputs: Vec::with_capacity(MAX_ACTIONS - header.transparent_outputs),
             transparent_outputs: Vec::with_capacity(header.transparent_outputs),
         };
         Ok(Box::new(Self {

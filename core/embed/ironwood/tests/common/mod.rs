@@ -3,7 +3,8 @@
 use std::sync::atomic::{AtomicU64, Ordering};
 
 use ironwood::{
-    Account, Engine, Error, ErrorCode, Limits, Network, Policy, RequestContext, Result, Review,
+    Account, Engine, Error, ErrorCode, Event, Limits, MAX_ACTIONS, MAX_TRANSPARENT_OUTPUTS,
+    Network, Policy, RequestContext, Result, Review, Session,
 };
 use orchard::bundle::BundleVersion;
 use orchard::keys::{FullViewingKey, Scope, SpendAuthorizingKey, SpendingKey};
@@ -42,6 +43,34 @@ pub fn policy(network: Network, maximum_fee: u64) -> Policy {
         Limits::new(maximum_fee, 100).unwrap(),
     )
     .unwrap()
+}
+
+/// Streams one PCZT through a fresh `Session` and signs it: everything the
+/// device does between `install_scratch` and `release_scratch`, which is what
+/// the arena tests put inside their scratch-tier window. The review is
+/// held to the end because the handler holds it too -- it owns the token the
+/// consent screen answers for.
+pub fn sign_streamed(bytes: &[u8], seed: u8, maximum_fee: u64) {
+    let mut session = Session::with_rng(
+        policy(Network::Testnet, maximum_fee),
+        ChaCha20Rng::from_seed([seed; 32]),
+    )
+    .unwrap();
+    session
+        .begin(bytes.len(), &keys().0, &SEED_FINGERPRINT)
+        .unwrap();
+    let mut review = None;
+    let mut rest = bytes;
+    while !rest.is_empty() {
+        let (consumed, event) = session.feed(rest, &keys().0).unwrap();
+        rest = &rest[consumed..];
+        if let Event::Review(reviewed) = event {
+            review = Some(reviewed);
+        }
+    }
+    let review = review.expect("the corpus PCZT reaches its review");
+    session.approve(review.token()).unwrap();
+    let _ = session.sign(review.token(), &keys().1).unwrap();
 }
 
 pub fn assert_error(error: Error, code: ErrorCode) {
@@ -470,8 +499,18 @@ pub fn flip(value: &mut Value) {
 pub const CORPUS_MAX_ACTIONS: usize = 8;
 
 /// Synthetic local-consensus fixture covering every admitted action count.
+///
+/// The equivalence corpus asks for at most [`CORPUS_MAX_ACTIONS`]; the arena
+/// model in `region_budget.rs` asks for [`MAX_ACTIONS`], because the scratch
+/// tier has to hold the widest session the wire admits and nothing smaller
+/// proves it does. A bundle of `outputs` actions costs `outputs` host Orchard
+/// output builds, so only that one test pays for the wide end.
+///
+/// The fee is ZIP-317's, `5_000 * actions`, which is over the 100_000 zat
+/// limit the corpus policy carries from 21 actions up: a caller past that has
+/// to raise `maximum_fee` with the count.
 pub fn build_actions(outputs: usize) -> Vec<u8> {
-    assert!((1..=CORPUS_MAX_ACTIONS).contains(&outputs));
+    assert!((1..=MAX_ACTIONS).contains(&outputs));
     let mut rng = ChaCha20Rng::from_seed([outputs as u8; 32]);
     let (fvk, _) = keys();
     let other = FullViewingKey::from(&SpendingKey::from_bytes([1; 32]).unwrap());
@@ -688,6 +727,38 @@ impl zcash_primitives::transaction::fees::FeeRule for FixedFee {
 /// what signs the dummy spend, and a dummy signature is over the sighash the
 /// transparent outputs are part of.
 pub fn build_deshield(outputs: &[(u64, Vec<u8>)], funded: u64) -> Vec<u8> {
+    deshield(outputs, funded, Shielded::PaymentAndChange)
+}
+
+/// The shielded side of a deshield fixture: what the one Ironwood spend funds
+/// besides the transparent outputs and the fee. Both shapes release the same
+/// value, so [`TRANSPARENT_FIXTURE_FEE`] is the fee either way; they differ
+/// only in how many Ironwood actions carry it.
+enum Shielded {
+    /// A payment to another wallet and change back: TWO actions, the shape
+    /// every transparent-output test uses.
+    PaymentAndChange,
+    /// One payment carrying both amounts, in an unpadded bundle: ONE action.
+    /// Transparent outputs and Ironwood actions share one ZIP-317 cap
+    /// (`MAX_TRANSPARENT_OUTPUTS = MAX_ACTIONS - 1`), so this is the only
+    /// shielded side that leaves room for a full transparent bundle.
+    OnePayment,
+}
+
+/// A balanced deshield with [`MAX_TRANSPARENT_OUTPUTS`] transparent outputs
+/// and one Ironwood action: the widest transparent bundle the device admits,
+/// and the case that pre-sizes the projection's transparent `Vec` to its cap.
+pub fn build_wide_deshield() -> Vec<u8> {
+    let values = transparent_values(MAX_TRANSPARENT_OUTPUTS);
+    let outputs: Vec<(u64, Vec<u8>)> = values
+        .iter()
+        .enumerate()
+        .map(|(i, value)| (*value, transparent_script_for(i)))
+        .collect();
+    deshield(&outputs, values.iter().sum(), Shielded::OnePayment)
+}
+
+fn deshield(outputs: &[(u64, Vec<u8>)], funded: u64, shielded: Shielded) -> Vec<u8> {
     let mut rng = ChaCha20Rng::from_seed([0xd0 ^ outputs.len() as u8; 32]);
     let (fvk, _) = keys();
     let other = FullViewingKey::from(&SpendingKey::from_bytes([1; 32]).unwrap());
@@ -721,7 +792,12 @@ pub fn build_deshield(outputs: &[(u64, Vec<u8>)], funded: u64) -> Vec<u8> {
         local_network(),
         HEIGHT.into(),
         BundlePadding::DEFAULT,
-        BundlePadding::DEFAULT,
+        match shielded {
+            Shielded::PaymentAndChange => BundlePadding::DEFAULT,
+            // One spend paired with one output is one action only if nothing
+            // pads the bundle back up.
+            Shielded::OnePayment => BundlePadding::UNPADDED,
+        },
     )
     .unwrap();
     builder
@@ -731,18 +807,24 @@ pub fn build_deshield(outputs: &[(u64, Vec<u8>)], funded: u64) -> Vec<u8> {
         .add_ironwood_output::<zip317::FeeError>(
             Some(fvk.to_ovk(Scope::External)),
             other.address_at(0u32, Scope::External),
-            Zatoshis::from_u64(TRANSPARENT_FIXTURE_PAYMENT).unwrap(),
+            Zatoshis::from_u64(match shielded {
+                Shielded::PaymentAndChange => TRANSPARENT_FIXTURE_PAYMENT,
+                Shielded::OnePayment => TRANSPARENT_FIXTURE_PAYMENT + TRANSPARENT_FIXTURE_CHANGE,
+            })
+            .unwrap(),
             MemoBytes::empty(),
         )
         .unwrap();
-    builder
-        .add_ironwood_output::<zip317::FeeError>(
-            Some(fvk.to_ovk(Scope::Internal)),
-            fvk.address_at(1u32, Scope::Internal),
-            Zatoshis::from_u64(TRANSPARENT_FIXTURE_CHANGE).unwrap(),
-            MemoBytes::empty(),
-        )
-        .unwrap();
+    if matches!(shielded, Shielded::PaymentAndChange) {
+        builder
+            .add_ironwood_output::<zip317::FeeError>(
+                Some(fvk.to_ovk(Scope::Internal)),
+                fvk.address_at(1u32, Scope::Internal),
+                Zatoshis::from_u64(TRANSPARENT_FIXTURE_CHANGE).unwrap(),
+                MemoBytes::empty(),
+            )
+            .unwrap();
+    }
     let result = builder
         .build_for_pczt(&mut rng, &FixedFee(TRANSPARENT_FIXTURE_FEE + funded))
         .unwrap();

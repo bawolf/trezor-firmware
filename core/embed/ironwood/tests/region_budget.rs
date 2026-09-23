@@ -17,12 +17,21 @@
 //!
 //! 1. the persistent arena must hold the whole `prewarm` transient peak,
 //! 2. the persistent set must not grow across sessions,
-//! 3. a session's transient demand must fit the scratch arena.
+//! 3. a session's transient demand must fit the scratch arena, at the two
+//!    widest shapes the wire admits as well as at the corpus sizes.
 //!
-//! The model counts the requested block size, not the (occasionally larger)
-//! block first-fit hands out when the remainder is too small to split, and it
-//! ignores fragmentation. Both make it a lower bound on arena occupancy, which
-//! is why the asserted margins are reported rather than merely checked.
+//! What the model is and is not. It counts LIVE BYTES: every request priced
+//! with the device's block arithmetic, and every `Vec` growth as
+//! alloc-copy-free with both capacities live (`ArenaModel` keeps
+//! `GlobalAlloc::realloc` at its default). The device grows in place when the
+//! next block is free, and no Rust type is larger on the 32-bit target than
+//! on this host, so for live bytes the model is an upper bound on the device.
+//! It says nothing about FRAGMENTATION -- where first-fit puts each block, and
+//! whether a request finds one hole big enough -- or about the occasionally
+//! larger block first-fit hands out when a remainder is too small to split.
+//! A tier can refuse a request with bytes to spare in total, which is how the
+//! rooted tier failed on the first Safe 5 boot. The `rooted_tier*.rs`
+//! binaries answer that half by running the real arena.
 
 mod common;
 
@@ -32,16 +41,24 @@ use std::hint::black_box;
 use std::sync::atomic::{AtomicIsize, AtomicUsize, Ordering};
 
 use common::*;
-use ironwood::{Event, Network, Session};
+use ironwood::{MAX_ACTIONS, MAX_TRANSPARENT_OUTPUTS};
 use ironwood_pasta_curves::group::{Group, GroupEncoding};
 use ironwood_pasta_curves::pallas;
-use rand_chacha::ChaCha20Rng;
-use rand_chacha::rand_core::SeedableRng;
 
 /// `ironwood::allocator::REGION_BYTES`: the rooted tier in `.zcash_region`.
 const ROOTED_BYTES: usize = 40 * 1024;
 /// `sign_pczt.SCRATCH_BYTES`: the per-session tier taken from the GC heap.
 const SCRATCH_BYTES: usize = 24 * 1024;
+
+/// Bytes every session must leave unclaimed in the scratch tier, counted as
+/// live bytes (see the module note: fragmentation is `rooted_tier*.rs`'s).
+///
+/// Small, because the widest shielded session already spends all but 208 B
+/// of the tier here. The device spends less -- no type is larger there, and a
+/// growth there may extend in place -- but this is the figure a host can
+/// state, and below this floor the difference between the two widths would
+/// be the whole margin, which is not a margin worth quoting.
+const MINIMUM_MARGIN: isize = 128;
 
 const HEADER: usize = 16;
 const UNIT: usize = 16;
@@ -120,33 +137,6 @@ fn trace<T>(body: impl FnOnce() -> T) -> (T, isize, isize, usize) {
     )
 }
 
-/// Streams one PCZT through a fresh `Session` and signs it: everything the
-/// device does between `install_scratch` and `release_scratch`. The review is
-/// held to the end because the handler holds it too -- it owns the token the
-/// consent screen answers for.
-fn one_session(bytes: &[u8], seed: u8) {
-    let mut session = Session::with_rng(
-        policy(Network::Testnet, 100_000),
-        ChaCha20Rng::from_seed([seed; 32]),
-    )
-    .unwrap();
-    session
-        .begin(bytes.len(), &keys().0, &SEED_FINGERPRINT)
-        .unwrap();
-    let mut review = None;
-    let mut rest = bytes;
-    while !rest.is_empty() {
-        let (consumed, event) = session.feed(rest, &keys().0).unwrap();
-        rest = &rest[consumed..];
-        if let Event::Review(reviewed) = event {
-            review = Some(reviewed);
-        }
-    }
-    let review = review.expect("the corpus PCZT reaches its review");
-    session.approve(review.token()).unwrap();
-    let _ = session.sign(review.token(), &keys().1).unwrap();
-}
-
 #[test]
 fn the_two_arenas_hold_what_the_device_puts_in_them() {
     // Phase 1 — the Pasta square-root table. `prewarm` triggers it by
@@ -168,19 +158,55 @@ fn the_two_arenas_hold_what_the_device_puts_in_them() {
     // before the two phases above could watch them being rooted. The builder is
     // not device code and its allocations are in neither arena.
     let small = fixture();
-    // The session working set is O(1) in the action count -- the streaming
-    // session never holds more than one action -- so the corpus maximum is
-    // representative of the 32-action cap.
-    let full = build_actions(CORPUS_MAX_ACTIONS);
+    let corpus = build_actions(CORPUS_MAX_ACTIONS);
+    // The two widest sessions the wire admits, which are the ones that size
+    // the scratch tier. Both caps are exercised because the session pre-sizes
+    // a `Vec` against each and they cannot both be at their maximum: the
+    // projection's `outputs` is `Vec::with_capacity(MAX_ACTIONS)` whatever
+    // arrives, its `transparent_outputs` is
+    // `Vec::with_capacity(header.transparent_outputs)`, and the two counts
+    // share one ZIP-317 cap, so `MAX_TRANSPARENT_OUTPUTS` transparent rows
+    // leave room for exactly one action.
+    let wide_shielded = build_actions(MAX_ACTIONS);
+    let wide_transparent = build_wide_deshield();
 
-    // Phase 3 — two sessions, with the persistent set already rooted. The
+    // Both fixtures really are at their cap. A fixture that quietly shrank --
+    // one padding decision in the host builder is enough -- would leave the
+    // budget below passing on a narrower session than the wire admits, which
+    // is the gap this test exists to close.
+    let view = json(&wide_shielded);
+    assert_eq!(
+        view["ironwood"]["actions"].as_array().unwrap().len(),
+        MAX_ACTIONS
+    );
+    assert!(
+        view["transparent"]["outputs"]
+            .as_array()
+            .is_none_or(Vec::is_empty)
+    );
+    let view = json(&wide_transparent);
+    assert_eq!(view["ironwood"]["actions"].as_array().unwrap().len(), 1);
+    assert_eq!(
+        view["transparent"]["outputs"].as_array().unwrap().len(),
+        MAX_TRANSPARENT_OUTPUTS
+    );
+
+    // Phase 3 — five sessions, with the persistent set already rooted. The
     // transient demand above `persistent` is what the scratch tier must hold,
     // and `persistent` itself must be identical after each: the device asserts
     // the same thing at `release_scratch`, where a non-zero scratch in-use
     // means a Rust static was filled during a session and now dangles.
-    let (_, first_peak, after_first, _) = trace(|| one_session(&small, 1));
-    let (_, second_peak, after_second, _) = trace(|| one_session(&small, 2));
-    let (_, full_peak, after_full, _) = trace(|| one_session(&full, 3));
+    //
+    // ZIP-317 charges `5_000 * actions`, so the widest shielded bundle pays
+    // 160_000 and needs a `maximum_fee` that admits it; the deshield fixtures
+    // charge `TRANSPARENT_FIXTURE_FEE` whatever their bundle.
+    let (_, first_peak, after_first, _) = trace(|| sign_streamed(&small, 1, 100_000));
+    let (_, second_peak, after_second, _) = trace(|| sign_streamed(&small, 2, 100_000));
+    let (_, full_peak, after_full, _) = trace(|| sign_streamed(&corpus, 3, 100_000));
+    let (_, shielded_peak, after_shielded, _) =
+        trace(|| sign_streamed(&wide_shielded, 4, 5_000 * MAX_ACTIONS as u64));
+    let (_, transparent_peak, after_transparent, _) =
+        trace(|| sign_streamed(&wide_transparent, 5, 100_000));
 
     println!("rooted tier   : {ROOTED_BYTES} B");
     println!(
@@ -189,14 +215,26 @@ fn the_two_arenas_hold_what_the_device_puts_in_them() {
     println!(
         "  prewarm     : peak {prewarm_peak}, persistent {persistent}, {warm_allocations} allocations in the domain warm"
     );
-    println!("  slack       : {} B", ROOTED_BYTES as isize - prewarm_peak);
+    // The rooted tier has to hold the LARGER of the two phases, and it is the
+    // table build, not the domain warm -- `trace` reports each phase's own
+    // peak, so neither figure alone is the tier's high-water mark.
+    let rooted_peak = table_peak.max(prewarm_peak);
+    println!("  peak        : {rooted_peak}");
+    println!("  slack       : {} B", ROOTED_BYTES as isize - rooted_peak);
     println!("scratch tier  : {SCRATCH_BYTES} B");
-    println!("  session 1   : peak {}", first_peak - persistent);
-    println!("  session 2   : peak {}", second_peak - persistent);
-    println!(
-        "  {CORPUS_MAX_ACTIONS} actions  : peak {}",
-        full_peak - persistent
-    );
+    for (label, peak) in [
+        ("session 1", first_peak),
+        ("session 2", second_peak),
+        ("corpus max", full_peak),
+        ("32 actions", shielded_peak),
+        ("1 + 31 transparent", transparent_peak),
+    ] {
+        let scratch = peak - persistent;
+        println!(
+            "  {label:<18}: peak {scratch}, margin {}",
+            SCRATCH_BYTES as isize - scratch
+        );
+    }
 
     assert_eq!(
         OVERALIGNED.load(Ordering::Relaxed),
@@ -205,32 +243,53 @@ fn the_two_arenas_hold_what_the_device_puts_in_them() {
     );
 
     // 1. The rooted tier holds the whole prewarm transient, not just the table that
-    //    survives it.
+    //    survives it -- and the transient that binds is the table BUILD, which
+    //    grows four 256-element `Vec<Fp>` and holds all four live.
     assert!(
-        prewarm_peak <= ROOTED_BYTES as isize,
-        "prewarm peaks at {prewarm_peak} B, over the {ROOTED_BYTES} B rooted tier"
+        rooted_peak <= ROOTED_BYTES as isize,
+        "prewarm peaks at {rooted_peak} B (table build {table_peak}, domain warm \
+         {prewarm_peak}), over the {ROOTED_BYTES} B rooted tier"
     );
 
     // 2. The persistent set is the same after every session. Drift here is a
     //    cross-session leak; the device reads the same number through
     //    `debug_region_info()` between two signs in one boot.
-    assert_eq!(after_first, persistent, "session 1 retained arena memory");
-    assert_eq!(after_second, persistent, "session 2 retained arena memory");
-    assert_eq!(
-        after_full, persistent,
-        "the widest session retained arena memory"
-    );
+    for (label, after) in [
+        ("session 1", after_first),
+        ("session 2", after_second),
+        ("the corpus maximum", after_full),
+        ("the widest shielded session", after_shielded),
+        ("the widest deshield", after_transparent),
+    ] {
+        assert_eq!(after, persistent, "{label} retained arena memory");
+    }
 
-    // 3. A session's transient demand fits the scratch tier, at every size.
+    // 3. A session's transient demand fits the scratch tier at every size, with
+    //    something left to argue about.
     for (label, peak) in [
         ("session 1", first_peak),
         ("session 2", second_peak),
-        ("the widest session", full_peak),
+        ("the corpus maximum", full_peak),
+        ("the widest shielded session", shielded_peak),
+        ("the widest deshield", transparent_peak),
     ] {
-        let scratch = peak - persistent;
+        let margin = SCRATCH_BYTES as isize - (peak - persistent);
         assert!(
-            scratch <= SCRATCH_BYTES as isize,
-            "{label} needs {scratch} B of scratch, over the {SCRATCH_BYTES} B tier"
+            margin >= MINIMUM_MARGIN,
+            "{label} leaves {margin} B of the {SCRATCH_BYTES} B scratch tier, \
+             under the stated {MINIMUM_MARGIN} B floor"
         );
     }
+
+    // 4. The session working set is O(1) in the action count all the way to the
+    //    cap: the streaming session holds one action at a time, and the only
+    //    per-bundle term is the 32 logical-action slots both projection vectors
+    //    share. A widest-shielded peak above the corpus peak would mean something
+    //    now scales with the count, which is the shape of growth the 208 B margin
+    //    cannot absorb.
+    assert_eq!(
+        shielded_peak, full_peak,
+        "{MAX_ACTIONS} actions cost more than {CORPUS_MAX_ACTIONS}: the session \
+         working set is no longer O(1) in the action count"
+    );
 }
