@@ -202,11 +202,6 @@ extern "C" fn session_begin(n_args: usize, args: *const Obj) -> Obj {
         // whole boot (fixes cross-session staleness of the Pasta table / orchard
         // OnceBox caches; see `ironwood::allocator`).
         crate::ironwood::allocator::install_region();
-        // Measurement bookkeeping: reset the per-session region peak and sample
-        // the bytes already in use (the persistent Pasta table + orchard OnceBox
-        // caches after session 1) BEFORE `begin` allocates, so the sweep can see a
-        // flat per-session peak and a constant in-use-at-begin (a leak otherwise).
-        crate::ironwood::allocator::mark_session_begin();
         // SAFETY: the seed is borrowed for this call only and not mutated.
         let seed = unsafe { get_buffer(args[0])? };
         let handle = signing::begin(
@@ -312,80 +307,6 @@ extern "C" fn session_cancel() -> Obj {
     Obj::const_none()
 }
 
-/// MEASUREMENT-ONLY region telemetry. Gated behind `ironwood-measurement`
-/// (default-OFF): the returned high-water marks are internal region layout
-/// information and are excluded from production builds.
-#[cfg(feature = "ironwood-measurement")]
-extern "C" fn session_region_high_water() -> Obj {
-    let block = || {
-        // (per_session_peak, in_use_at_begin, boot_peak), all in bytes from the
-        // region base; every element is 0 on the emulator. The per-session peak
-        // is the figure the sweep reads (the boot-monotone peak can only grow).
-        Ok(Tuple::alloc(&[
-            Obj::try_from(crate::ironwood::allocator::region_session_high_water())?,
-            Obj::try_from(crate::ironwood::allocator::region_in_use_at_begin())?,
-            Obj::try_from(crate::ironwood::allocator::region_high_water())?,
-        ])?
-        .into())
-    };
-    unsafe { util::try_or_raise(block) }
-}
-
-/// MEASUREMENT-ONLY per-operation micro-benchmark. Runs `iters` iterations of a
-/// single selected crypto operation over the same `ironwood-sinsemilla`
-/// (computed generators) and `ironwood-pasta-curves` instances the signing path
-/// links, and returns a folded accumulator of every result so nothing is
-/// optimised away. The caller installs the region (Pasta/Sinsemilla allocate)
-/// by passing a bytearray and times the call with `utime.ticks_ms`.
-/// Selector: 0 warmup, 1 note_commitment, 2 sinsemilla_hash, 3 scalar_mul,
-/// 4 commit_ivk. Changes no signing behavior; reached only through the reserved
-/// all-`0xff` diversifier-index bench path in `get_address`. Gated behind
-/// `ironwood-measurement` (default-OFF): production builds link no bench symbol
-/// and expose no bench binding.
-#[cfg(feature = "ironwood-measurement")]
-extern "C" fn bench(n_args: usize, args: *const Obj) -> Obj {
-    let block = |args: &[Obj], _kwargs: &Map| {
-        if args.len() != 3 {
-            return Err(Error::TypeError);
-        }
-        let selector = parse_u32(args[0], c"Invalid bench selector")?;
-        if !unsafe { ffi::mp_type_bytearray.is_type_of(args[1]) } {
-            return Err(Error::TypeError);
-        }
-        let iters = parse_u32(args[2], c"Invalid bench iterations")?;
-        // The signing region is now a boot-lifetime `.buf` static, so the
-        // caller's bytearray (arg 1) is accepted for API compatibility but
-        // ignored; the bench allocates from the same rooted region signing uses.
-        crate::ironwood::allocator::install_region();
-        let accumulator: u64 = match selector {
-            0 => {
-                ironwood::bench::warmup();
-                0
-            }
-            1 => ironwood::bench::note_commitment(iters),
-            2 => ironwood::bench::sinsemilla_hash(iters),
-            3 => ironwood::bench::scalar_mul(iters),
-            4 => ironwood::bench::commit_ivk(iters),
-            _ => return Err(Error::ValueError(c"Invalid bench selector")),
-        };
-        Obj::try_from(accumulator)
-    };
-    unsafe { util::try_with_args_and_kwargs(n_args, args, &Map::EMPTY, block) }
-}
-
-// The module is defined twice under mutually-exclusive cfgs. The PRODUCTION
-// variant (default) omits the MEASUREMENT-ONLY `session_region_high_water` and
-// `bench` bindings so no bench symbol links and no region telemetry is
-// reachable. The MEASUREMENT variant (`ironwood-measurement`)
-// adds those two bindings for on-device op-timing sweeps. The `obj_module!`
-// macro cannot cfg individual entries, so the two shared-plus-extra variants
-// are spelled out; keep the shared entries below in sync between the two. Only
-// the PRODUCTION table carries the `/// def` mock docs for the shared entries
-// (`build_mocks` is cfg-blind and would otherwise emit every shared stub
-// twice); the MEASUREMENT table documents only its two extra bindings.
-
-/// PRODUCTION module (default): no MEASUREMENT-ONLY bindings.
-#[cfg(not(feature = "ironwood-measurement"))]
 #[no_mangle]
 #[rustfmt::skip]
 pub static mp_module_trezorironwood: Module = obj_module! {
@@ -450,92 +371,4 @@ pub static mp_module_trezorironwood: Module = obj_module! {
     ///     unwinds the workflow with a GeneratorExit), and cancelling is
     ///     fail-closed where adopting a session is not."""
     Qstr::MP_QSTR_session_cancel => obj_fn_0!(session_cancel).as_obj(),
-};
-
-/// MEASUREMENT module (`ironwood-measurement`): adds op-timing + region
-/// telemetry bindings for on-device sweeps. NOT for production.
-#[cfg(feature = "ironwood-measurement")]
-#[no_mangle]
-#[rustfmt::skip]
-pub static mp_module_trezorironwood: Module = obj_module! {
-    // def derive_receiver(
-    //     seed: AnyBytes,
-    //     network: int,
-    //     account: int,
-    //     diversifier_index: AnyBytes,
-    // ) -> bytes:
-    //     """Internal synchronous adapter; seed must come from device wallet state."""
-    Qstr::MP_QSTR_derive_receiver => obj_fn_var!(4, 4, derive_receiver).as_obj(),
-    // def derive_viewing_key(
-    //     seed: bytes,
-    //     network: int,
-    //     account: int,
-    //     output: AnyBuffer,
-    // ) -> None:
-    //     """Fill a 96-byte Orchard FVK buffer from device wallet state."""
-    Qstr::MP_QSTR_derive_viewing_key => obj_fn_var!(4, 4, derive_viewing_key).as_obj(),
-    // def seed_fingerprint(seed: bytes, output: AnyBuffer) -> None:
-    //     """Fill a 32-byte buffer with the ZIP-32 seed fingerprint of the wallet
-    //     seed: a public identifier of the seed, not key material."""
-    Qstr::MP_QSTR_seed_fingerprint => obj_fn_2!(seed_fingerprint).as_obj(),
-    // def session_begin(
-    //     seed: bytes,
-    //     network: int,
-    //     account: int,
-    //     host_reference_height: int,
-    //     maximum_fee: int,
-    //     expiry_window: int,
-    //     pczt_length: int,
-    // ) -> int:
-    //     """Start streaming one PCZT for the account derived from the wallet seed.
-    //     Returns the session handle, which `session_feed`, `session_approve` and
-    //     `session_sign` require: it binds the native request to the workflow that
-    //     began it, so a second request cannot adopt this one. Allocations of the
-    //     signing core are carved from a boot-lifetime native region (no
-    //     caller-provided buffer)."""
-    Qstr::MP_QSTR_session_begin => obj_fn_var!(7, 7, session_begin).as_obj(),
-    // def session_feed(handle: int, chunk: AnyBytes) -> tuple[int, int, tuple | None]:
-    //     """Consume PCZT bytes. Returns (consumed, kind, payload): kind 0 needs more
-    //     bytes; kind 1 is a payment output to confirm, payload
-    //     (action_index, receiver, value, memo_kind, memo) where
-    //     memo_kind 0 is no memo (memo None), 1 a text memo (memo: its UTF-8
-    //     bytes, at most 256) and 2 a memo not shown verbatim (memo: the 32-byte
-    //     BLAKE2b-256 of the memo); kind 2 is the review, payload
-    //     (expiry_height, blocks_until_expiry, input_total, payment_total,
-    //     change_total, fee, padding_outputs, payment_outputs, action_count).
-    //     Unconsumed bytes must be fed again. ValueError: malformed / too many
-    //     actions; RuntimeError: rejected."""
-    Qstr::MP_QSTR_session_feed => obj_fn_var!(2, 2, session_feed).as_obj(),
-    // def session_approve(handle: int) -> None:
-    //     """Record consent for the reviewed PCZT; call only after the trusted totals screen."""
-    Qstr::MP_QSTR_session_approve => obj_fn_1!(session_approve).as_obj(),
-    // def session_sign(handle: int, seed: bytes) -> bytes:
-    //     """Sign every real spend and end the session. Returns concatenated
-    //     66-byte records: pool (0x03) | action_index | signature[64]."""
-    Qstr::MP_QSTR_session_sign => obj_fn_2!(session_sign).as_obj(),
-    // def session_cancel() -> None:
-    //     """End the session, if any, and wipe its state. Takes no handle: it is
-    //     teardown, it runs from a `finally` that may not have one (autolock
-    //     unwinds the workflow with a GeneratorExit), and cancelling is
-    //     fail-closed where adopting a session is not."""
-    Qstr::MP_QSTR_session_cancel => obj_fn_0!(session_cancel).as_obj(),
-    /// def session_region_high_water() -> tuple[int, int, int]:
-    ///     """MEASUREMENT-ONLY (ironwood-measurement). Region measurement counters,
-    ///     in bytes from the region base (all 0 on the emulator):
-    ///     (per_session_peak, in_use_at_begin, boot_peak). per_session_peak resets
-    ///     at each session_begin, so on an ascending-N single-boot sweep it stays
-    ///     ~flat; in_use_at_begin is the persistent set already allocated when the
-    ///     session began (constant in steady state — any drift is a cross-session
-    ///     leak); boot_peak is the boot-monotone maximum."""
-    Qstr::MP_QSTR_session_region_high_water => obj_fn_0!(session_region_high_water).as_obj(),
-    /// def bench(selector: int, region: bytearray, iters: int) -> int:
-    ///     """MEASUREMENT-ONLY (ironwood-measurement). Run `iters` iterations of one
-    ///     crypto operation (0 warmup, 1 note_commitment, 2 sinsemilla_hash,
-    ///     3 scalar_mul, 4 commit_ivk) over the signing path's Sinsemilla/Pallas
-    ///     instances and return a folded accumulator so nothing is optimised away.
-    ///     `region` is accepted for API compatibility but IGNORED: the bench
-    ///     allocates from the same boot-lifetime `.buf` region the signing path
-    ///     installs, so an empty bytearray() is fine. Time it with utime.ticks_ms
-    ///     on the Python side. Changes no signing behavior."""
-    Qstr::MP_QSTR_bench => obj_fn_var!(3, 3, bench).as_obj(),
 };

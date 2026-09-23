@@ -87,12 +87,6 @@ ironwood = [
     # links the fast table generators instead (see the crate feature comment).
     "ironwood/computed-generators",
 ]
-# Measurement-only op-timing scaffolding: the native `bench` binding, the
-# `session_region_high_water` region-telemetry binding, and the reserved-0xff
-# `_op_timing_bench` short-circuit in get_address.py. Default-OFF; production
-# builds omit it so no bench symbol links and no region telemetry is reachable
-# pre-consent. Implies `ironwood`.
-ironwood-measurement = ["ironwood", "ironwood/ironwood-measurement"]
 micropython = ["dep:upymod"]
 miniscript = []
 n1w1 = []

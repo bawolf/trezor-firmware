@@ -175,15 +175,4 @@ message ZcashPcztAck {
 message ZcashSpendAuthSignatures {
     required bytes transfer_id = 1;  // the transfer the records belong to
     required bytes records = 2;      // n * 66 bytes, 1 <= n <= 32 (MAX_ACTIONS)
-    // MEASUREMENT-ONLY, present in the signing-latency instrumentation build.
-    // An ASCII key=value breakdown of the on-device wall-clock spent per signing
-    // phase (derive/feed/sign), the per-action feed segments, and the region
-    // high-water mark, so a plain host (no DebugLink) can read where the latency
-    // goes. It never carries signing material and is absent from release builds.
-    // Verified: the production handler never sets it (`sign_pczt.py` returns
-    // without it unless the measurement module is frozen, which no release
-    // build freezes). It is in the schema only so a measurement image can
-    // answer a plain host, and it is removed together with the rest of the
-    // measurement lane before any upstream wire-id allocation.
-    optional bytes debug_timings = 3;
 }

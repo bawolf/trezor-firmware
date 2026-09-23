@@ -28,9 +28,7 @@ CHUNKS = 4
 PCZT_LENGTH = CHUNK * CHUNKS
 
 _RECEIVER = bytes(range(43))
-# The review payload: `_confirm_totals` is patched out, but `Timings.trailer`
-# reads `totals[8]` (the action count) in a measurement build, and the unit
-# test tree is exactly such a build -- `ironwood_measurement` is on disk.
+# The review payload `_confirm_totals` is handed; it is patched out here.
 _TOTALS = (10_000_040, 40, 500_000, 300_000, 180_000, 20_000, 2, 2, 8)
 
 
@@ -71,9 +69,6 @@ class _FakeIronwood:
 
     def session_cancel(self) -> None:
         pass
-
-    def session_region_high_water(self):
-        return (1, 2, 3)
 
 
 class _RecordingProgress:

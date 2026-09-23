@@ -22,13 +22,6 @@ extern crate alloc;
 
 use alloc::vec::Vec;
 
-/// Measurement-only per-operation micro-benchmarks (Sinsemilla vs Pallas
-/// scalar mult). Reached only through the reserved diversifier-index bench path
-/// in `get_address`; changes no signing behavior. Gated behind the
-/// `ironwood-measurement` feature (default-OFF): production builds exclude it
-/// entirely.
-#[cfg(feature = "ironwood-measurement")]
-pub mod bench;
 mod digest;
 #[cfg(feature = "test")]
 mod effects;

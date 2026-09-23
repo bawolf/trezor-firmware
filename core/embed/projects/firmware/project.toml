@@ -68,7 +68,6 @@ disable-animation             = { true = ["disable_animation"] }
 force-bootloader-upgrade      = { true = ["force_bootloader_upgrade"] }
 frozen                        = { true = ["frozen"] }
 ironwood                      = { true = ["ironwood"] }
-ironwood-measurement          = { true = ["ironwood-measurement"] }
 log-stack-usage               = { true = ["log_stack_usage"] }
 mem-perf                      = { true = ["memperf"] }
 miniscript                    = { true = ["miniscript"] }

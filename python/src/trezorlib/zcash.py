@@ -118,10 +118,6 @@ MAX_ACCOUNT = 2**31 - 1
 
 _UINT32_MAX = 2**32 - 1
 
-# MEASUREMENT-ONLY: last per-phase timing trailer read from a signing-latency
-# instrumentation firmware (bytes), or None against a release build.
-last_debug_timings: bytes | None = None
-
 _BECH32_CHARSET = "qpzry9x8gf2tvdw0s3jn54khce6mua7l"
 _BECH32_CHARSET_INDEX = {char: index for index, char in enumerate(_BECH32_CHARSET)}
 _BECH32M_CONST = 0x2BC830A3
@@ -295,12 +291,6 @@ def sign_pczt(
     )
     request = _expect(session, response, messages.ZcashPcztRequest)
     transfer_id, signatures = _upload(session, request, pczt)
-    # MEASUREMENT-ONLY: the signing-latency instrumentation firmware appends an
-    # ASCII per-phase timing trailer to the response. Stash it so a plain host
-    # runner (no DebugLink) can read the derive/feed/sign/high-water breakdown.
-    # This field is absent from release builds, so this is always a no-op there.
-    global last_debug_timings
-    last_debug_timings = getattr(signatures, "debug_timings", None)
     return _parse_records(session, transfer_id, signatures)
 
 

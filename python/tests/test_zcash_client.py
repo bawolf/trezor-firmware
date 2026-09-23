@@ -802,19 +802,6 @@ def test_sign_pczt_accepts_every_admissible_record_set(indices: list[int]) -> No
     assert_no_cancel(session)
 
 
-def test_sign_pczt_ignores_measurement_trailer() -> None:
-    """The optional debug trailer never changes the parsed result."""
-    pczt = _load(PCZT_BY_ACTIONS[1])
-    records = records_for([0])
-    response = messages.ZcashSpendAuthSignatures(
-        transfer_id=TRANSFER_ID, records=records, debug_timings=b"derive=1"
-    )
-    session = scripted(*upload_requests(len(pczt)), response)
-    result = zcash.sign_pczt(session, pczt, MAINNET, 0, REFERENCE_HEIGHT)
-    assert result == expected_signatures(records)
-    assert zcash.last_debug_timings == b"derive=1"
-
-
 @pytest.mark.parametrize(
     "total", [1, CHUNK - 1, CHUNK, CHUNK + 1, zcash.MAX_PCZT_BYTES]
 )

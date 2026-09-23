@@ -1679,8 +1679,6 @@ pub struct ZcashSpendAuthSignatures {
     pub transfer_id: ::std::option::Option<::std::vec::Vec<u8>>,
     // @@protoc_insertion_point(field:hw.trezor.messages.zcash.ZcashSpendAuthSignatures.records)
     pub records: ::std::option::Option<::std::vec::Vec<u8>>,
-    // @@protoc_insertion_point(field:hw.trezor.messages.zcash.ZcashSpendAuthSignatures.debug_timings)
-    pub debug_timings: ::std::option::Option<::std::vec::Vec<u8>>,
     // special fields
     // @@protoc_insertion_point(special_field:hw.trezor.messages.zcash.ZcashSpendAuthSignatures.special_fields)
     pub special_fields: ::protobuf::SpecialFields,
@@ -1769,44 +1767,8 @@ impl ZcashSpendAuthSignatures {
         self.records.take().unwrap_or_else(|| ::std::vec::Vec::new())
     }
 
-    // optional bytes debug_timings = 3;
-
-    pub fn debug_timings(&self) -> &[u8] {
-        match self.debug_timings.as_ref() {
-            Some(v) => v,
-            None => &[],
-        }
-    }
-
-    pub fn clear_debug_timings(&mut self) {
-        self.debug_timings = ::std::option::Option::None;
-    }
-
-    pub fn has_debug_timings(&self) -> bool {
-        self.debug_timings.is_some()
-    }
-
-    // Param is passed by value, moved
-    pub fn set_debug_timings(&mut self, v: ::std::vec::Vec<u8>) {
-        self.debug_timings = ::std::option::Option::Some(v);
-    }
-
-    // Mutable pointer to the field.
-    // If field is not initialized, it is initialized with default value first.
-    pub fn mut_debug_timings(&mut self) -> &mut ::std::vec::Vec<u8> {
-        if self.debug_timings.is_none() {
-            self.debug_timings = ::std::option::Option::Some(::std::vec::Vec::new());
-        }
-        self.debug_timings.as_mut().unwrap()
-    }
-
-    // Take field
-    pub fn take_debug_timings(&mut self) -> ::std::vec::Vec<u8> {
-        self.debug_timings.take().unwrap_or_else(|| ::std::vec::Vec::new())
-    }
-
     fn generated_message_descriptor_data() -> ::protobuf::reflect::GeneratedMessageDescriptorData {
-        let mut fields = ::std::vec::Vec::with_capacity(3);
+        let mut fields = ::std::vec::Vec::with_capacity(2);
         let mut oneofs = ::std::vec::Vec::with_capacity(0);
         fields.push(::protobuf::reflect::rt::v2::make_option_accessor::<_, _>(
             "transfer_id",
@@ -1817,11 +1779,6 @@ impl ZcashSpendAuthSignatures {
             "records",
             |m: &ZcashSpendAuthSignatures| { &m.records },
             |m: &mut ZcashSpendAuthSignatures| { &mut m.records },
-        ));
-        fields.push(::protobuf::reflect::rt::v2::make_option_accessor::<_, _>(
-            "debug_timings",
-            |m: &ZcashSpendAuthSignatures| { &m.debug_timings },
-            |m: &mut ZcashSpendAuthSignatures| { &mut m.debug_timings },
         ));
         ::protobuf::reflect::GeneratedMessageDescriptorData::new_2::<ZcashSpendAuthSignatures>(
             "ZcashSpendAuthSignatures",
@@ -1853,9 +1810,6 @@ impl ::protobuf::Message for ZcashSpendAuthSignatures {
                 18 => {
                     self.records = ::std::option::Option::Some(is.read_bytes()?);
                 },
-                26 => {
-                    self.debug_timings = ::std::option::Option::Some(is.read_bytes()?);
-                },
                 tag => {
                     ::protobuf::rt::read_unknown_or_skip_group(tag, is, self.special_fields.mut_unknown_fields())?;
                 },
@@ -1874,9 +1828,6 @@ impl ::protobuf::Message for ZcashSpendAuthSignatures {
         if let Some(v) = self.records.as_ref() {
             my_size += ::protobuf::rt::bytes_size(2, &v);
         }
-        if let Some(v) = self.debug_timings.as_ref() {
-            my_size += ::protobuf::rt::bytes_size(3, &v);
-        }
         my_size += ::protobuf::rt::unknown_fields_size(self.special_fields.unknown_fields());
         self.special_fields.cached_size().set(my_size as u32);
         my_size
@@ -1888,9 +1839,6 @@ impl ::protobuf::Message for ZcashSpendAuthSignatures {
         }
         if let Some(v) = self.records.as_ref() {
             os.write_bytes(2, v)?;
-        }
-        if let Some(v) = self.debug_timings.as_ref() {
-            os.write_bytes(3, v)?;
         }
         os.write_unknown_fields(self.special_fields.unknown_fields())?;
         ::std::result::Result::Ok(())
@@ -1911,7 +1859,6 @@ impl ::protobuf::Message for ZcashSpendAuthSignatures {
     fn clear(&mut self) {
         self.transfer_id = ::std::option::Option::None;
         self.records = ::std::option::Option::None;
-        self.debug_timings = ::std::option::Option::None;
         self.special_fields.clear();
     }
 
@@ -1919,7 +1866,6 @@ impl ::protobuf::Message for ZcashSpendAuthSignatures {
         static instance: ZcashSpendAuthSignatures = ZcashSpendAuthSignatures {
             transfer_id: ::std::option::Option::None,
             records: ::std::option::Option::None,
-            debug_timings: ::std::option::Option::None,
             special_fields: ::protobuf::SpecialFields::new(),
         };
         &instance
@@ -2027,12 +1973,11 @@ static file_descriptor_proto_data: &'static [u8] = b"\
     \x06length\x18\x03\x20\x02(\rR\x06length\"[\n\x0cZcashPcztAck\x12\x1f\n\
     \x0btransfer_id\x18\x01\x20\x02(\x0cR\ntransferId\x12\x16\n\x06offset\
     \x18\x02\x20\x02(\rR\x06offset\x12\x12\n\x04data\x18\x03\x20\x02(\x0cR\
-    \x04data\"z\n\x18ZcashSpendAuthSignatures\x12\x1f\n\x0btransfer_id\x18\
+    \x04data\"U\n\x18ZcashSpendAuthSignatures\x12\x1f\n\x0btransfer_id\x18\
     \x01\x20\x02(\x0cR\ntransferId\x12\x18\n\x07records\x18\x02\x20\x02(\x0c\
-    R\x07records\x12#\n\rdebug_timings\x18\x03\x20\x01(\x0cR\x0cdebugTimings\
-    *B\n\x0cZcashNetwork\x12\x18\n\x14ZcashNetwork_Mainnet\x10\0\x12\x18\n\
-    \x14ZcashNetwork_Testnet\x10\x01B9\n#com.satoshilabs.trezor.lib.protobuf\
-    B\x12TrezorMessageZcash\
+    R\x07records*B\n\x0cZcashNetwork\x12\x18\n\x14ZcashNetwork_Mainnet\x10\0\
+    \x12\x18\n\x14ZcashNetwork_Testnet\x10\x01B9\n#com.satoshilabs.trezor.li\
+    b.protobufB\x12TrezorMessageZcash\
 ";
 
 /// `FileDescriptorProto` object which was a source for this generated file

@@ -43,7 +43,6 @@ for prefix in DEBUG_PREFIXES:
 
 # Module-local qstrs whose Rust implementation is feature-gated.
 qstrings_ironwood = qstrings & {
-    "MP_QSTR_bench",
     "MP_QSTR_derive_receiver",
     "MP_QSTR_derive_viewing_key",
     "MP_QSTR_seed_fingerprint",
@@ -51,7 +50,6 @@ qstrings_ironwood = qstrings & {
     "MP_QSTR_session_begin",
     "MP_QSTR_session_cancel",
     "MP_QSTR_session_feed",
-    "MP_QSTR_session_region_high_water",
     "MP_QSTR_session_sign",
 }
 

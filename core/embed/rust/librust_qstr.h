@@ -1598,7 +1598,6 @@ static void _librust_qstrs(void) {
   MP_QSTR_debug__loading_seed_not_recommended;
 #endif
 #ifdef USE_IRONWOOD
-  MP_QSTR_bench;
   MP_QSTR_derive_receiver;
   MP_QSTR_derive_viewing_key;
   MP_QSTR_seed_fingerprint;
@@ -1606,7 +1605,6 @@ static void _librust_qstrs(void) {
   MP_QSTR_session_begin;
   MP_QSTR_session_cancel;
   MP_QSTR_session_feed;
-  MP_QSTR_session_region_high_water;
   MP_QSTR_session_sign;
 #endif
 }

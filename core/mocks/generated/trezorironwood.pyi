@@ -77,26 +77,3 @@ def session_cancel() -> None:
     teardown, it runs from a `finally` that may not have one (autolock
     unwinds the workflow with a GeneratorExit), and cancelling is
     fail-closed where adopting a session is not."""
-
-
-# rust/src/micropython/ironwood.rs
-def session_region_high_water() -> tuple[int, int, int]:
-    """MEASUREMENT-ONLY (ironwood-measurement). Region measurement counters,
-    in bytes from the region base (all 0 on the emulator):
-    (per_session_peak, in_use_at_begin, boot_peak). per_session_peak resets
-    at each session_begin, so on an ascending-N single-boot sweep it stays
-    ~flat; in_use_at_begin is the persistent set already allocated when the
-    session began (constant in steady state — any drift is a cross-session
-    leak); boot_peak is the boot-monotone maximum."""
-
-
-# rust/src/micropython/ironwood.rs
-def bench(selector: int, region: bytearray, iters: int) -> int:
-    """MEASUREMENT-ONLY (ironwood-measurement). Run `iters` iterations of one
-    crypto operation (0 warmup, 1 note_commitment, 2 sinsemilla_hash,
-    3 scalar_mul, 4 commit_ivk) over the signing path's Sinsemilla/Pallas
-    instances and return a folded accumulator so nothing is optimised away.
-    `region` is accepted for API compatibility but IGNORED: the bench
-    allocates from the same boot-lifetime `.buf` region the signing path
-    installs, so an empty bytearray() is fine. Time it with utime.ticks_ms
-    on the Python side. Changes no signing behavior."""

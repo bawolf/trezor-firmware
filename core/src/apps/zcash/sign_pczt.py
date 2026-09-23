@@ -332,19 +332,6 @@ async def _stream_and_sign(
 
     from . import ironwood_account
 
-    # Optional MEASUREMENT-ONLY latency instrumentation. `ironwood_measurement`
-    # is frozen only in the `--ironwood-measurement` build (the same feature that
-    # exposes the native bench / region-telemetry bindings); a PRODUCTION build
-    # freezes no such module, so this takes the ImportError path and `timings`
-    # stays None — the signing loop below then runs with no timing hooks at all
-    # and no `utime.ticks_ms` in the hot path.
-    try:
-        from .ironwood_measurement import Timings
-
-        timings = Timings()
-    except ImportError:
-        timings = None
-
     # Bitcoin shows its progress screen for the whole of sign_tx — while it
     # waits for host data and while it verifies silently — and never a blank
     # one. Same here, and it has to be up *before* `session_begin`, because
@@ -356,8 +343,6 @@ async def _stream_and_sign(
     progress_layout = progress(TR.progress__loading_transaction)
     progress_layout.report(0)
 
-    if timings is not None:
-        timings.begin_start()
     # `session_begin` is a seed-touching native call: it runs the whole ZIP-32
     # path and derives the account FVK, which computes the spend-authorizing
     # scalar as a temporary, and `zip32`'s `HardenedOnlyKey` is not `Zeroize`.
@@ -378,8 +363,6 @@ async def _stream_and_sign(
         )
     finally:
         utils.zero_unused_stack()
-    if timings is not None:
-        timings.begin_done()
     transfer_id = random.bytes(TRANSFER_ID_BYTES)
     offset = 0
     payments = 0
@@ -426,17 +409,11 @@ async def _stream_and_sign(
             progress_layout.report(1000 * (offset + fed) // pczt_length)
             # One chunk may complete several outputs; each returns separately
             # and the remainder is fed again after its confirmation.
-            if timings is not None:
-                timings.feed_start()
             consumed, kind, payload = session_feed(handle, data[fed:])
-            if timings is not None:
-                timings.feed_done()
             utils.zero_unused_stack()
             fed += consumed
             if kind == _STEP_OUTPUT:
                 _action_index, receiver, value, memo_kind, memo = payload
-                if timings is not None:
-                    timings.segment()
                 await _confirm_output(
                     receiver, value, payments, coin_name, account_label, path
                 )
@@ -446,8 +423,6 @@ async def _stream_and_sign(
                 payments += 1
                 ironwood_account.require_session(session)
             elif kind == _STEP_REVIEW:
-                if timings is not None:
-                    timings.segment()
                 totals = payload
             elif consumed == 0:
                 raise wire.ProcessError("Zcash PCZT rejected")
@@ -465,28 +440,12 @@ async def _stream_and_sign(
     # point (progress.init_signing / report_init); so do we.
     progress_layout = progress(TR.progress__signing_transaction)
     progress_layout.report(0)
-    if timings is not None:
-        timings.sign_start()
     try:
         records = session_sign(handle, wallet_seed)
     finally:
         utils.zero_unused_stack()
     progress_layout.report(1000)
-    if timings is not None:
-        timings.sign_done()
     if type(records) is not bytes or len(records) == 0 or len(records) % RECORD_LEN:
         raise wire.ProcessError("Zcash signing failed")
 
-    # PRODUCTION (default): no measurement module, so return the signature
-    # records with the proto `debug_timings` field unset, matching its
-    # documentation.
-    if timings is None:
-        return ZcashSpendAuthSignatures(transfer_id=transfer_id, records=records)
-
-    # MEASUREMENT build only: attach the per-phase latency + region-counter
-    # trailer. `totals[8]` is the full bundle action count.
-    return ZcashSpendAuthSignatures(
-        transfer_id=transfer_id,
-        records=records,
-        debug_timings=timings.trailer(totals[8]),
-    )
+    return ZcashSpendAuthSignatures(transfer_id=transfer_id, records=records)

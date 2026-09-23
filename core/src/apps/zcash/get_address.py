@@ -32,21 +32,6 @@ def _derive_receiver(
         utils.zero_unused_stack()
 
 
-def _op_timing_bench() -> str | None:
-    # MEASUREMENT-ONLY per-operation latency bench. The `ironwood_measurement`
-    # module (which carries the bench body and the native bench /
-    # region-telemetry bindings) is frozen ONLY when the firmware is built with
-    # the `ironwood-measurement` Cargo feature. In a PRODUCTION build (default,
-    # feature OFF) there is no such module, this returns None, and the reserved
-    # 0xff diversifier index derives an address normally instead of running any
-    # bench.
-    try:
-        from .ironwood_measurement import op_timing_bench
-    except ImportError:
-        return None
-    return op_timing_bench()
-
-
 async def get_address(msg: ZcashGetAddress) -> ZcashAddress:
     from trezor import TR, utils, wire
     from trezor.enums import ButtonRequestType
@@ -69,17 +54,6 @@ async def get_address(msg: ZcashGetAddress) -> ZcashAddress:
         network, account
     )
     ironwood_account.validate_diversifier_index(diversifier_index)
-
-    # MEASUREMENT-ONLY (ironwood-measurement builds): the reserved all-0xff
-    # diversifier index triggers the per-operation latency bench and returns the
-    # timings in a ProcessError instead of deriving an address. In a PRODUCTION
-    # build (default) the bench binding is absent, `_op_timing_bench()` returns
-    # None, and this index derives normally like any other — so the valid
-    # diversifier index 2^88-1 stays usable and no bench runs pre-consent (R1).
-    if bytes(diversifier_index) == b"\xff" * 11:
-        bench_timings = _op_timing_bench()
-        if bench_timings is not None:
-            raise wire.ProcessError(bench_timings)
 
     seed.raise_if_not_initialized()
     session = ironwood_account.snapshot_session()

@@ -10326,7 +10326,6 @@ class ZcashSpendAuthSignatures(protobuf.MessageType):
     FIELDS = {
         1: protobuf.Field("transfer_id", "bytes", repeated=False, required=True),
         2: protobuf.Field("records", "bytes", repeated=False, required=True),
-        3: protobuf.Field("debug_timings", "bytes", repeated=False, required=False, default=None),
     }
 
     def __init__(
@@ -10334,8 +10333,6 @@ class ZcashSpendAuthSignatures(protobuf.MessageType):
         *,
         transfer_id: "bytes",
         records: "bytes",
-        debug_timings: Optional["bytes"] = None,
     ) -> None:
         self.transfer_id = transfer_id
         self.records = records
-        self.debug_timings = debug_timings
