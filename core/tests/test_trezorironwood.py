@@ -195,13 +195,17 @@ class TestIronwoodSessionHandle(unittest.TestCase):
         handle = self._begin()
         self._assert_alive(handle)
 
-    def test_region_info_is_a_debug_instrument_or_nothing(self):
-        info = self.native.debug_region_info()
-        if info is None:
-            return
-        persist_in_use, persist_peak, scratch_in_use, scratch_peak = info
-        self.assertTrue(persist_in_use <= persist_peak)
-        self.assertTrue(scratch_in_use <= scratch_peak)
+    def test_region_info_is_absent_where_there_are_no_arenas(self):
+        """`debug_region_info()` reports only on a debuglink DEVICE build.
+
+        Here it must be `None`, not four zeros: the emulator's allocator is
+        plain `malloc` and installs no tier (`allocator_unix.rs`), so zeros
+        would read as a passing measurement of invariants
+        (`scratch_in_use == 0`, `persist_in_use` unchanged) that nothing on
+        this target actually holds. The device reads the real figures through
+        `DebugLinkGetGcInfo`; see the two-sign device test.
+        """
+        self.assertIsNone(self.native.debug_region_info())
         # Idempotent: teardown runs from a `finally` that may run twice.
         self.native.session_cancel()
         self.native.session_cancel(self.handle)

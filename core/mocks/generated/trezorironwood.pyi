@@ -101,4 +101,6 @@ def session_cancel(handle: int | None = None) -> None:
 # rust/src/micropython/ironwood.rs
 def debug_region_info() -> tuple[int, int, int, int] | None:
     """(persist_in_use, persist_peak, scratch_in_use, scratch_peak) of
-    the two signing arenas on a debuglink build, None otherwise."""
+    the two signing arenas on a debuglink DEVICE build, None otherwise
+    -- including on the emulator, which has no arenas to report. An
+    absent reading must be skipped, not read as zeros."""

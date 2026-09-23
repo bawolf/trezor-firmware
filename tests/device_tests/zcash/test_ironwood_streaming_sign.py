@@ -499,3 +499,95 @@ def test_cancel_at_totals_then_sign(session: Session) -> None:
     # A cancelled review leaves nothing pending: the next request signs normally.
     signatures = _sign(session, parameters, _accept_flow(session, payments))
     assert [s.action_index for s in signatures] == result["real_spend_actions"]
+
+
+# The two tiers, pinned here as well as in the firmware. `SCRATCH_BYTES` is
+# `apps.zcash.sign_pczt.SCRATCH_BYTES` (and `trezorironwood.SCRATCH_BYTES`,
+# which it is asserted equal to in `core/tests/test_trezorironwood.py`);
+# `REGION_BYTES` is `ironwood::allocator::REGION_BYTES`, the `.zcash_region`
+# static. Pinned rather than imported because this file talks to a device
+# whose firmware may not be this tree's.
+SCRATCH_BYTES = 24 * 1024
+REGION_BYTES = 40 * 1024
+
+REGION_KEYS = ("persist_in_use", "persist_peak", "scratch_in_use", "scratch_peak")
+
+
+def _region_info(session: Session) -> dict | None:
+    """The two signing arenas, read over debuglink, or `None` where absent.
+
+    `apps.debug` appends the four figures to `DebugLinkGcInfo`, whose payload
+    is a free-form name/value list, because the signing region is not on the
+    GC heap and `gc.mem_info()` cannot see it. They are absent on a build
+    without debuglink and on the emulator, whose allocator is plain `malloc`
+    and has no arenas at all (`rust/src/ironwood/allocator_unix.rs`).
+    """
+    debug = session.debug
+    if not debug.has_gc_info:
+        return None
+    response = debug._call(
+        messages.DebugLinkGetGcInfo(), expect=messages.DebugLinkGcInfo
+    )
+    info = {item.name: item.value for item in response.items}
+    if not all(key in info for key in REGION_KEYS):
+        return None
+    return {key: info[key] for key in REGION_KEYS}
+
+
+def test_two_signs_in_one_boot_leave_the_region_as_they_found_it(
+    session: Session,
+) -> None:
+    """The two invariants the two-tier region rests on, on real hardware.
+
+    The rooted tier is a boot-lifetime `.zcash_region` static holding the
+    persistent set (Pasta's square-root table, orchard's commitment-domain
+    caches); the scratch tier is a `bytearray` borrowed from the GC heap for
+    one session and given back. So:
+
+    * `persist_in_use` must be IDENTICAL after each sign. Drift is the
+      2026-09-18 cross-session bug returning -- something the first sign
+      rooted and the second rooted again.
+    * `scratch_in_use` must be ZERO once the workflow's `finally` has run.
+      A non-zero figure is a Rust static that was first filled during a
+      session and now points into memory the collector has taken back.
+
+    Neither is reachable from the emulator: `allocator_unix.rs` delegates to
+    `malloc` and installs no tier, so `debug_region_info()` is `None` there
+    and this SKIPS rather than passing on four zeros. The equivalent host
+    statement is `ironwood/tests/region_budget.rs`, which runs the device's
+    block arithmetic over the real allocation traces; this is the same claim
+    on 32-bit silicon.
+
+    Note that `scratch_in_use != 0` cannot be observed after the fact: the
+    device treats it as fatal at `release_scratch`, so a device that reaches
+    the second reading has already passed it. The assertion below is the
+    belt to that braces, and it is also what would catch the counter and the
+    block chain disagreeing (`region_info` reads the chains).
+    """
+    parameters, result = _vector("2_actions")
+    payments = len(result["payments"])
+
+    if _region_info(session) is None:
+        pytest.skip(
+            "no signing-region counters: this build has no debuglink, or it is "
+            "the emulator, which has no arenas (allocator_unix.rs is malloc)"
+        )
+
+    readings = []
+    for attempt in range(2):
+        signatures = _sign(session, parameters, _accept_flow(session, payments))
+        assert [s.action_index for s in signatures] == result["real_spend_actions"], (
+            f"sign {attempt + 1}"
+        )
+        readings.append(_region_info(session))
+
+    first, second = readings
+    # Not vacuous: the first sign really did root a persistent set. The host
+    # model puts it at 30,304 B; what matters here is that it is non-zero and
+    # then never moves.
+    assert first["persist_in_use"] > 0
+    assert first["persist_in_use"] == second["persist_in_use"], readings
+    for attempt, reading in enumerate(readings):
+        assert reading["scratch_in_use"] == 0, f"sign {attempt + 1}: {reading}"
+        assert reading["scratch_peak"] <= SCRATCH_BYTES, f"sign {attempt + 1}"
+        assert reading["persist_peak"] <= REGION_BYTES, f"sign {attempt + 1}"

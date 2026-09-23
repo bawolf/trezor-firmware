@@ -367,13 +367,19 @@ extern "C" fn session_cancel(n_args: usize, args: *const Obj) -> Obj {
     unsafe { util::try_with_args_and_kwargs(n_args, args, &Map::EMPTY, block) }
 }
 
-/// `(persist_in_use, persist_peak, scratch_in_use, scratch_peak)` under
-/// debuglink, `None` in production: the arena bookkeeping is a device
-/// instrument, not firmware telemetry, and nothing outside the debug app reads
-/// it.
+/// `(persist_in_use, persist_peak, scratch_in_use, scratch_peak)` on a
+/// debuglink DEVICE build, `None` everywhere else: the arena bookkeeping is a
+/// device instrument, not firmware telemetry, and nothing outside the debug
+/// app reads it.
+///
+/// `None` on the emulator is not an omission. `allocator_unix.rs` is plain
+/// `malloc` and installs no tier, so the only figures it could offer are four
+/// zeros -- and four zeros read as a passing measurement of invariants
+/// (`scratch_in_use == 0`, `persist_in_use` unchanged) that nothing there
+/// actually holds. Absent says what is true: there are no arenas here.
 extern "C" fn debug_region_info() -> Obj {
     let block = || {
-        #[cfg(feature = "debuglink")]
+        #[cfg(all(feature = "debuglink", target_arch = "arm"))]
         {
             let (persist_in_use, persist_peak, scratch_in_use, scratch_peak) =
                 allocator::region_info();
@@ -385,7 +391,7 @@ extern "C" fn debug_region_info() -> Obj {
             ])?
             .into())
         }
-        #[cfg(not(feature = "debuglink"))]
+        #[cfg(not(all(feature = "debuglink", target_arch = "arm")))]
         Ok(Obj::const_none())
     };
     unsafe { util::try_or_raise(block) }
@@ -480,6 +486,8 @@ pub static mp_module_trezorironwood: Module = obj_module! {
     Qstr::MP_QSTR_session_cancel => obj_fn_var!(0, 1, session_cancel).as_obj(),
     /// def debug_region_info() -> tuple[int, int, int, int] | None:
     ///     """(persist_in_use, persist_peak, scratch_in_use, scratch_peak) of
-    ///     the two signing arenas on a debuglink build, None otherwise."""
+    ///     the two signing arenas on a debuglink DEVICE build, None otherwise
+    ///     -- including on the emulator, which has no arenas to report. An
+    ///     absent reading must be skipped, not read as zeros."""
     Qstr::MP_QSTR_debug_region_info => obj_fn_0!(debug_region_info).as_obj(),
 };

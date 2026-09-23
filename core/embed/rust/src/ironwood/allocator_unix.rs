@@ -37,12 +37,6 @@ pub unsafe fn install_scratch(base: *mut u8, len: usize) -> bool {
 
 pub fn release_scratch() {}
 
-/// No arenas on the emulator, so nothing to report.
-#[cfg(feature = "debuglink")]
-pub fn region_info() -> (usize, usize, usize, usize) {
-    (0, 0, 0, 0)
-}
-
 struct SystemAllocator;
 
 // SAFETY: the emulator is single-threaded and the C allocator returns 16-byte
