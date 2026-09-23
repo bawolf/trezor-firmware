@@ -1,0 +1,179 @@
+name: Ironwood upstream alert (trezor/trezor-firmware)
+
+# ALERT ONLY. This workflow never writes to a branch.
+#
+# The firmware fork is not like the crate forks. There the sync can be
+# automatic, because a merge that passes the gates is safe to push. Here the
+# Ironwood branches carry a large, hand-placed diff across the C/Rust/Python
+# build -- flash budgets, allocator regions, protobuf definitions -- and
+# bringing trezor/main in is a judgement call that ends in a manual rebase, not
+# a merge commit a robot should invent. So this job only *looks*: it measures
+# how far behind we are, tries the merge in a scratch tree to see whether it
+# would conflict, and then throws the result away and tells you.
+#
+# It will never push, never merge for real, and never touch trezor/* -- the
+# upstream remote is added fetch-only.
+
+on:
+  schedule:
+    # Mondays, 07:05 UTC.
+    # NOTE: GitHub only schedules workflow files that exist on the repository's
+    # DEFAULT branch (`main` on bawolf/trezor-firmware). This file lives on
+    # `ci/upstream-drift`, so the weekly trigger is dormant until this file is
+    # also on `main`. See docs/FORK_MAINTENANCE.md in the trezor-ironwood repo.
+    - cron: '5 7 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: ironwood-upstream-alert
+  cancel-in-progress: false
+
+env:
+  UPSTREAM_SLUG: trezor/trezor-firmware
+  UPSTREAM_URL: https://github.com/trezor/trezor-firmware.git
+  # Branches to report on, space separated. A branch that does not exist on
+  # origin is reported as absent and skipped, not treated as a failure --
+  # `zcash/ironwood-upstream` only exists in some local worktrees today.
+  WATCHED_BRANCHES: "ironwood/zcash-streaming-signing zcash/ironwood-upstream"
+
+jobs:
+  drift-alert:
+    name: Report drift and would-be conflicts
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Check out the fork (full history -- trial merges need it)
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Measure drift and trial-merge each watched branch
+        id: scan
+        run: |
+          set -uo pipefail
+          git config user.name  "ironwood-upstream-alert"
+          git config user.email "ironwood-upstream-alert@users.noreply.github.com"
+          # Fetch-only: there is no push URL for upstream, by construction.
+          git remote add upstream "$UPSTREAM_URL"
+          git remote set-url --push upstream DISABLED
+          git fetch --no-tags upstream
+
+          def="$(git ls-remote --symref upstream HEAD | awk '$1 == "ref:" { sub("refs/heads/", "", $2); print $2; exit }')"
+          if [ -z "${def:-}" ]; then
+            for cand in main master; do
+              if git show-ref --verify --quiet "refs/remotes/upstream/$cand"; then def="$cand"; break; fi
+            done
+          fi
+          if [ -z "${def:-}" ]; then
+            echo "::error::could not detect the default branch of $UPSTREAM_SLUG"
+            exit 1
+          fi
+          echo "upstream_branch=$def" >> "$GITHUB_OUTPUT"
+          up_tip="$(git rev-parse "upstream/$def")"
+
+          ANY_CONFLICT=0
+          : > /tmp/report.md
+          {
+            echo "Upstream is \`$UPSTREAM_SLUG@$def\` @ \`${up_tip:0:12}\`."
+            echo
+          } >> /tmp/report.md
+
+          for br in $WATCHED_BRANCHES; do
+            echo "::group::$br"
+            if ! git show-ref --verify --quiet "refs/remotes/origin/$br"; then
+              printf '### `%s`\n\n_Not present on this fork -- skipped._\n\n' "$br" >> /tmp/report.md
+              echo "branch $br is absent on origin; skipping"
+              echo "::endgroup::"
+              continue
+            fi
+            tip="$(git rev-parse "origin/$br")"
+            behind="$(git rev-list --count "origin/$br..upstream/$def")"
+            ahead="$(git rev-list --count "upstream/$def..origin/$br")"
+
+            # Trial merge in a throwaway worktree so nothing here is ever a real
+            # merge on a real branch. --no-commit --no-ff, then hard reset.
+            work="$(mktemp -d)"
+            git worktree add --detach --quiet "$work" "origin/$br"
+            conflicts=""
+            merge_state="clean"
+            if ! git -C "$work" merge --no-commit --no-ff "upstream/$def" >/dev/null 2>&1; then
+              conflicts="$(git -C "$work" diff --name-only --diff-filter=U)"
+              merge_state="conflicts"
+              ANY_CONFLICT=1
+            fi
+            git -C "$work" merge --abort >/dev/null 2>&1 || true
+            git -C "$work" reset --hard --quiet >/dev/null 2>&1 || true
+            git worktree remove --force "$work" >/dev/null 2>&1 || true
+
+            {
+              printf '### `%s`\n\n' "$br"
+              printf -- '- tip: `%s`\n' "${tip:0:12}"
+              printf -- '- commits behind `%s`: **%s**\n' "$def" "$behind"
+              printf -- '- commits ahead (our work): %s\n' "$ahead"
+              printf -- '- trial merge of `upstream/%s`: **%s**\n\n' "$def" "$merge_state"
+              if [ -n "$conflicts" ]; then
+                printf 'Files that would conflict:\n\n'
+                printf '%s\n' "$conflicts" | sed 's/^/- `/; s/$/`/'
+                printf '\n'
+              fi
+            } >> /tmp/report.md
+            echo "::endgroup::"
+          done
+
+          {
+            echo "## Ironwood vs $UPSTREAM_SLUG"
+            echo
+            cat /tmp/report.md
+            echo "_Alert only. No merge was kept and nothing was pushed._"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          echo "any_conflict=$ANY_CONFLICT" >> "$GITHUB_OUTPUT"
+
+      - name: Open or update the drift issue
+        if: steps.scan.outputs.any_conflict == '1'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          UPSTREAM_BRANCH: ${{ steps.scan.outputs.upstream_branch }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          today="$(date -u +%Y-%m-%d)"
+          title="Upstream sync failed: conflicts with $UPSTREAM_SLUG $today"
+          {
+            echo "A trial merge of \`$UPSTREAM_SLUG@${UPSTREAM_BRANCH}\` into one or more"
+            echo "Ironwood branches would conflict."
+            echo
+            cat /tmp/report.md
+            echo "---"
+            echo
+            echo "**Nothing was merged or pushed.** The firmware rebase is deliberately manual:"
+            echo "pick the branch, rebase or merge it by hand, rebuild, and re-measure flash."
+            echo
+            echo "Run: $RUN_URL"
+            echo
+            echo "This issue closes itself the next week the trial merges come back clean."
+          } > /tmp/issue-body.md
+          gh label create upstream-sync --color B60205 --description "Automated upstream sync problems" 2>/dev/null || true
+          existing="$(gh issue list --state open --label upstream-sync --limit 1 --json number --jq '.[0].number // empty')"
+          if [ -n "$existing" ]; then
+            gh issue edit "$existing" --title "$title" --body-file /tmp/issue-body.md
+            gh issue comment "$existing" --body "Still conflicting as of $today -- $RUN_URL"
+          else
+            gh issue create --title "$title" --body-file /tmp/issue-body.md --label upstream-sync
+          fi
+
+      - name: Close the drift issue now that the trial merges are clean
+        if: steps.scan.outputs.any_conflict == '0'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          for n in $(gh issue list --state open --label upstream-sync --limit 20 --json number --jq '.[].number'); do
+            gh issue close "$n" --comment "Trial merges against $UPSTREAM_SLUG are clean again ($RUN_URL)."
+          done
