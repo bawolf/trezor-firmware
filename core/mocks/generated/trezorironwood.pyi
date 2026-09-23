@@ -1,5 +1,6 @@
 from typing import *
 from buffer_types import *
+SCRATCH_BYTES: int
 
 
 # rust/src/micropython/ironwood.rs
@@ -37,13 +38,17 @@ def session_begin(
     maximum_fee: int,
     expiry_window: int,
     pczt_length: int,
+    scratch: AnyBuffer,
 ) -> int:
     """Start streaming one PCZT for the account derived from the wallet seed.
     Returns the session handle, which `session_feed`, `session_approve` and
     `session_sign` require: it binds the native request to the workflow that
-    began it, so a second request cannot adopt this one. Allocations of the
-    signing core are carved from a boot-lifetime native region (no
-    caller-provided buffer)."""
+    began it, so a second request cannot adopt this one.
+    `scratch` is a writable buffer of at least SCRATCH_BYTES that the
+    caller must keep referenced until it has called `session_cancel`;
+    the session's own allocations are carved from it, while what must
+    outlive the session stays in a boot-lifetime native region.
+    ValueError: the scratch buffer is too small."""
 
 
 # rust/src/micropython/ironwood.rs
@@ -81,4 +86,12 @@ def session_cancel(handle: int | None = None) -> None:
     handle's session is ended, so a workflow cannot tear down a session
     that is no longer its own. Without one, whatever is live is ended:
     teardown runs from a `finally` that may have no handle yet, and
-    autolock unwinds the workflow with a GeneratorExit from outside."""
+    autolock unwinds the workflow with a GeneratorExit from outside.
+    Once nothing is live the scratch buffer is wiped and given back, so
+    the caller may drop its reference after this returns."""
+
+
+# rust/src/micropython/ironwood.rs
+def debug_region_info() -> tuple[int, int, int, int] | None:
+    """(persist_in_use, persist_peak, scratch_in_use, scratch_peak) of
+    the two signing arenas on a debuglink build, None otherwise."""

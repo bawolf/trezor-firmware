@@ -114,12 +114,15 @@ class TestIronwoodSessionHandle(unittest.TestCase):
         import trezorironwood
 
         self.native = trezorironwood
+        # One buffer per test: the allocator holds a raw pointer into it for
+        # the length of the session and gives it back at `session_cancel`.
+        self.scratch = bytearray(trezorironwood.SCRATCH_BYTES)
         self.handle = self._begin()
 
     def tearDown(self):
         self.native.session_cancel()
 
-    def _begin(self):
+    def _begin(self, scratch=None):
         return self.native.session_begin(
             self.SEED,
             self.NETWORK,
@@ -128,6 +131,7 @@ class TestIronwoodSessionHandle(unittest.TestCase):
             self.MAXIMUM_FEE,
             self.EXPIRY_WINDOW,
             self.PCZT_LENGTH,
+            self.scratch if scratch is None else scratch,
         )
 
     def _assert_alive(self, handle):
@@ -168,6 +172,36 @@ class TestIronwoodSessionHandle(unittest.TestCase):
         self.native.session_cancel()
         with self.assertRaises(RuntimeError):
             self.native.session_feed(self.handle, b"\x00")
+
+    def test_a_scratch_below_the_native_minimum_is_refused(self):
+        self.native.session_cancel()
+        with self.assertRaises(ValueError):
+            self._begin(bytearray(self.native.SCRATCH_BYTES - 1))
+
+    def test_the_workflow_asks_for_exactly_the_native_minimum(self):
+        from apps.zcash.sign_pczt import SCRATCH_BYTES
+
+        self.assertEqual(SCRATCH_BYTES, self.native.SCRATCH_BYTES)
+
+    def test_a_second_session_takes_a_second_scratch(self):
+        """The scratch is per-session; only the rooted tier spans a boot.
+
+        Cancelling gives the buffer back, so the next session may bring a
+        different one -- which is what the workflow does, one `bytearray` per
+        sign. A native tier that outlived its buffer would fail here.
+        """
+        self.native.session_cancel(self.handle)
+        self.scratch = bytearray(self.native.SCRATCH_BYTES)
+        handle = self._begin()
+        self._assert_alive(handle)
+
+    def test_region_info_is_a_debug_instrument_or_nothing(self):
+        info = self.native.debug_region_info()
+        if info is None:
+            return
+        persist_in_use, persist_peak, scratch_in_use, scratch_peak = info
+        self.assertTrue(persist_in_use <= persist_peak)
+        self.assertTrue(scratch_in_use <= scratch_peak)
         # Idempotent: teardown runs from a `finally` that may run twice.
         self.native.session_cancel()
         self.native.session_cancel(self.handle)

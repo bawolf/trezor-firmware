@@ -53,6 +53,11 @@ EXPIRY_WINDOW = const(100)
 # truly abandoned pre-consent sign must still be torn down.
 CHUNK_TIMEOUT_MS = const(5_000)
 
+# Bytes of per-session scratch the native allocator carves the signing session
+# from. Must match `trezorironwood.SCRATCH_BYTES`, which is the minimum
+# `session_begin` accepts; the two move together.
+SCRATCH_BYTES = const(24 * 1024)
+
 # Curated, non-secret native ValueError messages allowed to reach the host
 # verbatim. Any other ValueError (MicroPython unpack, parse_u32, format_amount,
 # address encode, ...) is collapsed to MALFORMED so incidental text never leaks
@@ -358,6 +363,16 @@ async def sign_pczt(msg: ZcashSignPczt) -> ZcashSpendAuthSignatures:
     # blind, which is what a pre-begin failure needs.
     handle_out: list[int] = []
 
+    # The session's own allocations are carved from this buffer, not from the
+    # native region: only what must outlive the session (Pasta's square-root
+    # table, orchard's commitment-domain caches) is boot-rooted, and that is
+    # 40 KiB of AUX1 the GC heap never had. The scratch is borrowed from the
+    # heap for the length of one sign and given back below, so every other
+    # coin's workflow runs at the full heap. It has to be allocated here,
+    # before `session_begin`, and referenced until `session_cancel` has run:
+    # the allocator holds a raw pointer into it for the whole session.
+    scratch = bytearray(SCRATCH_BYTES)
+
     try:
         return await _stream_and_sign(
             wallet_seed,
@@ -371,6 +386,7 @@ async def sign_pczt(msg: ZcashSignPczt) -> ZcashSpendAuthSignatures:
             account_label,
             path,
             handle_out,
+            scratch,
         )
     except ValueError as exc:
         # Only the two curated native messages reach the host verbatim; any other
@@ -388,7 +404,11 @@ async def sign_pczt(msg: ZcashSignPczt) -> ZcashSpendAuthSignatures:
         # Runs on normal return, on host-cancel, and on autolock: when the idle
         # timer closes this workflow the GeneratorExit unwinds through here, so
         # the native session (and its secrets) is always torn down.
+        # `session_cancel` wipes the scratch and hands it back before this
+        # returns, so dropping the reference here cannot leave the allocator
+        # pointing into collected memory.
         _cancel_native(handle_out[0] if handle_out else None)
+        del scratch
         del wallet_seed
 
 
@@ -415,6 +435,7 @@ async def _stream_and_sign(
     account_label: str,
     path: str,
     handle_out: list[int],
+    scratch: bytearray,
 ) -> ZcashSpendAuthSignatures:
     from trezor import TR, utils, wire
     from trezor.crypto import random
@@ -457,6 +478,7 @@ async def _stream_and_sign(
             MAXIMUM_FEE,
             EXPIRY_WINDOW,
             pczt_length,
+            scratch,
         )
     finally:
         utils.zero_unused_stack()

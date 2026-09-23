@@ -320,9 +320,11 @@ impl From<ironwood::ErrorCode> for Failure {
 }
 
 /// Starts a request, replacing any earlier one. `seed` is borrowed for this
-/// call only. Region installation is the caller's business: it must happen
-/// before this allocates.
-/// Starts a request and returns its handle.
+/// call only. Arena installation is the caller's business, and so is the
+/// prewarm: everything this allocates belongs to the session, so the scratch
+/// tier must be live before the first byte is carved.
+///
+/// Returns the request's handle.
 ///
 /// The handle is what binds the native request to the Python workflow that
 /// began it: `feed`, `approve` and `sign` refuse any other handle. The
@@ -341,21 +343,9 @@ pub fn begin(
     expiry_window: u32,
     declared_len: usize,
 ) -> core::result::Result<u32, Failure> {
-    // Drop the old request first so its blocks return to the region before
-    // the new one is carved.
+    // Drop the old request first so its blocks return to the scratch tier
+    // before the new one is carved.
     *active() = None;
-    // Pre-warm the persistent Pasta square-root table into the
-    // freshly installed region BEFORE any per-action scratch is allocated. Pasta
-    // builds this ~29.8 KB table lazily behind a Rust `static` the GC never
-    // scans; if it is first built mid-stream (interleaved with transient verify
-    // scratch), the table is left at a high offset when that scratch frees and
-    // splits the region — the fragmentation that faulted the 8-action run.
-    // `prewarm` roots it at a low,
-    // stable address for the whole session by decompressing one fixed public
-    // point (one `Fp` square root), without the ~2-3 s of Sinsemilla hashing the
-    // old `bench::warmup` wasted here and without rooting the region for process
-    // lifetime. It touches no signing material and changes no signing behavior.
-    ironwood::prewarm();
     let policy = Policy::new(
         RequestContext::new(network, Account::new(account)?, host_reference_height),
         Limits::new(maximum_fee, expiry_window)?,
@@ -380,6 +370,13 @@ pub fn begin(
         review: None,
     }));
     Ok(handle)
+}
+
+/// Whether no request is live. The handler releases the session's scratch tier
+/// on this: with nothing left to carve from it, it can go back to the
+/// collector.
+pub fn is_idle() -> bool {
+    active().is_none()
 }
 
 /// Whether the live request, if there is one, belongs to `handle`.

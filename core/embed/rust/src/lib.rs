@@ -40,7 +40,9 @@ mod coverage;
 #[cfg(feature = "universal_fw")]
 mod definitions;
 mod io;
-#[cfg(feature = "ironwood")]
+// Also under `test`: the arena mechanics inside are target-independent and
+// host-tested, and the rest of the module is feature-gated within.
+#[cfg(any(feature = "ironwood", test))]
 mod ironwood;
 mod maybe_trace;
 #[cfg(feature = "micropython")]

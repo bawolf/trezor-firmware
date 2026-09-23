@@ -73,6 +73,16 @@ SECTIONS {
     . = ALIGN(4);
   } >AUX1_RAM
 
+  /* The Zcash signing allocator's boot-rooted arena, empty unless the image
+     was built with Ironwood. It is in AUX1 with .bss rather than in .buf so
+     that it does not come out of the MicroPython GC heap, which .buf fills
+     AUX2 ahead of. 16-byte aligned: the arena's free list is on a 16-byte
+     grid. */
+  .zcash_region (NOLOAD): ALIGN(16) {
+    *(.zcash_region*);
+    . = ALIGN(4);
+  } >AUX1_RAM
+
   .stack : ALIGN(8) {
     . += 32K; /* Overflow causes UsageFault */
   } >AUX2_RAM

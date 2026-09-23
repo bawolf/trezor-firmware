@@ -73,6 +73,13 @@ XTASK_BUILD_OPTS += --miniscript
 endif
 ifeq ($(IRONWOOD),1)
 XTASK_BUILD_OPTS += --ironwood
+# The Zcash signing arena is a 40 KiB section in AUX1, the bank .bss lives in
+# on the two-bank models, so unrelated .bss growth is what would push it out.
+# Fail while there is still slack to argue about rather than on the commit that
+# overflows the bank. T3W1 has one bank whose slack IS the heap, so no floor.
+ifneq (,$(filter $(TREZOR_MODEL),T3T1 T3B1))
+XTASK_BUILD_OPTS += --require-free AUX1_RAM=4096
+endif
 endif
 ifeq ($(N1W1),1)
 XTASK_BUILD_OPTS += --n1w1

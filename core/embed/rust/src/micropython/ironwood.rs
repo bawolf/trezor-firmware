@@ -3,6 +3,7 @@ use core::ffi::CStr;
 use ironwood::receive::{derive_external_receiver, derive_full_viewing_key, Network};
 use ironwood::{Memo, MAX_ACTIONS};
 
+use crate::ironwood::allocator;
 use crate::ironwood::signing::{self, Failure, Step, RECORD_LEN};
 use crate::micropython::buffer::{get_buffer, get_buffer_mut};
 use crate::micropython::map::Map;
@@ -33,10 +34,11 @@ extern "C" fn derive_receiver(n_args: usize, args: *const Obj) -> Obj {
         }
 
         // pasta_curves' `hash_to_curve` boxes its hasher, so receiver and
-        // viewing-key derivation allocate. Root (or reuse) the boot-lifetime
-        // signing region first: it is a `.buf` static that is reserved
-        // whatever this image does, and `install_region` is idempotent.
-        crate::ironwood::allocator::install_region();
+        // viewing-key derivation allocate. Root (or reuse) the rooted tier
+        // first: no scratch is installed outside a signing session, so these
+        // blocks -- and any lazy static they fill -- land there, which is where
+        // anything that outlives the call has to be.
+        allocator::install_region();
 
         let receiver = {
             // SAFETY: No MicroPython code or allocation runs while either buffer is
@@ -77,10 +79,11 @@ extern "C" fn derive_viewing_key(n_args: usize, args: *const Obj) -> Obj {
         }
 
         // pasta_curves' `hash_to_curve` boxes its hasher, so receiver and
-        // viewing-key derivation allocate. Root (or reuse) the boot-lifetime
-        // signing region first: it is a `.buf` static that is reserved
-        // whatever this image does, and `install_region` is idempotent.
-        crate::ironwood::allocator::install_region();
+        // viewing-key derivation allocate. Root (or reuse) the rooted tier
+        // first: no scratch is installed outside a signing session, so these
+        // blocks -- and any lazy static they fill -- land there, which is where
+        // anything that outlives the call has to be.
+        allocator::install_region();
 
         // SAFETY: The seed is immutable, the output is a distinct writable
         // object, and neither reference is retained or crosses into Python.
@@ -181,7 +184,7 @@ fn parse_network(value: Obj) -> Result<ironwood::Network, Error> {
 
 extern "C" fn session_begin(n_args: usize, args: *const Obj) -> Obj {
     let block = |args: &[Obj], _kwargs: &Map| {
-        if args.len() != 7 {
+        if args.len() != 8 {
             return Err(Error::TypeError);
         }
         let network = parse_network(args[1])?;
@@ -194,14 +197,33 @@ extern "C" fn session_begin(n_args: usize, args: *const Obj) -> Obj {
         if !unsafe { ffi::mp_type_bytes.is_type_of(args[0]) } {
             return Err(Error::TypeError);
         }
-        // Any earlier request must release its blocks before the new one begins.
+        // Any earlier request must release its blocks while the tier they were
+        // carved from is still installed, and only then may that tier go.
         signing::cancel(None);
-        // Root (or reuse) the boot-lifetime signing region. It is a native
-        // `.buf` static, not a Python object, so nothing needs to be kept
-        // referenced across the session and it survives every session for the
-        // whole boot (fixes cross-session staleness of the Pasta table / orchard
-        // OnceBox caches; see `ironwood::allocator`).
-        crate::ironwood::allocator::install_region();
+        allocator::release_scratch();
+        // Root (or reuse) the boot-lifetime rooted tier. It is a native
+        // `.zcash_region` static, not a Python object, so it survives every
+        // session for the whole boot -- which is what keeps the Pasta table and
+        // the orchard OnceBox caches valid across sessions.
+        allocator::install_region();
+        // The persistent set has to be built while the rooted tier is the only
+        // one installed: `prewarm` fills exactly the lazy statics that outlive
+        // a session, and the allocator routes to the scratch as soon as there
+        // is one. Once per boot; a later session finds it already there.
+        ironwood::prewarm();
+        let (scratch, scratch_len) = {
+            // SAFETY: the buffer is only measured here. The pointer is handed
+            // to the allocator below and stays valid for the session because
+            // the caller keeps the `bytearray` referenced until it has called
+            // `session_cancel`, and the MicroPython collector does not move
+            // objects.
+            let scratch = unsafe { get_buffer_mut(args[7])? };
+            (scratch.as_mut_ptr(), scratch.len())
+        };
+        // SAFETY: as above -- the caller owns the buffer for the whole session.
+        if !unsafe { allocator::install_scratch(scratch, scratch_len) } {
+            return Err(Error::ValueError(c"Invalid signing scratch buffer"));
+        }
         // SAFETY: the seed is borrowed for this call only and not mutated.
         let seed = unsafe { get_buffer(args[0])? };
         let handle = signing::begin(
@@ -213,7 +235,12 @@ extern "C" fn session_begin(n_args: usize, args: *const Obj) -> Obj {
             expiry_window,
             declared_len,
         )
-        .map_err(failure)?;
+        .map_err(|error| {
+            // Nothing was carved that outlives this call, so give the scratch
+            // back now rather than leaving it pinned until the teardown runs.
+            allocator::release_scratch();
+            failure(error)
+        })?;
         Obj::try_from(handle)
     };
 
@@ -322,14 +349,49 @@ extern "C" fn session_cancel(n_args: usize, args: *const Obj) -> Obj {
             Some(value) => Some(parse_handle(*value)?),
         };
         signing::cancel(handle);
+        // The scratch tier goes back to the collector exactly when nothing is
+        // left to carve from it. A cancel that refused a foreign handle left
+        // the session live and must not take its memory away.
+        if signing::is_idle() {
+            allocator::release_scratch();
+        }
         Ok(Obj::const_none())
     };
     unsafe { util::try_with_args_and_kwargs(n_args, args, &Map::EMPTY, block) }
 }
 
+/// `(persist_in_use, persist_peak, scratch_in_use, scratch_peak)` under
+/// debuglink, `None` in production: the arena bookkeeping is a device
+/// instrument, not firmware telemetry, and nothing outside the debug app reads
+/// it.
+extern "C" fn debug_region_info() -> Obj {
+    let block = || {
+        #[cfg(feature = "debuglink")]
+        {
+            let (persist_in_use, persist_peak, scratch_in_use, scratch_peak) =
+                allocator::region_info();
+            Ok(Tuple::alloc(&[
+                Obj::try_from(persist_in_use)?,
+                Obj::try_from(persist_peak)?,
+                Obj::try_from(scratch_in_use)?,
+                Obj::try_from(scratch_peak)?,
+            ])?
+            .into())
+        }
+        #[cfg(not(feature = "debuglink"))]
+        Ok(Obj::const_none())
+    };
+    unsafe { util::try_or_raise(block) }
+}
+
 #[no_mangle]
 #[rustfmt::skip]
 pub static mp_module_trezorironwood: Module = obj_module! {
+    // Bytes of per-session scratch `session_begin` requires, mirrored by
+    // `apps.zcash.sign_pczt.SCRATCH_BYTES`.
+    /// SCRATCH_BYTES: int
+    Qstr::MP_QSTR_SCRATCH_BYTES => Obj::small_int(allocator::SCRATCH_BYTES as u16),
+
     /// def derive_receiver(
     ///     seed: AnyBytes,
     ///     network: int,
@@ -358,14 +420,18 @@ pub static mp_module_trezorironwood: Module = obj_module! {
     ///     maximum_fee: int,
     ///     expiry_window: int,
     ///     pczt_length: int,
+    ///     scratch: AnyBuffer,
     /// ) -> int:
     ///     """Start streaming one PCZT for the account derived from the wallet seed.
     ///     Returns the session handle, which `session_feed`, `session_approve` and
     ///     `session_sign` require: it binds the native request to the workflow that
-    ///     began it, so a second request cannot adopt this one. Allocations of the
-    ///     signing core are carved from a boot-lifetime native region (no
-    ///     caller-provided buffer)."""
-    Qstr::MP_QSTR_session_begin => obj_fn_var!(7, 7, session_begin).as_obj(),
+    ///     began it, so a second request cannot adopt this one.
+    ///     `scratch` is a writable buffer of at least SCRATCH_BYTES that the
+    ///     caller must keep referenced until it has called `session_cancel`;
+    ///     the session's own allocations are carved from it, while what must
+    ///     outlive the session stays in a boot-lifetime native region.
+    ///     ValueError: the scratch buffer is too small."""
+    Qstr::MP_QSTR_session_begin => obj_fn_var!(8, 8, session_begin).as_obj(),
     /// def session_feed(handle: int, chunk: AnyBytes) -> tuple[int, int, tuple | None]:
     ///     """Consume PCZT bytes. Returns (consumed, kind, payload): kind 0 needs more
     ///     bytes; kind 1 is a payment output to confirm, payload
@@ -394,6 +460,12 @@ pub static mp_module_trezorironwood: Module = obj_module! {
     ///     handle's session is ended, so a workflow cannot tear down a session
     ///     that is no longer its own. Without one, whatever is live is ended:
     ///     teardown runs from a `finally` that may have no handle yet, and
-    ///     autolock unwinds the workflow with a GeneratorExit from outside."""
+    ///     autolock unwinds the workflow with a GeneratorExit from outside.
+    ///     Once nothing is live the scratch buffer is wiped and given back, so
+    ///     the caller may drop its reference after this returns."""
     Qstr::MP_QSTR_session_cancel => obj_fn_var!(0, 1, session_cancel).as_obj(),
+    /// def debug_region_info() -> tuple[int, int, int, int] | None:
+    ///     """(persist_in_use, persist_peak, scratch_in_use, scratch_peak) of
+    ///     the two signing arenas on a debuglink build, None otherwise."""
+    Qstr::MP_QSTR_debug_region_info => obj_fn_0!(debug_region_info).as_obj(),
 };

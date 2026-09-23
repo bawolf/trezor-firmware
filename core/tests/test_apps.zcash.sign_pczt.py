@@ -48,8 +48,16 @@ class _FakeIronwood:
         self.approved = False
         self.cancelled = []
         self.handle = 0
+        self.scratch = None
 
     def session_begin(self, *args) -> int:
+        # The last argument is the session's scratch tier. The workflow must
+        # hand one over and keep it alive until it has cancelled: the native
+        # allocator carves the whole session out of it.
+        scratch = args[-1]
+        assert isinstance(scratch, bytearray), "session_begin got no scratch buffer"
+        assert len(scratch) == sign_pczt.SCRATCH_BYTES, "wrong scratch size"
+        self.scratch = scratch
         self.begun = True
         self.events.append((BEGIN, None))
         self.handle += 1
@@ -216,6 +224,7 @@ class TestIronwoodSignPcztProgress(unittest.TestCase):
                 "ZEC #1",
                 "m/32'/133'/0'",
                 self.handle_out,
+                bytearray(sign_pczt.SCRATCH_BYTES),
             )
         )
 

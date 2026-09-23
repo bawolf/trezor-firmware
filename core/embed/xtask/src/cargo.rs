@@ -167,7 +167,7 @@ fn build_impl(args: ResolvedBuildArgs, is_dependency: bool) -> Result<()> {
         let mapfile = elf
             .with_file_name(args.project.binary_name())
             .with_extension("map");
-        memusage::print_memusage(&mapfile)?;
+        memusage::print_memusage(&mapfile, args.require_free.as_deref())?;
     }
 
     Ok(())
