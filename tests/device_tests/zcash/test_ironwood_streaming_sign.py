@@ -56,7 +56,11 @@ def _sign(session: Session, parameters: dict, flow) -> list:
 
 def _vector(name: str) -> tuple[dict, dict]:
     """One checked-in vector by name, for the flows parametrization cannot express."""
-    for path in ("sign_pczt.json", "sign_pczt.memos.json"):
+    for path in (
+        "sign_pczt.json",
+        "sign_pczt.memos.json",
+        "sign_pczt.transparent.json",
+    ):
         fixture = json.loads((COMMON_FIXTURES_DIR / "zcash" / path).read_text())
         for test in fixture["tests"]:
             if test["name"] == name:
@@ -107,6 +111,76 @@ def test_streamed_sign(session: Session, parameters: dict, result: dict) -> None
     # is a property of the vector, not of its size.
     assert [s.action_index for s in signatures] == result["real_spend_actions"]
     assert all(len(s.signature) == 64 for s in signatures)
+
+
+def _accept_transparent_flow(
+    session: Session, outputs: int, requests: list, shown: list
+):
+    """The deshield flow, recording every ButtonRequest and address screen.
+
+    The order is fixed by the encoding: the transparent bundle precedes the
+    shielded actions, so the privacy warning and the transparent outputs come
+    before any shielded payment. The warning is once per transaction, however
+    many transparent outputs follow.
+    """
+    # 12-word wallet: the ZIP-315 weak-backup warning comes first.
+    br = yield
+    requests.append((br.code, br.name))
+    session.debug.press_yes()
+    br = yield
+    requests.append((br.code, br.name))
+    session.debug.press_yes()
+    for _ in range(outputs):
+        br = yield
+        requests.append((br.code, br.name))
+        shown.append(_address_screen_text(session))
+        session.debug.press_yes()
+        br = yield
+        requests.append((br.code, br.name))
+        session.debug.press_yes()
+    br = yield
+    requests.append((br.code, br.name))
+    session.debug.press_yes()
+
+
+@parametrize_using_common_fixtures("zcash/sign_pczt.transparent.json")
+def test_transparent_outputs(session: Session, parameters: dict, result: dict) -> None:
+    """A deshield: transparent outputs shown as t-addresses, behind one warning.
+
+    The addresses are the vector's, and the vector's come from
+    `zcash_transparent`'s own encoder in the generator -- a second
+    implementation of the Base58Check the device does with `coininfo`'s version
+    bytes. The screen must agree with it, because that string is the only thing
+    the user can compare against their wallet.
+    """
+    assert len(bytes.fromhex(parameters["pczt"])) == result["pczt_length"]
+    transparent = result["transparent_outputs"]
+    shielded = len(result["payments"])
+    requests: list = []
+    shown: list = []
+
+    signatures = _sign(
+        session,
+        parameters,
+        _accept_transparent_flow(session, len(transparent) + shielded, requests, shown),
+    )
+
+    assert [s.action_index for s in signatures] == result["real_spend_actions"]
+    # Weak backup, the privacy warning, two screens per output, then consent.
+    assert requests == (
+        [(B.Warning, "ironwood_weak_backup"), (B.Warning, "zcash_transparent_payment")]
+        + [(B.ConfirmOutput, "confirm_output")]
+        * (len(transparent) + shielded)
+        * OUTPUT_SCREENS
+        + [(B.SignTx, "confirm_total")]
+    )
+    # The transparent outputs come first, in bundle order, each shown as the
+    # address the vector says, chunked in fours.
+    for output, screen in zip(transparent, shown):
+        pieces = _address_pieces(screen, output["address"])
+        assert pieces, screen
+        assert "".join(pieces) == output["address"]
+        assert max(len(piece) for piece in pieces) % 4 == 0
 
 
 MEMO_TEXT_BUDGET = 256

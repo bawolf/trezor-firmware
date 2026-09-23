@@ -43,6 +43,18 @@ from trezorlib.protobuf import MessageType
 FIXTURE_DIR = Path(__file__).parent / "fixtures" / "zcash"
 FIXTURE_MANIFEST = json.loads((FIXTURE_DIR / "MANIFEST.json").read_text())
 
+# The device corpus's deshield vectors, when this checkout has them. The host
+# never parses a PCZT, so what they prove here is exactly that: a transparent
+# bundle changes nothing about the transfer or the response.
+DESHIELD_FIXTURES = (
+    Path(__file__).parents[2]
+    / "common"
+    / "tests"
+    / "fixtures"
+    / "zcash"
+    / "sign_pczt.transparent.json"
+)
+
 MAINNET = messages.ZcashNetwork.Mainnet
 TESTNET = messages.ZcashNetwork.Testnet
 NETWORKS = [MAINNET, TESTNET]
@@ -812,6 +824,30 @@ def test_sign_pczt_boundary_lengths(total: int) -> None:
     result = zcash.sign_pczt(session, pczt, MAINNET, 0, REFERENCE_HEIGHT)
     assert result == expected_signatures(records)
     assert sent(session) == expected_host_messages(pczt)
+
+
+@pytest.mark.skipif(
+    not DESHIELD_FIXTURES.exists(), reason="device corpus not in this checkout"
+)
+def test_sign_pczt_streams_a_transparent_bundle_unchanged() -> None:
+    """A deshield is ordinary bytes to the host: same transfer, same response.
+
+    Transparent outputs are a device-side admission and display rule. If any
+    of it had leaked into `trezorlib`, it would show up here as a different
+    message sequence or a different result shape.
+    """
+    vectors = json.loads(DESHIELD_FIXTURES.read_text())["tests"]
+    assert vectors, "the deshield corpus is empty"
+    for vector in vectors:
+        pczt = bytes.fromhex(vector["parameters"]["pczt"])
+        assert vector["result"]["transparent_outputs"], vector["name"]
+        records = records_for(vector["result"]["real_spend_actions"])
+        session = scripted(*sign_script(pczt, records))
+        result = zcash.sign_pczt(session, pczt, MAINNET, 0, REFERENCE_HEIGHT)
+        assert result == expected_signatures(records), vector["name"]
+        assert sent(session) == expected_host_messages(pczt), vector["name"]
+        assert not remaining(session)
+        assert_no_cancel(session)
 
 
 # ====== sign_pczt: hostile upload ====== #
