@@ -7,6 +7,9 @@
 //! neither, so both are compiled into this binary from source together with
 //! the `wire` and `error` modules they name through `crate::`.
 
+// `effects.rs` is `no_std` and allocates.
+extern crate alloc;
+
 mod common;
 #[allow(dead_code)]
 #[path = "../src/digest.rs"]
@@ -26,7 +29,7 @@ use std::collections::BTreeSet;
 use common::*;
 use digest::{ActionEffects, Digest};
 pub use error::{Error, ErrorCode, Result};
-use ironwood::{Engine, Network, ZIP32_HARDENED};
+use ironwood::{Engine, Network, TransparentKind, TransparentOutput, ZIP32_HARDENED};
 use orchard::ValuePool;
 use orchard::bundle::TxVersion;
 use orchard::bundle::commitments::hash_bundle_txid_empty;
@@ -95,7 +98,7 @@ fn reference(bytes: &[u8], header: &wire::Header) -> Result<Nodes> {
     let mut nodes = None;
     Verifier::new(Pczt::parse(bytes).unwrap())
         .with_ironwood(|bundle| -> std::result::Result<(), OrchardError<Error>> {
-            let sighash = effects::sighash(bundle, header).map_err(OrchardError::Custom)?;
+            let sighash = effects::sighash(&[], bundle, header).map_err(OrchardError::Custom)?;
             let tx: TransactionData<EffectsOnly> = TransactionData::from_parts_v6(
                 BranchId::try_from(header.branch).unwrap(),
                 header.lock_time,

@@ -20,7 +20,9 @@ use ironwood::{
     SignatureRecord,
 };
 pub use ironwood::{
-    Error, MAX_ACTIONS, MAX_PCZT_BYTES, Result, USER_ADDRESS_BUDGET, ZIP32_HARDENED,
+    Error, MAX_ACTIONS, MAX_PCZT_BYTES, MAX_SCRIPT_PUBKEY_BYTES, MAX_TRANSPARENT_OUTPUTS,
+    P2PKH_SCRIPT_BYTES, P2SH_SCRIPT_BYTES, Result, TransparentKind, USER_ADDRESS_BUDGET,
+    ZIP32_HARDENED,
 };
 use ironwood_pasta_curves::group::ff::{Field, PrimeField};
 use ironwood_pasta_curves::pallas;
@@ -528,9 +530,66 @@ fn corpus() -> Vec<Case> {
             mutate(|v| v["ironwood"]["bsk"] = json!(vec![0u8; 32])),
         ),
     ];
-    for outputs in 1..=CORPUS_MAX_ACTIONS {
-        corpus.push(case(format!("{outputs} actions"), build_actions(outputs)));
+    // Deshields: the shielded half is balanced so that the Ironwood value sum
+    // is `fee + Σ transparent outputs`, which is the identity the accounting
+    // now has to get right.
+    for count in [0usize, 1, 2, 4] {
+        corpus.push(case(
+            format!("{count} transparent outputs"),
+            build_transparent(&transparent_values(count)),
+        ));
     }
+    // The same shielded side with no transparent bundle: the whole released
+    // amount becomes fee, which the cap then refuses. This is the case that
+    // fails if the subtraction is dropped on either side.
+    corpus.push(case(
+        "transparent release without a transparent bundle",
+        build_deshield(&[], 100_000),
+    ));
+    // Unbalanced: a transparent output the value sum does not release, so the
+    // fee subtraction underflows.
+    corpus.push(case(
+        "transparent output the value sum does not release",
+        build_deshield(&[(100_000, p2pkh([0x33; 20]))], 0),
+    ));
+    corpus.push(case(
+        "transparent output at max money",
+        build_deshield(&[(MAX_MONEY, p2pkh([0x33; 20]))], 0),
+    ));
+    // Both admitted script shapes on their own, so the P2SH branch of the
+    // projection is exercised without the alternation.
+    for (name, script) in [
+        ("p2pkh only", p2pkh([0x51; 20])),
+        ("p2sh only", p2sh([0x51; 20])),
+    ] {
+        let value = transparent_values(1)[0];
+        corpus.push(case(
+            format!("transparent {name}"),
+            build_deshield(&[(value, script)], value),
+        ));
+    }
+    corpus.push(case(
+        "transparent input",
+        with_transparent_bundle_and_input(&build_transparent(&transparent_values(1))),
+    ));
+    corpus.push(case(
+        "transparent outputs at the logical-action cap",
+        build_deshield(
+            &(0..MAX_ACTIONS - 2)
+                .map(|i| (1, transparent_script_for(i)))
+                .collect::<Vec<_>>(),
+            (MAX_ACTIONS - 2) as u64,
+        ),
+    ));
+    corpus.push(case(
+        "transparent outputs past the logical-action cap",
+        with_transparent_bundle(
+            &build_transparent(&transparent_values(1)),
+            (0..MAX_ACTIONS - 1)
+                .map(|i| transparent_output_json(1, &transparent_script_for(i)))
+                .collect(),
+        ),
+    ));
     for inputs in 1..=CORPUS_MAX_ACTIONS {
         let values: Vec<u64> = (0..inputs as u64).map(|i| 100_000 + i * 10_000).collect();
         corpus.push(case(format!("{inputs} inputs"), build_inputs(&values)));
@@ -924,6 +983,8 @@ fn fresh_session() -> Session<ChaCha20Rng> {
 struct Run {
     /// Every `ConfirmOutput`, in order.
     confirmed: Vec<ReviewedOutput>,
+    /// Every `ConfirmTransparentOutput`, in order.
+    transparent: Vec<ironwood::TransparentOutput>,
     review: Option<Review>,
 }
 
@@ -938,6 +999,7 @@ fn stream_into(
     session.begin(declared, &keys().0, &SEED_FINGERPRINT)?;
     let mut run = Run {
         confirmed: Vec::new(),
+        transparent: Vec::new(),
         review: None,
     };
     for piece in bytes.chunks(chunk.max(1)) {
@@ -952,6 +1014,10 @@ fn stream_into(
                     assert!(run.review.is_none(), "confirmation after review");
                     assert_eq!(output.kind, OutputKind::Payment);
                     run.confirmed.push(output);
+                }
+                Event::ConfirmTransparentOutput(output) => {
+                    assert!(run.review.is_none(), "confirmation after review");
+                    run.transparent.push(output);
                 }
                 Event::Review(review) => {
                     assert!(run.review.is_none(), "second review");
@@ -1037,6 +1103,13 @@ fn check(case: &Case, n: u64, counts: &mut Counts) {
                     .cloned()
                     .collect();
                 assert_eq!(run.confirmed, payments, "{name}: chunk {chunk}");
+                // The transparent outputs are confirmed in bundle order, and
+                // before any shielded one: the encoding puts them first.
+                assert_eq!(
+                    run.transparent,
+                    expected.projection().transparent_outputs,
+                    "{name}: chunk {chunk}"
+                );
                 assert!(session.test_has_pending_request());
                 contexts.insert(*review.token().context());
                 assert_ne!(review.token().context(), expected.token().context());
@@ -1173,7 +1246,8 @@ fn sampled_single_byte_mutations_match_engine() {
     assert!(rejected >= 50, "{rejected}");
 }
 
-/// Cumulative end offsets of the header, each action and the trailer.
+/// Cumulative end offsets of every section: the header, each transparent
+/// output, the shielded prefix, each action and the trailer.
 fn section_ends(bytes: &[u8]) -> Vec<usize> {
     let mut scanner = stream::Scanner::new(bytes.len()).unwrap();
     let mut ends = Vec::new();
@@ -1191,15 +1265,25 @@ fn section_ends(bytes: &[u8]) -> Vec<usize> {
 
 #[test]
 fn truncation_at_every_section_boundary_yields_no_token() {
-    for (name, bytes) in [("fixture", fixture()), ("8 actions", build_actions(8))] {
+    for (name, bytes) in [
+        ("fixture", fixture()),
+        ("8 actions", build_actions(8)),
+        (
+            "2 transparent outputs",
+            build_transparent(&transparent_values(2)),
+        ),
+    ] {
+        let view = json(&bytes);
         let ends = section_ends(&bytes);
+        // Header, each transparent output, the shielded prefix, each action,
+        // the trailer.
         assert_eq!(
             ends.len(),
-            json(&bytes)["ironwood"]["actions"]
-                .as_array()
-                .unwrap()
-                .len()
-                + 2
+            view["ironwood"]["actions"].as_array().unwrap().len()
+                + view["transparent"]["outputs"]
+                    .as_array()
+                    .map_or(0, |outputs| outputs.len())
+                + 3
         );
         assert_eq!(*ends.last().unwrap(), bytes.len());
         let mut cuts: Vec<usize> = ends[..ends.len() - 1].to_vec();
@@ -1285,6 +1369,7 @@ fn trailer_rejection_after_confirmations_leaves_nothing() {
                         rest = &rest[consumed..];
                         match event {
                             Event::ConfirmOutput(_) => confirmed += 1,
+                            Event::ConfirmTransparentOutput(_) => {}
                             Event::Review(_) => panic!("{name}: reviewed"),
                             Event::None => {}
                         }
@@ -1400,9 +1485,11 @@ fn identity_rk_dummy_spend_is_rejected_by_engine_and_session_alike() {
         .iter()
         .enumerate()
         .find_map(|(offset, byte)| session.feed(&[*byte], &keys().0).err().map(|e| (offset, e)));
+    // The header and the shielded prefix precede the actions; this fixture
+    // has no transparent bundle.
     assert_eq!(
         failed_at,
-        Some((ends[1 + dummy.index] - 1, ErrorCode::Malformed))
+        Some((ends[2 + dummy.index] - 1, ErrorCode::Malformed))
     );
 
     let control = basepoint_rk_dummy();

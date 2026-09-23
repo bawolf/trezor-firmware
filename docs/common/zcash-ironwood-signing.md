@@ -26,14 +26,21 @@ resume. The transfer id is checked on every chunk.
 
 | Stage | Device consumes | Device keeps afterwards |
 |---|---|---|
-| Header | magic, version/group/branch/lock_time/expiry/coin_type, the absent transparent and Orchard pool tags, an optional but necessarily empty Sapling bundle, the Ironwood bundle tag and action count | `Header`, `count` |
+| Header | magic, version/group/branch/lock_time/expiry/coin_type, `tx_modifiable`, the global proprietary count, and the transparent bundle's tag with its input and output counts | `Header`, the transparent output count |
+| Transparent output `j` | value, the length-prefixed `scriptPubKey`, the absent `redeem_script`, the empty `bip32_derivation`, the bounded and ignored `user_address`, the empty proprietary map | one projection row (20-byte hash, kind, value) |
+| Shielded prefix | an optional but necessarily empty Sapling bundle, the absent Orchard tag, the Ironwood bundle tag and action count | `count` |
 | Action `i` | the action grammar, about 2 KB | one `ActionRecord` (§4) |
 | Trailer | flags, value sum (magnitude and sign), the optional anchor, the absent proof, the optional and ignored `bsk`, end of input | nothing new |
 
+The transparent bundle sits between the global fields and the shielded pools
+in the v2 encoding, which is why the header stops at its output count and the
+Ironwood action count arrives later, with the shielded prefix.
+
 Per-section byte budgets follow from the grammar (`stream.rs`
-`HEADER_BUDGET`, `ACTION_BUDGET`, `TRAILER_BUDGET`); the largest is the
-scanner's single buffer. A section that does not complete inside its budget
-is `Malformed` before any cryptography runs.
+`HEADER_BUDGET` = 101, `TRANSPARENT_OUTPUT_BUDGET` = 589, `SHIELDED_BUDGET` =
+109, `ACTION_BUDGET` = 2015, `TRAILER_BUDGET` = 89); the largest is the
+scanner's single buffer, and it is still the action. A section that does not
+complete inside its budget is `Malformed` before any cryptography runs.
 
 The response is `ZcashSpendAuthSignatures { transfer_id, records }`, each
 record `pool u8 (Ironwood = 0x03) ‖ action_index u8 ‖ signature [u8; 64]`, in
@@ -56,9 +63,16 @@ counter increments on `ZcashSignPczt` receipt, before any parsing; a second
 is borrowed for that call only.
 
 **Header.** Version and version group, the branch derived from network and
-height, coin type, lock time zero, the expiry window. The transparent and
-Orchard pool tags must be absent. A Sapling bundle may be present only if it
-is empty (no spends, no outputs, zero value sum); anything else is `Policy`.
+height, coin type, lock time zero, the expiry window. The Orchard pool tag
+must be absent. A Sapling bundle may be present only if it is empty (no
+spends, no outputs, zero value sum); anything else is `Policy`. The
+transparent bundle may be absent, or present under the rules of §13.
+
+**Transparent output `j`.** Each admitted output is fed to the ZIP-244 T.2c
+outputs hash (§5), added to the transparent total, and shown now with its
+`t1…`/`t3…` (`tm…`/`t2…`) address. Like a shielded payment confirmation this
+is **not consent**. The per-transaction privacy warning precedes the first
+one (§13).
 
 **Action `i`, in order:**
 
@@ -93,16 +107,28 @@ is empty (no spends, no outputs, zero value sum); anything else is `Policy`.
 **Trailer.** The Ironwood-V3 default flags (unexpected bits rejected), the
 value sum, the optional anchor when present, `bsk` ignored, end of input.
 Then the bundle-level checks: at least one real spend and at least one
-reviewed output, fee = inputs − outputs, value balance equals the fee, the
-fee cap, conservation.
+reviewed output (shielded **or** transparent), then the accounting identity:
+
+```
+fee              = input_total − shielded_output_total − transparent_total
+value_sum        = fee + transparent_total
+input_total      = payment_total + change_total + transparent_total + fee
+```
+
+The transparent outputs leave the shielded pool through the Ironwood value
+sum, so they are spent value and not fee. Dropping either subtraction
+mis-states the fee by the whole transparent amount without failing any other
+check, which is why the identity is written out here and has its own
+conformance case. Then the fee cap.
 
 **VerifyDummies.** Each dummy record's `rk.verify(sighash, signature)`. Only
 then is the consent token derived (§6).
 
-**Totals.** The amount leaving the wallet (payments + fee), the fee, the
-digest-bound expiry height, network and account, and the count of payment
-outputs confirmed. The host reference height is a policy input and is not
-shown. Approval consumes the token.
+**Totals.** The amount leaving the wallet (shielded payments + transparent
+outputs + fee), the fee, the digest-bound expiry height, network and account,
+the count of confirmed outputs, and -- when any output is transparent -- the
+public amount. The host reference height is a policy input and is not shown.
+Approval consumes the token.
 
 **Sign.** Take the pending slot before any check; require
 `SpendValidatingKey::from(ask) == expected_ak`; for each real record require
@@ -113,9 +139,25 @@ including failures.
 ## 5. Digest
 
 The device computes the ZIP-244/ZIP-229 V6 signature digest incrementally:
-the header digest, the transparent, Sapling and Orchard-V6 nodes as their
-fixed empty digests, and the Ironwood node as compact ‖ memo ‖ noncompact ‖
-flags ‖ value balance. The anchor is excluded from the sighash and belongs
+the header digest, the Sapling and Orchard-V6 nodes as their fixed empty
+digests, and the Ironwood node as compact ‖ memo ‖ noncompact ‖ flags ‖ value
+balance.
+
+The transparent node is the fixed empty digest until a transparent output is
+fed. With no transparent **inputs** -- which §13 makes structural -- ZIP-244
+§S.2 says `transparent_sig_digest` is identical to the txid node §T.2, so the
+node is
+
+```
+BLAKE2b-256("ZTxIdTranspaHash",
+    BLAKE2b-256("ZTxIdPrevoutHash", "") ‖
+    BLAKE2b-256("ZTxIdSequencHash", "") ‖
+    BLAKE2b-256("ZTxIdOutputsHash", ‖_j LE64(value_j) ‖ CompactSize(|script_j|) ‖ script_j))
+```
+
+-- one extra running BLAKE2b state, no `hash_type` byte, no amounts/scripts
+sub-hashes, no per-input pass. The fed bytes per output are exactly what
+`TxOut::write` serializes. The anchor is excluded from the sighash and belongs
 only to the authorizing-data digest. Every sub-digest is pinned
 byte-for-byte against the whole-transaction implementation by the
 differential tests in `core/embed/ironwood/tests`.
@@ -155,8 +197,9 @@ memo bytes never cross into Python.
 ## 11. Decided display and admission policy
 
 **Per-output review.** Each payment output is confirmed as it arrives, with
-totals and fee afterwards, as Bitcoin does. Those per-output confirmations
-are not consent (§4).
+totals and fee afterwards, as Bitcoin does. Transparent outputs come first,
+because the encoding puts them first, and the output numbering runs across
+both halves. Those per-output confirmations are not consent (§4).
 
 **Memos.** Nonempty memos are displayed within a byte budget.
 
@@ -208,3 +251,62 @@ Trezor-only extension: for such a wallet the exported value is
 authoritative and a host must store it rather than recompute it. For every
 seed length ZIP 32 admits (32..252 bytes) the value is byte-for-byte the
 canonical one.
+
+## 13. Transparent outputs
+
+The device signs a **deshield**: a shielded-funded transaction that pays one
+or more transparent addresses. It signs no transparent **input**, and holds no
+transparent key.
+
+**Admission.** The transparent bundle is absent, or present with:
+
+- **zero inputs.** An input is `Policy`. This is not a parse convenience: zero
+  transparent inputs is what makes ZIP-244 §S.2 collapse to §T.2 (§5), and the
+  device has no BIP-44/secp256k1 keychain and no script solver with which to
+  authorize a transparent spend.
+- **at least one output.** The v2 encoder writes an empty bundle as an absent
+  tag, so a present-and-empty bundle would be a second encoding of the same
+  transaction: `Policy`.
+- **at most `MAX_ACTIONS − Ironwood actions` outputs.** ZIP-317 counts a
+  standard 34-byte transparent output as one logical action, in the same total
+  as the shielded actions, so the device charges it against the same cap of 32
+  rather than inventing a second one: `Capacity` otherwise. At least one
+  Ironwood action is always required, so no more than 31 transparent outputs
+  are ever admitted.
+
+Per output:
+
+| Field | Rule |
+|---|---|
+| `value` | required, at most `MAX_MONEY` (`Malformed` above it); displayed; enters the accounting |
+| `script_pubkey` | exactly the 25-byte P2PKH `76 a9 14 <hash160> 88 ac` or the 23-byte P2SH `a9 14 <hash160> 87`; anything else is `Policy` |
+| `redeem_script` | must be absent (`Policy`) |
+| `bip32_derivation` | must be empty (`Policy`) |
+| `user_address` | admitted within `USER_ADDRESS_BUDGET`, required to be UTF-8, and **ignored** -- the same rule the Ironwood output has |
+| `proprietary` | must be empty (`Policy`) |
+
+Only the two standard script shapes are admitted because an unrecognised
+script is an address the device cannot render, and an address it cannot render
+is one it cannot obtain consent for. P2SH is admitted, not refused: a payment
+to a script is a payment a user can recognise as a `t3…`/`t2…` address, and
+exchanges use them.
+
+**Display.** Each transparent output is shown with its Base58Check address --
+`t1…`/`t3…` on mainnet, `tm…`/`t2…` on testnet, from `coininfo`'s existing
+7352/7357 and 7461/7354 version bytes and the base58check encoder Bitcoin
+signing already uses -- chunked in fours like every other address the device
+asks a user to compare. The 20-byte hash is solved out of the very
+`scriptPubKey` that is fed to the digest, so what is shown is what the
+signature covers.
+
+**The privacy warning.** Exactly one screen per transaction, before the first
+transparent output, under its own ButtonRequest name
+(`zcash_transparent_payment`, `ButtonRequestType.Warning`) so a host can
+neither suppress it nor mistake it for an output confirmation. It is per
+transaction and not per output because a deshield with several recipients is
+still one decision about privacy. The totals screen then repeats the public
+amount, because the warning came before any amount did.
+
+**Change.** There is none: the device owns no transparent key, so no
+transparent output can be its own change and every one of them is a payment,
+shown in full.

@@ -3,9 +3,11 @@
 //! Reproduces `effects::sighash` byte for byte from running BLAKE2b states, so
 //! no action is retained. The tree, field order and personalizations follow the
 //! pinned `zcash_primitives::transaction::txid` and
-//! `orchard::bundle::commitments`; the transparent, Sapling and Orchard nodes
-//! are their fixed empty digests, and the anchor is deliberately absent because
-//! it belongs to the authorizing-data digest.
+//! `orchard::bundle::commitments`; the Sapling and Orchard nodes are their
+//! fixed empty digests, the transparent node is that fixed empty digest until
+//! a transparent output is fed (ZIP-244 T.2 with no transparent inputs, which
+//! §S.2 makes the signature digest's transparent node as well), and the anchor
+//! is deliberately absent because it belongs to the authorizing-data digest.
 
 use blake2b_simd::{Params, State};
 use orchard::ValuePool;
@@ -17,13 +19,22 @@ use zcash_note_encryption::{
 use zcash_protocol::consensus::BranchId;
 use zcash_protocol::constants::{V6_TX_VERSION, V6_VERSION_GROUP_ID};
 
-use crate::wire::Header;
+use crate::wire::{Header, MAX_SCRIPT_PUBKEY_BYTES};
 use crate::{Error, Result};
+
+// `TxOut::write` prefixes the `scriptPubKey` with its Bitcoin `CompactSize`
+// length, which is a single byte below 253. The grammar admits only the two
+// standard script shapes, so the multi-byte forms are unreachable and are not
+// carried in the image.
+const _: () = assert!(MAX_SCRIPT_PUBKEY_BYTES < 253);
 
 // Private in zcash_primitives::transaction::txid; retyped here.
 const TX_HASH_PREFIX: &[u8; 12] = b"ZcashTxHash_";
 const HEADERS_HASH: &[u8; 16] = b"ZTxIdHeadersHash";
 const TRANSPARENT_HASH: &[u8; 16] = b"ZTxIdTranspaHash";
+const PREVOUTS_HASH: &[u8; 16] = b"ZTxIdPrevoutHash";
+const SEQUENCE_HASH: &[u8; 16] = b"ZTxIdSequencHash";
+const OUTPUTS_HASH: &[u8; 16] = b"ZTxIdOutputsHash";
 const SAPLING_HASH: &[u8; 16] = b"ZTxIdSaplingHash";
 // Private in orchard::bundle::commitments; retyped here.
 const IRONWOOD_HASH: &[u8; 16] = b"ZTxIdIronwd_H_v6";
@@ -68,6 +79,8 @@ pub(crate) struct ActionEffects<'a> {
 pub(crate) struct Digest {
     branch: u32,
     header: [u8; 32],
+    transparent_outputs: usize,
+    outputs: State,
     actions: usize,
     compact: State,
     memos: State,
@@ -88,6 +101,8 @@ impl Digest {
         Ok(Self {
             branch: header.branch,
             header: finalize(&h),
+            transparent_outputs: 0,
+            outputs: hasher(OUTPUTS_HASH),
             actions: 0,
             compact: hasher(IRONWOOD_COMPACT_HASH),
             memos: hasher(IRONWOOD_MEMOS_HASH),
@@ -118,6 +133,32 @@ impl Digest {
         self.header
     }
 
+    /// Feeds one transparent output into the ZIP-244 T.2c `ZTxIdOutputsHash`
+    /// running hash: `LE64(value)` then the CompactSize-prefixed
+    /// `scriptPubKey`, exactly `TxOut::write`.
+    pub(crate) fn transparent_output(&mut self, value: u64, script_pubkey: &[u8]) {
+        self.transparent_outputs += 1;
+        self.outputs
+            .update(&value.to_le_bytes())
+            .update(&[script_pubkey.len() as u8])
+            .update(script_pubkey);
+    }
+
+    /// ZIP-244 T.2 over a bundle with NO transparent inputs, which §S.2 makes
+    /// the signature digest's transparent node as well: the prevouts and
+    /// sequence nodes are their fixed empty personalized digests. Without any
+    /// transparent output the bundle is absent and the fixed empty transparent
+    /// node stands in, as upstream extraction does.
+    pub(crate) fn transparent_digest(&self) -> [u8; 32] {
+        let mut h = hasher(TRANSPARENT_HASH);
+        if self.transparent_outputs > 0 {
+            h.update(&finalize(&hasher(PREVOUTS_HASH)))
+                .update(&finalize(&hasher(SEQUENCE_HASH)))
+                .update(&finalize(&self.outputs));
+        }
+        finalize(&h)
+    }
+
     /// Without actions the bundle is absent and its empty digest stands in, as
     /// upstream extraction does.
     pub(crate) fn ironwood_digest(&self, flags: u8, value_balance: i64) -> [u8; 32] {
@@ -139,7 +180,7 @@ impl Digest {
         personal[12..].copy_from_slice(&self.branch.to_le_bytes());
         let mut h = hasher(&personal);
         h.update(&self.header)
-            .update(&finalize(&hasher(TRANSPARENT_HASH)))
+            .update(&self.transparent_digest())
             .update(&finalize(&hasher(SAPLING_HASH)))
             .update(&empty(ValuePool::Orchard))
             .update(&self.ironwood_digest(flags, value_balance));

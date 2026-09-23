@@ -7,7 +7,7 @@ use common::*;
 use ironwood::testing::preflight;
 use ironwood::{
     Account, Engine, ErrorCode, Limits, MAX_ACTIONS, MAX_PCZT_BYTES, MEMO_TEXT_BUDGET, Memo,
-    Network, OutputKind, Policy, RequestContext,
+    Network, OutputKind, Policy, RequestContext, TransparentKind,
 };
 use pczt::Pczt;
 use pczt::roles::signer::Signer;
@@ -1158,4 +1158,83 @@ fn equivalent_zero_lock_times_keep_digest_but_require_new_consent() {
             .unwrap();
     }
     assert_eq!(oracle.shielded_sighash(), digest);
+}
+
+#[test]
+fn transparent_outputs_are_projected_shown_and_signed() {
+    for count in [1usize, 2, 4] {
+        let values = transparent_values(count);
+        let total: u64 = values.iter().sum();
+        let bytes = build_transparent(&values);
+        preflight(&bytes).unwrap();
+        let mut engine = engine();
+        let review = engine.begin_test(&bytes).unwrap();
+        let p = review.projection();
+        assert_eq!(p.transparent_total, total, "{count}");
+        assert_eq!(p.transparent_outputs.len(), count, "{count}");
+        // The identity: the fee is what is left after the shielded outputs AND
+        // the transparent ones, so it does not move with the bundle.
+        assert_eq!(p.fee, TRANSPARENT_FIXTURE_FEE, "{count}");
+        assert_eq!(p.payment_total, TRANSPARENT_FIXTURE_PAYMENT, "{count}");
+        assert_eq!(p.change_total, TRANSPARENT_FIXTURE_CHANGE, "{count}");
+        assert_eq!(
+            p.input_total,
+            TRANSPARENT_FIXTURE_PAYMENT
+                + TRANSPARENT_FIXTURE_CHANGE
+                + TRANSPARENT_FIXTURE_FEE
+                + total,
+            "{count}"
+        );
+        for (index, output) in p.transparent_outputs.iter().enumerate() {
+            assert_eq!(output.index, index);
+            assert_eq!(output.value, values[index]);
+            let script = transparent_script_for(index);
+            let (kind, hash) = if index % 2 == 0 {
+                (TransparentKind::P2pkh, &script[3..23])
+            } else {
+                (TransparentKind::P2sh, &script[2..22])
+            };
+            assert_eq!(output.kind, kind);
+            assert_eq!(&output.hash[..], hash);
+        }
+        engine.approve(review.token()).unwrap();
+        let digest = *review.sighash();
+        let signed = engine.sign(review.token(), &keys().1).unwrap();
+        assert_eq!(signatures(&signed).len(), 1);
+        // The host's own signer derives the sighash from the whole PCZT,
+        // transparent bundle included, and it is the one that was approved.
+        assert_eq!(Signer::new(signed).unwrap().shielded_sighash(), digest);
+    }
+}
+
+#[test]
+fn the_fee_identity_includes_the_transparent_outputs() {
+    let values = transparent_values(1);
+    let total: u64 = values.iter().sum();
+    let bytes = build_transparent(&values);
+    // The same shielded side with no transparent bundle at all: its value sum
+    // still releases `fee + Σ transparent outputs`, and with nothing
+    // transparent to pay, all of it is fee. Dropping the subtraction on the
+    // other side would make THIS the number shown for the deshield above.
+    let shielded_only = build_deshield(&[], total);
+    let mut raised_cap = Engine::with_rng(
+        policy(Network::Testnet, 1_000_000),
+        ChaCha20Rng::from_seed([0x1f; 32]),
+    )
+    .unwrap();
+    let review = raised_cap
+        .begin(&shielded_only, &keys().0, &SEED_FINGERPRINT)
+        .unwrap();
+    assert_eq!(review.projection().fee, TRANSPARENT_FIXTURE_FEE + total);
+    assert_eq!(review.projection().transparent_total, 0);
+
+    // A transparent output the value sum does not release: the fee would have
+    // to be negative.
+    let unbalanced = build_deshield(&[(total, transparent_script_for(0))], 0);
+    preflight(&unbalanced).unwrap();
+    assert_error(
+        engine().begin_test(&unbalanced).unwrap_err(),
+        ErrorCode::Malformed,
+    );
+    let _ = bytes;
 }

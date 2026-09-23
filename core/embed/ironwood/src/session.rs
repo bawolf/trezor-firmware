@@ -42,9 +42,9 @@ use zeroize::{Zeroize, ZeroizeOnDrop, Zeroizing};
 use crate::digest::{ActionEffects, Digest};
 use crate::stream::{self, Item, Scanner};
 use crate::{
-    Error, MAX_ACTIONS, OutputKind, OwnDerivation, Policy, Projection, Result, Review,
-    ReviewedOutput, Token, add, ensure_malformed, ensure_policy, ensure_state, same_bytes,
-    verify_encryption, wire,
+    Error, MAX_ACTIONS, MAX_TRANSPARENT_OUTPUTS, OutputKind, OwnDerivation, Policy, Projection,
+    Result, Review, ReviewedOutput, Token, TransparentOutput, add, ensure_malformed, ensure_policy,
+    ensure_state, same_bytes, verify_encryption, wire,
 };
 
 /// Inner personalization of the consent token's byte commitment (design §6).
@@ -61,6 +61,10 @@ pub enum Event {
     /// A verified value-bearing payment output. Not consent: no token exists
     /// yet and any later rejection discards everything (design §4 step 8).
     ConfirmOutput(ReviewedOutput),
+    /// A transparent output, bound into the digest and solved to an address.
+    /// Its own event, not a `ConfirmOutput`, because the handler must show it
+    /// differently: it is public, and its address is Base58Check, not unified.
+    ConfirmTransparentOutput(TransparentOutput),
     /// The whole PCZT verified; carries the token the trusted UI may approve.
     Review(Review),
 }
@@ -222,7 +226,9 @@ struct Body {
     digest: Digest,
     projection: Projection,
     output_total: u64,
-    /// Declared action count; the scanner yields exactly this many.
+    /// Declared action count, zero until the `Shielded` item carries it: the
+    /// encoding puts the count after the transparent bundle. The grammar
+    /// refuses a zero count, so zero means "not yet declared".
     count: usize,
     seen: usize,
     nullifiers: [[u8; 32]; MAX_ACTIONS],
@@ -404,6 +410,16 @@ impl<R: RngCore + CryptoRng> Session<R> {
                     stream.body = Some(Body::new(header, &self.policy)?);
                     continue;
                 }
+                Some(Item::TransparentOutput(output)) => {
+                    let body = stream.body.as_deref_mut().ok_or(Error::internal())?;
+                    let row = body.transparent_output(&output)?;
+                    return Ok((consumed, Event::ConfirmTransparentOutput(row)));
+                }
+                Some(Item::Shielded(shielded)) => {
+                    let body = stream.body.as_deref_mut().ok_or(Error::internal())?;
+                    body.shielded(&shielded)?;
+                    continue;
+                }
                 Some(Item::Action(action)) => {
                     let body = stream.body.as_deref_mut().ok_or(Error::internal())?;
                     match body.action(&action, fvk, &stream.fvk, &stream.own)? {
@@ -516,16 +532,30 @@ impl<R: RngCore + CryptoRng> Session<R> {
         let real = records
             .iter()
             .any(|(_, record)| matches!(record, Record::Real { .. }));
-        ensure_policy(real && !projection.outputs.is_empty())?;
+        let reviewed_an_output =
+            !projection.outputs.is_empty() || !projection.transparent_outputs.is_empty();
+        ensure_policy(real && reviewed_an_output)?;
+        // `verify_bundle`'s identity, with the transparent outputs in it: they
+        // leave the shielded pool through the Ironwood value sum, so they are
+        // spent value and not fee. This subtraction is the one place a sign
+        // error silently mis-states the fee.
+        let transparent_total = projection.transparent_total;
         projection.fee = projection
             .input_total
             .checked_sub(output_total)
+            .and_then(|left| left.checked_sub(transparent_total))
             .ok_or(Error::malformed())?;
-        ensure_malformed(i64::try_from(trailer.value_sum).ok() == Some(projection.fee as i64))?;
+        ensure_malformed(
+            i64::try_from(trailer.value_sum).ok()
+                == Some(add(projection.fee, transparent_total)? as i64),
+        )?;
         ensure_policy(projection.fee <= self.policy.limits.maximum_fee)?;
         ensure_malformed(
             add(
-                add(projection.payment_total, projection.change_total)?,
+                add(
+                    add(projection.payment_total, projection.change_total)?,
+                    transparent_total,
+                )?,
                 projection.fee,
             )? == projection.input_total,
         )?;
@@ -716,20 +746,61 @@ impl Body {
             input_total: 0,
             payment_total: 0,
             change_total: 0,
+            transparent_total: 0,
             fee: 0,
             padding_outputs: 0,
             outputs: Vec::with_capacity(MAX_ACTIONS),
+            transparent_outputs: Vec::with_capacity(header.transparent_outputs),
         };
         Ok(Box::new(Self {
             digest,
             projection,
             output_total: 0,
-            count: header.actions,
+            count: 0,
             seen: 0,
             nullifiers: [[0; 32]; MAX_ACTIONS],
             records: Records::default(),
             scope_classifier: None,
         }))
+    }
+
+    /// One transparent output: bind it into the ZIP-244 T.2c outputs hash,
+    /// add it to the transparent total and project the row the handler shows.
+    ///
+    /// The device owns no transparent key, so there is nothing to classify
+    /// and nothing to recover: a transparent output is a payment, always, and
+    /// the address shown is solved from the very `scriptPubKey` fed to the
+    /// hash. The counterpart in [`crate::validate`] reads the same fields from
+    /// the parsed PCZT.
+    fn transparent_output(
+        &mut self,
+        output: &stream::TransparentOutput<'_>,
+    ) -> Result<TransparentOutput> {
+        let index = self.projection.transparent_outputs.len();
+        if index >= MAX_TRANSPARENT_OUTPUTS {
+            return Err(Error::internal());
+        }
+        self.digest
+            .transparent_output(output.value, output.script_pubkey);
+        self.projection.transparent_total = add(self.projection.transparent_total, output.value)?;
+        let row = TransparentOutput {
+            index,
+            kind: output.kind,
+            hash: output.hash,
+            value: output.value,
+        };
+        self.projection.transparent_outputs.push(row);
+        Ok(row)
+    }
+
+    /// The declared Ironwood action count, which the encoding places after
+    /// the transparent bundle. The scanner has already capped it.
+    fn shielded(&mut self, shielded: &stream::Shielded) -> Result<()> {
+        if self.count != 0 || shielded.actions == 0 {
+            return Err(Error::internal());
+        }
+        self.count = shielded.actions;
+        Ok(())
     }
 
     /// Design §4 steps 1-9: the per-action checks of [`crate::verify_bundle`]

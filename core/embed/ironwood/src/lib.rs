@@ -68,8 +68,13 @@ pub use wire::MAX_ACTIONS;
 /// Maximum uploaded or returned PCZT size. A transport enforces this before
 /// allocation; [`Engine::begin`] rechecks the exact assembled bytes.
 pub use wire::MAX_PCZT_BYTES;
+/// Maximum number of admitted transparent outputs. They share [`MAX_ACTIONS`]
+/// with the Ironwood actions, because ZIP-317 counts both as logical actions.
+pub use wire::MAX_TRANSPARENT_OUTPUTS;
 /// Longest `output.user_address` string admitted on the wire.
 pub use wire::USER_ADDRESS_BUDGET;
+/// The only `scriptPubKey` lengths admitted on a transparent output.
+pub use wire::{MAX_SCRIPT_PUBKEY_BYTES, P2PKH_SCRIPT_BYTES, P2SH_SCRIPT_BYTES};
 use zcash_note_encryption::Domain;
 use zcash_protocol::consensus::{
     BlockHeight, BranchId, MAIN_NETWORK, NetworkConstants, Parameters, TEST_NETWORK,
@@ -493,6 +498,30 @@ pub struct ReviewedOutput {
     pub memo: Memo,
 }
 
+/// Which standard `scriptPubKey` a transparent output pays, and so which
+/// Base58Check version byte the handler renders it under: `t1…`/`tm…` for a
+/// public key hash, `t3…`/`t2…` for a script hash.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum TransparentKind {
+    P2pkh,
+    P2sh,
+}
+
+/// A transparent output the device shows. It is a payment by construction:
+/// the device owns no transparent keys, so no transparent output can be its
+/// own change, and every one of them is public.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct TransparentOutput {
+    /// Position in the transparent bundle, which is the order the outputs
+    /// hash and the order they are shown in.
+    pub index: usize,
+    pub kind: TransparentKind,
+    /// The 20-byte hash the address encodes; solved from the `scriptPubKey`
+    /// the digest hashes, so what is shown is what the signature covers.
+    pub hash: [u8; 20],
+    pub value: u64,
+}
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Projection {
     pub network: Network,
@@ -505,9 +534,14 @@ pub struct Projection {
     pub input_total: u64,
     pub payment_total: u64,
     pub change_total: u64,
+    /// Sum of [`transparent_outputs`](Self::transparent_outputs). Held apart
+    /// from `payment_total` because it is the part of the payment that is
+    /// public, which is the whole reason the handler warns about it.
+    pub transparent_total: u64,
     pub fee: u64,
     pub padding_outputs: usize,
     pub outputs: Vec<ReviewedOutput>,
+    pub transparent_outputs: Vec<TransparentOutput>,
 }
 
 #[derive(PartialEq, Eq, Zeroize, ZeroizeOnDrop)]
@@ -569,6 +603,9 @@ struct Pending {
     signing_indices: Vec<usize>,
     approved: bool,
     header: wire::Header,
+    /// The admitted transparent outputs, kept so `sign` recomputes the same
+    /// digest node it approved rather than an empty one.
+    transparent_outputs: Vec<TransparentOutput>,
     sighash: [u8; 32],
     expected_ak: SpendValidatingKey,
 }
@@ -721,6 +758,7 @@ impl<R: RngCore + CryptoRng> Engine<R> {
             signing_indices,
             sighash,
             header,
+            transparent_outputs,
             expected_ak,
         } = validate(bytes, &self.policy, fvk, &own)?;
 
@@ -758,6 +796,7 @@ impl<R: RngCore + CryptoRng> Engine<R> {
                 signing_indices,
                 approved: false,
                 header,
+                transparent_outputs,
                 sighash,
                 expected_ak,
             },
@@ -808,7 +847,9 @@ impl<R: RngCore + CryptoRng> Engine<R> {
                 if *modifiable != 0 {
                     return Err(Error::internal());
                 }
-                if effects::sighash(bundle, &pending.header)? != pending.sighash {
+                if effects::sighash(&pending.transparent_outputs, bundle, &pending.header)?
+                    != pending.sighash
+                {
                     return Err(Error::internal());
                 }
                 for index in &pending.signing_indices {
@@ -853,6 +894,7 @@ struct Validated {
     signing_indices: Vec<usize>,
     sighash: [u8; 32],
     header: wire::Header,
+    transparent_outputs: Vec<TransparentOutput>,
     expected_ak: SpendValidatingKey,
 }
 
@@ -884,6 +926,23 @@ fn validate(
     )?;
 
     let pczt = Pczt::parse(bytes).map_err(|_| Error::malformed())?;
+    // `wire::scan` already admitted the transparent bundle's shape; this
+    // re-reads the same bytes through the deserializer to build the rows the
+    // device shows and the outputs the digest hashes.
+    let mut transparent_outputs = Vec::new();
+    let mut transparent_total = 0;
+    for (index, output) in pczt.transparent().outputs().iter().enumerate() {
+        let (kind, hash) =
+            stream::transparent_script(output.script_pubkey()).ok_or(Error::policy())?;
+        let value = *output.value();
+        transparent_total = add(transparent_total, value)?;
+        transparent_outputs.push(TransparentOutput {
+            index,
+            kind,
+            hash,
+            value,
+        });
+    }
     let mut sighash = None;
     let mut projection = Projection {
         network: request.network,
@@ -895,14 +954,17 @@ fn validate(
         input_total: 0,
         payment_total: 0,
         change_total: 0,
+        transparent_total,
         fee: 0,
         padding_outputs: 0,
         outputs: Vec::new(),
+        transparent_outputs: transparent_outputs.clone(),
     };
     let mut signing_indices = Vec::new();
     let verifier = Verifier::new(pczt)
         .with_ironwood(|bundle| -> core::result::Result<(), OrchardError<Error>> {
-            let digest = effects::sighash(bundle, &header).map_err(OrchardError::Custom)?;
+            let digest = effects::sighash(&transparent_outputs, bundle, &header)
+                .map_err(OrchardError::Custom)?;
             verify_bundle(
                 bundle,
                 fvk,
@@ -930,6 +992,7 @@ fn validate(
         signing_indices,
         sighash: sighash.ok_or(Error::internal())?,
         header,
+        transparent_outputs,
         expected_ak: SpendValidatingKey::from(fvk.clone()),
     })
 }
@@ -1037,16 +1100,32 @@ fn verify_bundle(
             memo,
         });
     }
-    ensure_policy(!signing_indices.is_empty() && !projection.outputs.is_empty())?;
+    // At least one value-bearing output the user reviewed. A deshield whose
+    // whole payment is transparent has no value-bearing shielded output at
+    // all, and the transparent rows are what it shows instead.
+    let reviewed_an_output =
+        !projection.outputs.is_empty() || !projection.transparent_outputs.is_empty();
+    ensure_policy(!signing_indices.is_empty() && reviewed_an_output)?;
+    // The transparent outputs leave the shielded pool through the Ironwood
+    // value sum, so they are spent value, not fee. This subtraction is the one
+    // place a sign error silently mis-states the fee.
+    let transparent_total = projection.transparent_total;
     projection.fee = projection
         .input_total
         .checked_sub(output_total)
+        .and_then(|left| left.checked_sub(transparent_total))
         .ok_or(Error::malformed())?;
-    ensure_malformed(i64::try_from(*bundle.value_sum()).ok() == Some(projection.fee as i64))?;
+    ensure_malformed(
+        i64::try_from(*bundle.value_sum()).ok()
+            == Some(add(projection.fee, transparent_total)? as i64),
+    )?;
     ensure_policy(projection.fee <= policy.limits.maximum_fee)?;
     ensure_malformed(
         add(
-            add(projection.payment_total, projection.change_total)?,
+            add(
+                add(projection.payment_total, projection.change_total)?,
+                transparent_total,
+            )?,
             projection.fee,
         )? == projection.input_total,
     )

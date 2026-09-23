@@ -1,6 +1,7 @@
 //! Incremental, chunk-fed scanner for the exact v2 Ironwood-only PCZT grammar
 //! that `wire::scan` admits. The encoding is
-//! consumed one section at a time (header, each action, trailer) in a fixed
+//! consumed one section at a time (header, each transparent output, the
+//! shielded prefix, each action, trailer) in a fixed
 //! buffer, so the device never holds more than one action's bytes; see
 //! docs/common/zcash-ironwood-signing.md §3-4.
 //!
@@ -14,7 +15,31 @@ use zcash_note_encryption::{ENC_CIPHERTEXT_SIZE, OUT_CIPHERTEXT_SIZE};
 use zcash_protocol::value::MAX_MONEY;
 use zeroize::Zeroize;
 
-use crate::{Error, MAX_ACTIONS, MAX_PCZT_BYTES, Result, USER_ADDRESS_BUDGET, ZIP32_HARDENED};
+use crate::{
+    Error, MAX_ACTIONS, MAX_PCZT_BYTES, MAX_SCRIPT_PUBKEY_BYTES, MAX_TRANSPARENT_OUTPUTS,
+    P2PKH_SCRIPT_BYTES, P2SH_SCRIPT_BYTES, Result, TransparentKind, USER_ADDRESS_BUDGET,
+    ZIP32_HARDENED,
+};
+
+/// The transparent address a `scriptPubKey` pays, or `None` if the device
+/// cannot render one.
+///
+/// Only the two standard shapes are admitted, because an unrecognised script
+/// is an address the device cannot display and therefore cannot obtain
+/// consent for. This is
+/// `zcash_transparent::address::TransparentAddress::from_script_pubkey`
+/// restricted to those two `solver::ScriptKind`s, without the script parser:
+/// the bytes are fully determined by the 20-byte hash. `wire.rs` checks the
+/// same two shapes.
+pub(crate) fn transparent_script(script: &[u8]) -> Option<(TransparentKind, [u8; 20])> {
+    match script {
+        [0x76, 0xa9, 0x14, hash @ .., 0x88, 0xac] => {
+            Some((TransparentKind::P2pkh, hash.try_into().ok()?))
+        }
+        [0xa9, 0x14, hash @ .., 0x87] => Some((TransparentKind::P2sh, hash.try_into().ok()?)),
+        _ => None,
+    }
+}
 
 const MAGIC: [u8; 8] = *b"PCZT\x02\0\0\0";
 /// Longest encoding the canonical varint reader consumes before deciding.
@@ -22,11 +47,25 @@ const VARINT: usize = 10;
 const TAG: usize = 1;
 
 /// Header bytes: magic, six `u32` varints (one behind the lock-time tag),
-/// `tx_modifiable`, the proprietary count, three pool tags, an empty Sapling
-/// bundle (three zero counts and two optional 32-byte fields), the Ironwood
-/// tag and the action count.
-pub const HEADER_BUDGET: usize =
-    MAGIC.len() + 6 * VARINT + TAG + 1 + VARINT + 4 * TAG + 3 * VARINT + 2 * (TAG + 32) + VARINT;
+/// `tx_modifiable`, the proprietary count, and the transparent bundle's tag
+/// with its input and output vector lengths. The bundle's outputs are their
+/// own sections, so the header stops at the output count.
+pub const HEADER_BUDGET: usize = MAGIC.len() + 6 * VARINT + TAG + 1 + VARINT + TAG + 2 * VARINT;
+
+/// Transparent output bytes: the value, the length-prefixed `scriptPubKey`,
+/// the absent `redeem_script`, the `bip32_derivation` count, the optional
+/// bounded `user_address` and the proprietary count.
+pub const TRANSPARENT_OUTPUT_BUDGET: usize = VARINT
+    + (VARINT + MAX_SCRIPT_PUBKEY_BYTES)
+    + TAG
+    + VARINT
+    + (TAG + VARINT + USER_ADDRESS_BUDGET)
+    + VARINT;
+
+/// Shielded-prefix bytes: an empty Sapling bundle (its tag, three zero counts
+/// and two optional 32-byte fields), the absent Orchard tag, the Ironwood tag
+/// and the action count.
+pub const SHIELDED_BUDGET: usize = TAG + 3 * VARINT + 2 * (TAG + 32) + TAG + TAG + VARINT;
 
 /// Action bytes: nine tagged 32-byte fields, the optional signature, two
 /// recipients, two values, the FVK, two absent tags, two optional ZIP-32
@@ -62,10 +101,23 @@ pub const SECTION_BUDGET: usize = ACTION_BUDGET;
 // budget. A failure here is not a bug by itself: re-derive the number from
 // the field list in the doc comment above, check the new `SECTION_BUDGET`
 // against the region, and update the literal in the same commit.
-const _: () = assert!(HEADER_BUDGET == 190 && ACTION_BUDGET == 2015 && TRAILER_BUDGET == 89);
-const _: () = assert!(HEADER_BUDGET <= SECTION_BUDGET && TRAILER_BUDGET <= SECTION_BUDGET);
+const _: () = assert!(
+    HEADER_BUDGET == 101
+        && TRANSPARENT_OUTPUT_BUDGET == 589
+        && SHIELDED_BUDGET == 109
+        && ACTION_BUDGET == 2015
+        && TRAILER_BUDGET == 89
+);
+const _: () = assert!(
+    HEADER_BUDGET <= SECTION_BUDGET
+        && TRANSPARENT_OUTPUT_BUDGET <= SECTION_BUDGET
+        && SHIELDED_BUDGET <= SECTION_BUDGET
+        && TRAILER_BUDGET <= SECTION_BUDGET
+);
 
-/// The global fields `wire::scan` returns plus the admitted action count.
+/// The global fields `wire::scan` returns plus the admitted transparent
+/// output count. The Ironwood action count is not here: the encoding puts it
+/// after the transparent bundle, so it arrives with [`Shielded`].
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Header {
     pub version: u32,
@@ -74,6 +126,25 @@ pub struct Header {
     pub lock_time: u32,
     pub expiry: u32,
     pub coin_type: u32,
+    pub transparent_outputs: usize,
+}
+
+/// One transparent output: the value and the `scriptPubKey` the digest hashes
+/// (ZIP-244 T.2c), with the address the device renders already solved out of
+/// the script.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct TransparentOutput<'a> {
+    pub value: u64,
+    pub kind: TransparentKind,
+    pub hash: [u8; 20],
+    /// Fed verbatim to the outputs hash; `kind` and `hash` are its solution.
+    pub script_pubkey: &'a [u8],
+}
+
+/// The Ironwood bundle's declared action count, read after the transparent
+/// bundle because that is where the encoding puts it.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Shielded {
     pub actions: usize,
 }
 
@@ -138,6 +209,8 @@ pub struct Trailer<'a> {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Item<'a> {
     Header(Header),
+    TransparentOutput(TransparentOutput<'a>),
+    Shielded(Shielded),
     Action(Action<'a>),
     Trailer(Trailer<'a>),
 }
@@ -322,17 +395,7 @@ fn header(r: &mut Reader<'_>) -> Parse<Header> {
     let coin_type = r.u32()?;
     policy(r.byte()? == 0)?; // tx_modifiable
     r.empty_map()?; // global proprietary
-    r.absent()?; // transparent
-    r.empty_sapling()?;
-    r.absent()?; // orchard
-    policy(r.tag()?)?; // ironwood
-    let actions = r.varint()?;
-    if actions == 0 {
-        return Err(Error::Policy.into());
-    }
-    if actions > MAX_ACTIONS as u64 {
-        return Err(Error::Capacity.into());
-    }
+    let transparent_outputs = transparent(r)?;
     Ok(Header {
         version,
         group,
@@ -340,6 +403,77 @@ fn header(r: &mut Reader<'_>) -> Parse<Header> {
         lock_time,
         expiry,
         coin_type,
+        transparent_outputs,
+    })
+}
+
+/// `Option<transparent::Bundle>`: absent, or present with NO inputs and at
+/// least one output. Returns the declared output count; each output is its
+/// own section.
+///
+/// Zero inputs is what keeps the whole transparent digest to one running hash:
+/// ZIP-244 §S.2 makes `transparent_sig_digest` identical to the txid node §T.2
+/// for a transaction with no transparent inputs, so none of the S.2
+/// amounts/scripts/txin sub-hashes and no `hash_type` byte exist. An input is
+/// therefore `Policy`, not a parse failure: the device cannot authorize a
+/// transparent spend at all (no BIP-44 keychain, no script solving), and a
+/// zero-length input vector is the structural statement of that.
+///
+/// A present bundle with no outputs is refused too: the v2 encoder writes the
+/// empty bundle as an absent tag, so it would be a second encoding of the same
+/// transaction.
+fn transparent(r: &mut Reader<'_>) -> Parse<usize> {
+    if !r.tag()? {
+        return Ok(0);
+    }
+    policy(r.varint()? == 0)?; // inputs
+    let outputs = r.varint()?;
+    policy(outputs > 0)?;
+    if outputs > MAX_TRANSPARENT_OUTPUTS as u64 {
+        return Err(Error::Capacity.into());
+    }
+    Ok(outputs as usize)
+}
+
+/// One `transparent::Output`. `redeem_script`, `bip32_derivation` and
+/// `proprietary` are refused because a device that cannot spend a transparent
+/// output has no use for them and must not be asked to display what it did not
+/// check; `user_address` is admitted, bounded and ignored, the same rule the
+/// Ironwood output has.
+fn transparent_output<'a>(r: &mut Reader<'a>) -> Parse<TransparentOutput<'a>> {
+    let value = r.varint()?;
+    malformed(value <= MAX_MONEY)?;
+    let length = r.varint()?;
+    policy(length == P2PKH_SCRIPT_BYTES as u64 || length == P2SH_SCRIPT_BYTES as u64)?;
+    let script_pubkey = r.slice(length as usize)?;
+    let (kind, hash) = transparent_script(script_pubkey).ok_or(Error::Policy)?;
+    r.absent()?; // redeem_script
+    r.empty_map()?; // bip32_derivation
+    r.user_address()?;
+    r.empty_map()?; // proprietary
+    Ok(TransparentOutput {
+        value,
+        kind,
+        hash,
+        script_pubkey,
+    })
+}
+
+/// The pools between the transparent bundle and the actions, ending at the
+/// Ironwood action count. `transparent_outputs` is already admitted, and the
+/// two share one ZIP-317 logical-action cap (`MAX_TRANSPARENT_OUTPUTS`).
+fn shielded(r: &mut Reader<'_>, transparent_outputs: usize) -> Parse<Shielded> {
+    r.empty_sapling()?;
+    r.absent()?; // orchard
+    policy(r.tag()?)?; // ironwood
+    let actions = r.varint()?;
+    if actions == 0 {
+        return Err(Error::Policy.into());
+    }
+    if actions > (MAX_ACTIONS - transparent_outputs) as u64 {
+        return Err(Error::Capacity.into());
+    }
+    Ok(Shielded {
         actions: actions as usize,
     })
 }
@@ -425,6 +559,8 @@ fn trailer<'a>(r: &mut Reader<'a>) -> Parse<Trailer<'a>> {
 #[derive(Clone, Copy)]
 enum Section {
     Header,
+    Transparent { next: usize, count: usize },
+    Shielded { transparent_outputs: usize },
     Action { next: usize, count: usize },
     Trailer,
 }
@@ -433,8 +569,21 @@ impl Section {
     const fn budget(self) -> usize {
         match self {
             Self::Header => HEADER_BUDGET,
+            Self::Transparent { .. } => TRANSPARENT_OUTPUT_BUDGET,
+            Self::Shielded { .. } => SHIELDED_BUDGET,
             Self::Action { .. } => ACTION_BUDGET,
             Self::Trailer => TRAILER_BUDGET,
+        }
+    }
+
+    /// What follows a header that declared `count` transparent outputs.
+    const fn after_transparent_count(count: usize) -> Self {
+        if count == 0 {
+            Self::Shielded {
+                transparent_outputs: 0,
+            }
+        } else {
+            Self::Transparent { next: 0, count }
         }
     }
 }
@@ -518,11 +667,30 @@ impl Scanner {
         };
         let parsed = match section {
             Section::Header => header(&mut reader).map(|header| {
+                let next = Section::after_transparent_count(header.transparent_outputs);
+                (Item::Header(header), State::Scan(next))
+            }),
+            Section::Transparent { next, count } => transparent_output(&mut reader).map(|output| {
+                let next = if next + 1 == count {
+                    Section::Shielded {
+                        transparent_outputs: count,
+                    }
+                } else {
+                    Section::Transparent {
+                        next: next + 1,
+                        count,
+                    }
+                };
+                (Item::TransparentOutput(output), State::Scan(next))
+            }),
+            Section::Shielded {
+                transparent_outputs,
+            } => shielded(&mut reader, transparent_outputs).map(|shielded| {
                 let next = Section::Action {
                     next: 0,
-                    count: header.actions,
+                    count: shielded.actions,
                 };
-                (Item::Header(header), State::Scan(next))
+                (Item::Shielded(shielded), State::Scan(next))
             }),
             Section::Action { next, count } => action(&mut reader).map(|action| {
                 let next = if next + 1 == count {

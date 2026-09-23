@@ -16,11 +16,31 @@ pub const MAX_PCZT_BYTES: usize = 65_536;
 // this cap and stays O(1) in N; peak RAM is dominated by the single live
 // action's transient working set, not this cap.
 pub const MAX_ACTIONS: usize = 32;
+/// Largest admitted transparent output count.
+///
+/// ZIP-317 counts transparent outputs as logical actions alongside the
+/// shielded ones -- `logical_actions = max(ceil(tx_in_total_size / 150),
+/// ceil(tx_out_total_size / 34)) + ... + orchard_actions`, and a standard
+/// 34-byte transparent output is therefore exactly one of them. The device
+/// keeps the same arithmetic and the same single cap: transparent outputs and
+/// Ironwood actions share [`MAX_ACTIONS`], so what the 32 bounds is what the
+/// fee rule charges for, not two unrelated numbers. A transparent-only
+/// transaction is not an Ironwood signing request (§4 requires a real
+/// Ironwood spend), so at least one action is always taken.
+pub const MAX_TRANSPARENT_OUTPUTS: usize = MAX_ACTIONS - 1;
 /// Longest `output.user_address` admitted, in bytes. The stock SDK stamps the
 /// ZIP-321 recipient string on every payment output; a unified address with
 /// every receiver type is about 213 characters, so this bounds the scanner's
 /// section buffer without refusing any real address.
 pub const USER_ADDRESS_BUDGET: usize = 512;
+
+/// Serialized length of the P2PKH `scriptPubKey`
+/// `OP_DUP OP_HASH160 <20> OP_EQUALVERIFY OP_CHECKSIG`.
+pub const P2PKH_SCRIPT_BYTES: usize = 25;
+/// Serialized length of the P2SH `scriptPubKey` `OP_HASH160 <20> OP_EQUAL`.
+pub const P2SH_SCRIPT_BYTES: usize = 23;
+/// Longest `scriptPubKey` admitted, in bytes.
+pub const MAX_SCRIPT_PUBKEY_BYTES: usize = P2PKH_SCRIPT_BYTES;
 
 // `version`, `group` and `coin_type` are read only by the host-only reference
 // scanner below; the device checks the same fields on `stream::Header`.
@@ -133,6 +153,42 @@ impl<'a> Reader<'a> {
         Ok(())
     }
 
+    /// One `transparent::Output` (`stream.rs::transparent_output`).
+    fn transparent_output(&mut self) -> Result<()> {
+        malformed(self.varint()? <= MAX_MONEY)?; // value
+        let length = self.varint()?;
+        policy(length == P2PKH_SCRIPT_BYTES as u64 || length == P2SH_SCRIPT_BYTES as u64)?;
+        let script = self.take(length as usize)?;
+        // Twin of `stream.rs::transparent_script`.
+        policy(matches!(
+            script,
+            [0x76, 0xa9, 0x14, .., 0x88, 0xac] | [0xa9, 0x14, .., 0x87]
+        ))?;
+        self.absent()?; // redeem_script
+        self.empty_map()?; // bip32_derivation
+        self.user_address()?;
+        self.empty_map()?; // proprietary
+        Ok(())
+    }
+
+    /// `Option<transparent::Bundle>` (`stream.rs::transparent`): absent, or
+    /// present with no inputs and at least one output. Returns the count.
+    fn transparent(&mut self) -> Result<usize> {
+        if !self.tag()? {
+            return Ok(0);
+        }
+        policy(self.varint()? == 0)?; // inputs
+        let outputs = self.varint()?;
+        policy(outputs > 0)?;
+        if outputs > MAX_TRANSPARENT_OUTPUTS as u64 {
+            return Err(Error::capacity());
+        }
+        for _ in 0..outputs {
+            self.transparent_output()?;
+        }
+        Ok(outputs as usize)
+    }
+
     /// Fingerprint and a three-index hardened path
     /// (`stream.rs::zip32_derivation`).
     fn zip32_derivation(&mut self) -> Result<()> {
@@ -210,7 +266,7 @@ pub(crate) fn scan(bytes: &[u8]) -> Result<Header> {
     };
     policy(r.byte()? == 0)?;
     r.empty_map()?;
-    r.absent()?; // transparent
+    let transparent_outputs = r.transparent()?;
     r.empty_sapling()?;
     r.absent()?; // orchard
     policy(r.tag()?)?;
@@ -218,7 +274,8 @@ pub(crate) fn scan(bytes: &[u8]) -> Result<Header> {
     if count == 0 {
         return Err(Error::policy());
     }
-    if count > MAX_ACTIONS as u64 {
+    // One shared ZIP-317 logical-action cap (see `MAX_TRANSPARENT_OUTPUTS`).
+    if count > (MAX_ACTIONS - transparent_outputs) as u64 {
         return Err(Error::capacity());
     }
     for _ in 0..count {

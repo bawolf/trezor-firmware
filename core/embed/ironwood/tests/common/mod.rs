@@ -581,3 +581,232 @@ pub fn build_inputs(values: &[u64]) -> Vec<u8> {
         .unwrap();
     finish(builder, &mut rng)
 }
+
+/// A canonical 25-byte P2PKH `scriptPubKey`: `76 a9 14 <hash160> 88 ac`.
+pub fn p2pkh(hash160: [u8; 20]) -> Vec<u8> {
+    let mut script = vec![0x76, 0xa9, 0x14];
+    script.extend_from_slice(&hash160);
+    script.extend_from_slice(&[0x88, 0xac]);
+    script
+}
+
+/// A canonical 23-byte P2SH `scriptPubKey`: `a9 14 <hash160> 87`.
+pub fn p2sh(hash160: [u8; 20]) -> Vec<u8> {
+    let mut script = vec![0xa9, 0x14];
+    script.extend_from_slice(&hash160);
+    script.push(0x87);
+    script
+}
+
+/// One transparent output in the v2 JSON view.
+pub fn transparent_output_json(value: u64, script_pubkey: &[u8]) -> Value {
+    serde_json::json!({
+        "value": value,
+        "script_pubkey": script_pubkey,
+        "redeem_script": Value::Null,
+        "bip32_derivation": {},
+        "user_address": Value::Null,
+        "proprietary": {},
+    })
+}
+
+/// The fixture's transparent bundle replaced by `outputs`.
+pub fn with_transparent_bundle(bytes: &[u8], outputs: Vec<Value>) -> Vec<u8> {
+    let mut value = json(bytes);
+    value["transparent"] = serde_json::json!({ "inputs": [], "outputs": outputs });
+    encode(value)
+}
+
+/// The scripts `build_transparent` uses: P2PKH and P2SH alternating, so both
+/// admitted shapes and both CompactSize lengths appear in every fixture with
+/// more than one output.
+pub fn transparent_script_for(index: usize) -> Vec<u8> {
+    let hash = [0xa0 + index as u8; 20];
+    if index.is_multiple_of(2) {
+        p2pkh(hash)
+    } else {
+        p2sh(hash)
+    }
+}
+
+/// The transparent payment values `build_transparent` uses.
+pub fn transparent_values(count: usize) -> Vec<u64> {
+    (0..count).map(|i| 100_000 + i as u64 * 10_000).collect()
+}
+
+/// Fee of every `build_transparent` fixture, whatever its transparent bundle.
+pub const TRANSPARENT_FIXTURE_FEE: u64 = 10_000;
+pub const TRANSPARENT_FIXTURE_PAYMENT: u64 = 600_000;
+pub const TRANSPARENT_FIXTURE_CHANGE: u64 = 390_000;
+
+/// A fee rule that charges exactly what it was built with.
+///
+/// `DeferredPcztBuilder::build_for_pczt` requires the shielded value balance
+/// to equal the fee rule's fee, and it knows nothing about transparent
+/// outputs (`transparent: None` is hard-coded in `zcash_primitives 0.30.1`,
+/// so there is no builder path to a v6 PCZT with a transparent bundle). A
+/// *balanced* deshield fixture -- one whose Ironwood `value_sum` really is
+/// `fee + Σ transparent outputs`, which is the identity the device checks --
+/// therefore means telling the builder the whole amount that leaves the
+/// shielded pool and splicing the transparent bundle in afterwards through
+/// the v2 JSON view, exactly as every other mutation fixture here does.
+struct FixedFee(u64);
+
+impl zcash_primitives::transaction::fees::FeeRule for FixedFee {
+    type Error = core::convert::Infallible;
+
+    #[allow(clippy::too_many_arguments)]
+    fn fee_required<P: Parameters>(
+        &self,
+        _params: &P,
+        _target_height: zcash_protocol::consensus::BlockHeight,
+        _transparent_input_sizes: impl IntoIterator<
+            Item = zcash_primitives::transaction::fees::transparent::InputSize,
+        >,
+        _transparent_output_sizes: impl IntoIterator<Item = usize>,
+        _sapling_input_count: usize,
+        _sapling_output_count: usize,
+        _orchard_action_count: usize,
+        _ironwood_action_count: usize,
+    ) -> std::result::Result<Zatoshis, Self::Error> {
+        Ok(Zatoshis::from_u64(self.0).expect("fixture fee within the money range"))
+    }
+}
+
+/// A deshield: one Ironwood spend funding a shielded payment, shielded change
+/// and the transparent `outputs`, each `(value, scriptPubKey)`.
+///
+/// `funded` is what the shielded side releases beyond the fee. Pass the sum of
+/// the output values for a balanced transaction -- the Ironwood `value_sum` is
+/// then `TRANSPARENT_FIXTURE_FEE + Σ values`, so the device's identity
+/// `value_sum == fee + Σ transparent outputs` holds and the fee it computes is
+/// `TRANSPARENT_FIXTURE_FEE` whatever the bundle is. Passing anything else
+/// builds a transaction whose accounting does not add up, which is what the
+/// identity has to catch.
+///
+/// The transparent bundle is spliced in BEFORE `finalize_io`, because that is
+/// what signs the dummy spend, and a dummy signature is over the sighash the
+/// transparent outputs are part of.
+pub fn build_deshield(outputs: &[(u64, Vec<u8>)], funded: u64) -> Vec<u8> {
+    let mut rng = ChaCha20Rng::from_seed([0xd0 ^ outputs.len() as u8; 32]);
+    let (fvk, _) = keys();
+    let other = FullViewingKey::from(&SpendingKey::from_bytes([1; 32]).unwrap());
+    let input =
+        TRANSPARENT_FIXTURE_PAYMENT + TRANSPARENT_FIXTURE_CHANGE + TRANSPARENT_FIXTURE_FEE + funded;
+    let version = BundleVersion::ironwood_v3();
+    let mut funding = orchard::builder::Builder::new(
+        orchard::builder::BundleType::DEFAULT,
+        version,
+        version.default_flags(),
+        orchard::Anchor::empty_tree(),
+    )
+    .unwrap();
+    funding
+        .add_output(
+            None,
+            fvk.address_at(0u32, Scope::External),
+            NoteValue::from_raw(input),
+            MemoBytes::empty().into_bytes(),
+        )
+        .unwrap();
+    let (bundle, meta) = funding.build_for_pczt(&mut rng).unwrap();
+    let action = &bundle.actions()[meta.output_action_index(0).unwrap()];
+    let (note, _, _) = try_note_decryption(
+        &IronwoodDomain::for_pczt_action(action),
+        &fvk.to_ivk(Scope::External).prepare(),
+        action,
+    )
+    .unwrap();
+    let mut builder = DeferredPcztBuilder::new::<zip317::FeeError>(
+        local_network(),
+        HEIGHT.into(),
+        BundlePadding::DEFAULT,
+        BundlePadding::DEFAULT,
+    )
+    .unwrap();
+    builder
+        .add_ironwood_spend::<zip317::FeeError>(fvk.clone(), note)
+        .unwrap();
+    builder
+        .add_ironwood_output::<zip317::FeeError>(
+            Some(fvk.to_ovk(Scope::External)),
+            other.address_at(0u32, Scope::External),
+            Zatoshis::from_u64(TRANSPARENT_FIXTURE_PAYMENT).unwrap(),
+            MemoBytes::empty(),
+        )
+        .unwrap();
+    builder
+        .add_ironwood_output::<zip317::FeeError>(
+            Some(fvk.to_ovk(Scope::Internal)),
+            fvk.address_at(1u32, Scope::Internal),
+            Zatoshis::from_u64(TRANSPARENT_FIXTURE_CHANGE).unwrap(),
+            MemoBytes::empty(),
+        )
+        .unwrap();
+    let result = builder
+        .build_for_pczt(&mut rng, &FixedFee(TRANSPARENT_FIXTURE_FEE + funded))
+        .unwrap();
+    let mut pczt = Creator::build_from_parts(result.pczt_parts).unwrap();
+    if !outputs.is_empty() {
+        let bytes = pczt.clone().serialize().unwrap();
+        let rows = outputs
+            .iter()
+            .map(|(value, script)| transparent_output_json(*value, script))
+            .collect();
+        pczt = Pczt::parse(&with_transparent_bundle(&bytes, rows)).unwrap();
+    }
+    let pczt = IoFinalizer::new(pczt).finalize_io().unwrap();
+    Redactor::new(pczt)
+        .redact_sapling_with(|mut sapling| {
+            sapling.clear_bsk();
+            sapling.clear_anchor();
+        })
+        .redact_ironwood_with(|mut ironwood| {
+            ironwood.clear_bsk();
+            ironwood.redact_actions(|mut action| action.clear_spend_witness());
+        })
+        .finish()
+        .serialize()
+        .unwrap()
+}
+
+/// A balanced deshield paying `values` with [`transparent_script_for`].
+pub fn build_transparent(values: &[u64]) -> Vec<u8> {
+    let outputs: Vec<(u64, Vec<u8>)> = values
+        .iter()
+        .enumerate()
+        .map(|(i, value)| (*value, transparent_script_for(i)))
+        .collect();
+    build_deshield(&outputs, values.iter().sum())
+}
+
+/// The fixture with one transparent input alongside its outputs: the shape
+/// the device refuses structurally, because zero transparent inputs is what
+/// makes ZIP-244 §S.2 collapse to §T.2.
+pub fn with_transparent_bundle_and_input(bytes: &[u8]) -> Vec<u8> {
+    let mut value = json(bytes);
+    let outputs = value["transparent"]["outputs"].clone();
+    value["transparent"] = serde_json::json!({
+        "inputs": [{
+            "prevout_txid": vec![0x11u8; 32],
+            "prevout_index": 0,
+            "sequence": Value::Null,
+            "required_time_lock_time": Value::Null,
+            "required_height_lock_time": Value::Null,
+            "script_sig": Value::Null,
+            "value": 1_000_000,
+            "script_pubkey": p2pkh([0x22; 20]),
+            "redeem_script": Value::Null,
+            "partial_signatures": {},
+            "sighash_type": 1,
+            "bip32_derivation": {},
+            "ripemd160_preimages": {},
+            "sha256_preimages": {},
+            "hash160_preimages": {},
+            "hash256_preimages": {},
+            "proprietary": {},
+        }],
+        "outputs": outputs,
+    });
+    encode(value)
+}

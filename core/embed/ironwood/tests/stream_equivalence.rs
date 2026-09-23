@@ -14,15 +14,16 @@ mod stream;
 use common::*;
 use ironwood::testing::preflight;
 use ironwood::{
-    Error, ErrorCode, MAX_ACTIONS, MAX_PCZT_BYTES, Network, Result, USER_ADDRESS_BUDGET,
-    ZIP32_HARDENED,
+    Error, ErrorCode, MAX_ACTIONS, MAX_PCZT_BYTES, MAX_SCRIPT_PUBKEY_BYTES,
+    MAX_TRANSPARENT_OUTPUTS, Network, P2PKH_SCRIPT_BYTES, P2SH_SCRIPT_BYTES, Result,
+    TransparentKind, USER_ADDRESS_BUDGET, ZIP32_HARDENED,
 };
 use pczt::Pczt;
 use pczt::roles::verifier::{OrchardError, Verifier};
 use serde_json::{Value, json};
 use stream::{
-    ACTION_BUDGET, HEADER_BUDGET, Header, Item, SECTION_BUDGET, Scanner, TRAILER_BUDGET,
-    Zip32Derivation,
+    ACTION_BUDGET, HEADER_BUDGET, Header, Item, SECTION_BUDGET, SHIELDED_BUDGET, Scanner,
+    TRAILER_BUDGET, TRANSPARENT_OUTPUT_BUDGET, Zip32Derivation,
 };
 use zcash_protocol::memo::MemoBytes;
 use zcash_protocol::value::MAX_MONEY;
@@ -34,8 +35,15 @@ const CHUNKINGS: [usize; 5] = [1, 7, 64, 1024, WHOLE];
 /// eight-byte varints for money, every optional field present (an empty
 /// Sapling bundle with anchor and `bsk`, a `user_address` at its budget, the
 /// Ironwood `bsk`).
-const HEADER_ACCEPTED_MAX: usize =
-    8 + 3 * 5 + (1 + 5) + 5 + 5 + 1 + 1 + 2 + (1 + 3 + 33 + 33) + 1 + 1;
+const HEADER_ACCEPTED_MAX: usize = 8 + 3 * 5 + (1 + 5) + 5 + 5 + 1 + 1 + 1 + 1 + 1;
+/// The value, the longest admitted script with its prefix, the absent
+/// `redeem_script`, the empty `bip32_derivation`, a `user_address` at its
+/// budget and the empty proprietary map.
+const TRANSPARENT_OUTPUT_ACCEPTED_MAX: usize =
+    8 + (1 + MAX_SCRIPT_PUBKEY_BYTES) + 1 + 1 + (1 + 2 + USER_ADDRESS_BUDGET) + 1;
+/// An empty Sapling bundle with anchor and `bsk`, the absent Orchard tag, the
+/// Ironwood tag and the action count.
+const SHIELDED_ACCEPTED_MAX: usize = 1 + 3 + 33 + 33 + 1 + 1 + 1;
 const ACTION_ACCEPTED_MAX: usize = 9 * 33
     + 65
     + 2 * 44
@@ -51,8 +59,16 @@ const ACTION_ACCEPTED_MAX: usize = 9 * 33
     + 33
     + (1 + 2 + USER_ADDRESS_BUDGET);
 const TRAILER_ACCEPTED_MAX: usize = 1 + 8 + 1 + 33 + 1 + 1 + 33;
+// The transparent outputs and the actions share one cap, and an output's
+// longest encoding is far shorter than an action's, so the longest admitted
+// PCZT is the all-actions one.
+const _: () = assert!(TRANSPARENT_OUTPUT_ACCEPTED_MAX < ACTION_ACCEPTED_MAX);
+const _: () = assert!(MAX_TRANSPARENT_OUTPUTS < MAX_ACTIONS);
 const _: () = assert!(
-    HEADER_ACCEPTED_MAX + MAX_ACTIONS * ACTION_ACCEPTED_MAX + TRAILER_ACCEPTED_MAX
+    HEADER_ACCEPTED_MAX
+        + SHIELDED_ACCEPTED_MAX
+        + MAX_ACTIONS * ACTION_ACCEPTED_MAX
+        + TRAILER_ACCEPTED_MAX
         <= MAX_PCZT_BYTES
 );
 
@@ -122,9 +138,22 @@ struct OwnedTrailer {
     anchor: Option<[u8; 32]>,
 }
 
+/// One yielded transparent output, owned.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct OwnedTransparentOutput {
+    value: u64,
+    kind: TransparentKind,
+    hash: [u8; 20],
+    script_pubkey: [u8; MAX_SCRIPT_PUBKEY_BYTES],
+    script_len: usize,
+}
+
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 struct Scanned {
     header: Option<Header>,
+    transparent_outputs: Vec<OwnedTransparentOutput>,
+    /// Declared Ironwood action count, yielded after the transparent bundle.
+    actions_declared: Option<usize>,
     actions: Vec<OwnedAction>,
     trailer: Option<OwnedTrailer>,
     /// Byte length of every completed section, in order.
@@ -156,6 +185,19 @@ fn run(bytes: &[u8], chunk: usize) -> Run {
                 section_start = fed;
                 match item {
                     Item::Header(header) => scanned.header = Some(header),
+                    Item::TransparentOutput(output) => {
+                        let mut script_pubkey = [0; MAX_SCRIPT_PUBKEY_BYTES];
+                        script_pubkey[..output.script_pubkey.len()]
+                            .copy_from_slice(output.script_pubkey);
+                        scanned.transparent_outputs.push(OwnedTransparentOutput {
+                            value: output.value,
+                            kind: output.kind,
+                            hash: output.hash,
+                            script_pubkey,
+                            script_len: output.script_pubkey.len(),
+                        });
+                    }
+                    Item::Shielded(shielded) => scanned.actions_declared = Some(shielded.actions),
                     Item::Action(action) => scanned.actions.push(OwnedAction::from(&action)),
                     Item::Trailer(trailer) => {
                         scanned.trailer = Some(OwnedTrailer {
@@ -246,10 +288,30 @@ fn assert_matches_upstream_json(name: &str, scanned: &Scanned, upstream: &Value)
             lock_time: global["fallback_lock_time"].as_u64().unwrap_or(0) as u32,
             expiry: global["expiry_height"].as_u64().unwrap() as u32,
             coin_type: global["coin_type"].as_u64().unwrap() as u32,
-            actions: upstream["ironwood"]["actions"].as_array().unwrap().len(),
+            transparent_outputs: upstream["transparent"]["outputs"]
+                .as_array()
+                .map_or(0, |outputs| outputs.len()),
         },
         "{name}: header"
     );
+    assert_eq!(
+        scanned.actions_declared,
+        Some(upstream["ironwood"]["actions"].as_array().unwrap().len()),
+        "{name}: action count"
+    );
+    for (i, output) in scanned.transparent_outputs.iter().enumerate() {
+        let t = &upstream["transparent"]["outputs"][i];
+        assert_eq!(
+            output.value,
+            t["value"].as_u64().unwrap(),
+            "{name}: t{i} value"
+        );
+        assert_eq!(
+            &output.script_pubkey[..output.script_len],
+            octets(&t["script_pubkey"]).as_slice(),
+            "{name}: t{i} script"
+        );
+    }
     for (i, action) in scanned.actions.iter().enumerate() {
         let a = &upstream["ironwood"]["actions"][i];
         let spend = &a["spend"];
@@ -563,6 +625,34 @@ fn accepted_corpus() -> Vec<(String, Vec<u8>)> {
     for outputs in 1..=CORPUS_MAX_ACTIONS {
         corpus.push((format!("{outputs} actions"), build_actions(outputs)));
     }
+    for count in [1usize, 2, 4] {
+        corpus.push((
+            format!("{count} transparent outputs"),
+            build_transparent(&transparent_values(count)),
+        ));
+    }
+    // A `user_address` at its budget on a transparent output, the one field
+    // there the device admits and ignores.
+    corpus.push((
+        "transparent user_address at budget".into(),
+        with_transparent_bundle(&build_transparent(&transparent_values(1)), {
+            let mut output =
+                transparent_output_json(transparent_values(1)[0], &transparent_script_for(0));
+            output["user_address"] = json!("t".repeat(USER_ADDRESS_BUDGET));
+            vec![output]
+        }),
+    ));
+    // The cap, exactly: the corpus fixture has two Ironwood actions, and a
+    // transparent output is a logical action just like one of those.
+    corpus.push((
+        "transparent outputs at the logical-action cap".into(),
+        with_transparent_bundle(
+            &build_transparent(&transparent_values(1)),
+            (0..MAX_ACTIONS - 2)
+                .map(|i| transparent_output_json(1, &transparent_script_for(i)))
+                .collect(),
+        ),
+    ));
     corpus
 }
 
@@ -610,10 +700,113 @@ fn rejected_corpus() -> Vec<(String, Vec<u8>, ErrorCode)> {
             mutate(|v| v["global"]["proprietary"] = json!({"x": [1]})),
             Policy,
         ),
+        // The v2 encoder writes the empty bundle as an absent tag, so a
+        // present-and-empty bundle is a second encoding of the same
+        // transaction.
         (
-            "transparent present".into(),
+            "transparent present and empty".into(),
             mutate(|v| v["transparent"] = json!({"inputs": [], "outputs": []})),
             Policy,
+        ),
+        (
+            "transparent input".into(),
+            mutate(|v| {
+                v["transparent"] = json!({
+                    "inputs": [{
+                        "prevout_txid": vec![0x11u8; 32],
+                        "prevout_index": 0,
+                        "sequence": Value::Null,
+                        "required_time_lock_time": Value::Null,
+                        "required_height_lock_time": Value::Null,
+                        "script_sig": Value::Null,
+                        "value": 1_000_000,
+                        "script_pubkey": p2pkh([0x22; 20]),
+                        "redeem_script": Value::Null,
+                        "partial_signatures": {},
+                        "sighash_type": 1,
+                        "bip32_derivation": {},
+                        "ripemd160_preimages": {},
+                        "sha256_preimages": {},
+                        "hash160_preimages": {},
+                        "hash256_preimages": {},
+                        "proprietary": {},
+                    }],
+                    "outputs": [transparent_output_json(100_000, &p2pkh([0x33; 20]))],
+                })
+            }),
+            Policy,
+        ),
+        (
+            "transparent script not standard".into(),
+            with_transparent_bundle(
+                &fixture(),
+                vec![transparent_output_json(100_000, &[0x6a, 0x14])],
+            ),
+            Policy,
+        ),
+        (
+            "transparent script at an admitted length but the wrong shape".into(),
+            with_transparent_bundle(&fixture(), {
+                let mut script = p2pkh([0x33; 20]);
+                script[0] = 0x77;
+                vec![transparent_output_json(100_000, &script)]
+            }),
+            Policy,
+        ),
+        (
+            "transparent redeem_script".into(),
+            with_transparent_bundle(&fixture(), {
+                let mut output = transparent_output_json(100_000, &p2pkh([0x33; 20]));
+                output["redeem_script"] = json!(p2sh([0x44; 20]));
+                vec![output]
+            }),
+            Policy,
+        ),
+        (
+            "transparent proprietary".into(),
+            with_transparent_bundle(&fixture(), {
+                let mut output = transparent_output_json(100_000, &p2pkh([0x33; 20]));
+                output["proprietary"] = json!({"x": [1]});
+                vec![output]
+            }),
+            Policy,
+        ),
+        (
+            "transparent user_address over budget".into(),
+            with_transparent_bundle(&fixture(), {
+                let mut output = transparent_output_json(100_000, &p2pkh([0x33; 20]));
+                output["user_address"] = json!("t".repeat(USER_ADDRESS_BUDGET + 1));
+                vec![output]
+            }),
+            Policy,
+        ),
+        (
+            "transparent value over max money".into(),
+            with_transparent_bundle(
+                &fixture(),
+                vec![transparent_output_json(MAX_MONEY + 1, &p2pkh([0x33; 20]))],
+            ),
+            Malformed,
+        ),
+        (
+            "transparent outputs past the logical-action cap".into(),
+            with_transparent_bundle(
+                &fixture(),
+                (0..MAX_ACTIONS - 1)
+                    .map(|i| transparent_output_json(1, &transparent_script_for(i)))
+                    .collect(),
+            ),
+            Capacity,
+        ),
+        (
+            "more transparent outputs than the transparent cap".into(),
+            with_transparent_bundle(
+                &fixture(),
+                (0..MAX_TRANSPARENT_OUTPUTS + 1)
+                    .map(|i| transparent_output_json(1, &transparent_script_for(i % 2)))
+                    .collect(),
+            ),
+            Capacity,
         ),
         (
             "sapling spend".into(),
@@ -838,24 +1031,46 @@ fn varint(mut value: u64) -> Vec<u8> {
 
 #[test]
 fn budgets_bound_the_grammar() {
-    assert_eq!(HEADER_BUDGET, 190);
+    assert_eq!(HEADER_BUDGET, 101);
+    assert_eq!(TRANSPARENT_OUTPUT_BUDGET, 589);
+    assert_eq!(SHIELDED_BUDGET, 109);
     assert_eq!(ACTION_BUDGET, 2015);
     assert_eq!(TRAILER_BUDGET, 89);
     assert_eq!(SECTION_BUDGET, ACTION_BUDGET);
-    assert_eq!(HEADER_ACCEPTED_MAX, 115);
+    assert_eq!(HEADER_ACCEPTED_MAX, 44);
+    assert_eq!(TRANSPARENT_OUTPUT_ACCEPTED_MAX, 552);
+    assert_eq!(SHIELDED_ACCEPTED_MAX, 73);
     assert_eq!(ACTION_ACCEPTED_MAX, 1911);
     assert_eq!(TRAILER_ACCEPTED_MAX, 78);
     for (name, bytes) in accepted_corpus() {
         let scanned = scan(&bytes, WHOLE).unwrap();
         let sections = &scanned.sections;
+        let transparent = scanned.transparent_outputs.len();
         assert_eq!(sections.iter().sum::<usize>(), bytes.len(), "{name}");
-        assert_eq!(sections.len(), scanned.actions.len() + 2, "{name}");
+        // header, each transparent output, the shielded prefix, each action,
+        // the trailer.
+        assert_eq!(
+            sections.len(),
+            transparent + scanned.actions.len() + 3,
+            "{name}"
+        );
         assert!(
             sections[0] <= HEADER_ACCEPTED_MAX,
             "{name}: header {}",
             sections[0]
         );
-        for length in &sections[1..sections.len() - 1] {
+        for length in &sections[1..1 + transparent] {
+            assert!(
+                *length <= TRANSPARENT_OUTPUT_ACCEPTED_MAX,
+                "{name}: transparent output {length}"
+            );
+        }
+        assert!(
+            sections[1 + transparent] <= SHIELDED_ACCEPTED_MAX,
+            "{name}: shielded {}",
+            sections[1 + transparent]
+        );
+        for length in &sections[2 + transparent..sections.len() - 1] {
             assert!(*length <= ACTION_ACCEPTED_MAX, "{name}: action {length}");
         }
         assert!(
@@ -871,7 +1086,7 @@ fn accepted_corpus_matches_upstream_under_every_chunking() {
     for (name, bytes) in accepted_corpus() {
         preflight(&bytes).unwrap_or_else(|e| panic!("{name}: {e:?}"));
         let scanned = assert_same_verdict(&name, &bytes).unwrap();
-        assert_eq!(scanned.actions.len(), scanned.header.unwrap().actions);
+        assert_eq!(Some(scanned.actions.len()), scanned.actions_declared);
         assert_matches_upstream_json(&name, &scanned, &upstream_json(&bytes).unwrap());
         if !assert_matches_orchard_accessors(&name, &bytes, &scanned) {
             unparsed_upstream.push(name);
@@ -966,9 +1181,10 @@ fn overlong_varints_before_a_verdict_keep_wire_scan_verdicts() {
     assert_same_verdict("wide header, proprietary", &bytes);
 
     // An empty Sapling bundle with its anchor and `bsk`, as the Full view
-    // keeps it, is the longest admitted header prefix: empty proprietary map,
-    // no transparent bundle, Sapling present with zero spends and outputs,
-    // then (after the value sum) the anchor and `bsk`.
+    // keeps it, is the longest admitted shielded prefix: Sapling present with
+    // zero spends and outputs, then (after the value sum) the anchor and
+    // `bsk`. The two bytes before it close the header section: the empty
+    // proprietary map and the absent transparent bundle.
     let sapling_counts = [0, 0, 1, 0, 0];
     let sapling_rest = || {
         let mut bytes = vec![1];
@@ -991,10 +1207,28 @@ fn overlong_varints_before_a_verdict_keep_wire_scan_verdicts() {
     header.extend(sapling_rest());
     header.extend([0, 1]);
     header.extend(&ten_byte); // action count
-    assert!(header.len() > HEADER_ACCEPTED_MAX && header.len() <= HEADER_BUDGET);
+    // The header section ends at the transparent bundle's absent tag; the
+    // shielded prefix carries everything after it, and it is that section
+    // whose overlong action count runs past its longest accepted encoding.
+    let header_section = 8 + 3 * 5 + (1 + 5) + 5 + 5 + 1 + 1 + 1;
+    assert!(header_section <= HEADER_BUDGET);
+    let shielded_section = header.len() - header_section;
+    assert!(shielded_section > SHIELDED_ACCEPTED_MAX && shielded_section <= SHIELDED_BUDGET);
     let bytes = [header, rest.to_vec()].concat();
     assert_eq!(preflight(&bytes).unwrap_err(), ErrorCode::Capacity);
-    assert_same_verdict("wide header, action count", &bytes);
+    assert_same_verdict("wide shielded prefix, action count", &bytes);
+
+    // The same inside a transparent output: its proprietary count widened to
+    // ten bytes is still decided within TRANSPARENT_OUTPUT_BUDGET.
+    let one = build_transparent(&transparent_values(1));
+    let sections = scan(&one, WHOLE).unwrap().sections;
+    let end = sections[0] + sections[1];
+    let mut bytes = one[..end - 1].to_vec();
+    bytes.extend(&ten_byte);
+    bytes.extend(&one[end..]);
+    assert!(sections[1] - 1 + ten_byte.len() <= TRANSPARENT_OUTPUT_BUDGET);
+    assert_eq!(preflight(&bytes).unwrap_err(), ErrorCode::Policy);
+    assert_same_verdict("wide transparent output, proprietary", &bytes);
 
     let mut header = wide();
     header.extend([0x80; 9]);
@@ -1045,9 +1279,16 @@ fn verdicts_arrive_within_the_section_budget() {
         let run = run(&bytes, 1);
         let Err(_) = run.result else { continue };
         let sections = &run.scanned.sections;
+        let transparent = run
+            .scanned
+            .header
+            .map_or(0, |header| header.transparent_outputs);
+        let actions = run.scanned.actions_declared.unwrap_or(0);
         let budget = match sections.len() {
             0 => HEADER_BUDGET,
-            n if n <= run.scanned.header.unwrap().actions => ACTION_BUDGET,
+            n if n <= transparent => TRANSPARENT_OUTPUT_BUDGET,
+            n if n == transparent + 1 => SHIELDED_BUDGET,
+            n if n <= transparent + 1 + actions => ACTION_BUDGET,
             _ => TRAILER_BUDGET,
         };
         let pending = run.fed - sections.iter().sum::<usize>();
