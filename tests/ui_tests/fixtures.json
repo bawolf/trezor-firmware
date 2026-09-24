@@ -28228,6 +28228,10 @@
 "T3B1_en_test_shamir_persistence.py::test_recovery_on_old_wallet": "f8875868f782c1f6886ab5e8cd13a3b685a78d03adc8255edd63cf5c3cdc21cb",
 "T3B1_en_test_shamir_persistence.py::test_recovery_single_reset": "147598c9fd8556a1bf883dc1ec636c9bf32be0f2aa11419ad8c9358bc5fd2061",
 "T3B1_en_test_wipe_code.py::test_wipe_code_activate_core": "4750f5bc02a5a6f92b1293443507339fff5f093bfc5425047a920e587b8aa3b8"
+},
+"zcash_tests": {
+"T3B1_en_test_capabilities.py::test_zcash_shielded_capability": "7945fdf0623a34efada654fe62a57fa06c6ab0cf4383bc14c6b7acd594b10596",
+"T3B1_en_test_get_address.py::test_receive_address_chunkify": "e0863cc12e16130a4f594faf18bafcb262193eff4b68429f1cab18de22a6f2d5"
 }
 },
 "T3T1": {
@@ -42013,6 +42017,10 @@
 "T3T1_en_test_shamir_persistence.py::test_recovery_on_old_wallet": "cf148b36dba1cc4175f517a8a50b59f6ebcf4163cf85d3e0c36c23a35b737c3f",
 "T3T1_en_test_shamir_persistence.py::test_recovery_single_reset": "fa24bb1b9e57f338de116083ea3728f50ec0d3969ae5964e648446b4ccfb4a2f",
 "T3T1_en_test_wipe_code.py::test_wipe_code_activate_core": "3ff1c4a8eff0fc15d9d02d2f6f619e24f6c2aa72c4218a5fec16a6d2519c6952"
+},
+"zcash_tests": {
+"T3T1_en_test_capabilities.py::test_zcash_shielded_capability": "0064e8a52b9bff0c2a31432fa781b800afb21e8910d60f303671bdfc8d8425fc",
+"T3T1_en_test_get_address.py::test_receive_address_chunkify": "204cdd971ae771b64c768149eb4a65a3a4b09ec58cda2e748544abe5b9355471"
 }
 },
 "T3W1": {
@@ -56397,6 +56405,10 @@
 "T3W1_en_test_shamir_persistence.py::test_recovery_multiple_resets": "41e59336727fdeb7f619b484ec0c28d9658e805ba785387918b8858aa1d3f9a1",
 "T3W1_en_test_shamir_persistence.py::test_recovery_single_reset": "a013793f079fc3652cf0923f114e4ef653a04d175bd21a17fd73e7f551235690",
 "T3W1_en_test_wipe_code.py::test_wipe_code_activate_core": "03dd59f202dbda03340796f30e134724ca5f3938602bb50fd2260c86c6e49ee3"
+},
+"zcash_tests": {
+"T3W1_en_test_capabilities.py::test_zcash_shielded_capability": "90812f196e8c35dc7f35cb5a9a0e553c8fc6a610812d85b9f166e90b3f1c8b59",
+"T3W1_en_test_get_address.py::test_receive_address_chunkify": "91feb41ab33bee4b1b638a2efd93342f0a4f6610598eb89f67399aa5c113e900"
 }
 }
 }

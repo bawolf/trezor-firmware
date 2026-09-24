@@ -4,6 +4,7 @@
 	run emu \
 	test test_rust test_rust_zcash \
 	test_emu_sanity test_emu test_emu_multicore test_emu_monero \
+	test_emu_zcash test_emu_zcash_ui test_emu_zcash_ui_record \
 	test_emu_u2f test_emu_fido2 \
 	test_emu_click test_emu_click_ui test_emu_click_ui_multicore \
 	test_emu_persistence test_emu_persistence_ui test_emu_upgrade \
@@ -153,6 +154,17 @@ test_emu_multicore: ## run device tests using multiple cores
 	$(PYTEST) -n $(MULTICORE) $(TESTPATH)/device_tests $(TESTOPTS) --timeout $(PYTEST_TIMEOUT) \
 		--control-emulators --model=core --random-order-seed=$(RANDOM) \
 		--lang=$(TEST_LANG)
+
+test_emu_zcash: ## run Zcash shielded device tests (needs a ZCASH_SHIELDED=1 emulator)
+	$(EMU_TEST) $(PYTEST) $(TESTPATH)/zcash_tests $(TESTOPTS) --lang=$(TEST_LANG)
+
+test_emu_zcash_ui: ## run Zcash shielded device tests with UI testing
+	$(EMU_TEST) $(PYTEST) $(TESTPATH)/zcash_tests $(TESTOPTS) \
+		--ui=test --ui-check-missing --do-master-diff --lang=$(TEST_LANG)
+
+test_emu_zcash_ui_record: ## record screens for the Zcash shielded device tests
+	$(EMU_TEST) $(PYTEST) $(TESTPATH)/zcash_tests $(TESTOPTS) \
+		--ui=record --ui-check-missing --do-master-diff --lang=$(TEST_LANG)
 
 test_emu_monero: ## run selected monero device tests from monero-agent
 	cd tests ; $(EMU_TEST) ./run_tests_device_emu_monero.sh $(TESTOPTS)

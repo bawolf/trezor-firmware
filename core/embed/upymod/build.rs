@@ -1273,6 +1273,13 @@ impl<'a> MpyBuilder<'a> {
             files.add(src, "trezor/enums/Tezos*.py")?;
 
             files.add(src, "apps/zcash/*.py")?;
+            // The shielded workflows ship only in `zcash_shielded` builds; the
+            // rest of apps/zcash is the transparent signer the Bitcoin app uses.
+            if cfg!(not(feature = "zcash_shielded")) {
+                files.remove(src, "apps/zcash/get_address.py");
+                files.remove(src, "apps/zcash/get_viewing_key.py");
+                files.remove(src, "apps/zcash/helpers.py");
+            }
 
             files.add(src, "apps/webauthn/*.py")?;
 
