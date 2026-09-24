@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING
 from trezor.crypto.bech32 import Encoding, convertbits
 
 if TYPE_CHECKING:
+    from buffer_types import AnyBytes
     from enum import IntEnum
 
     from apps.common.coininfo import CoinInfo
@@ -21,6 +22,11 @@ else:
 PREFIXES = {
     "Zcash": "u",
     "Zcash Testnet": "utest",
+}
+
+FVK_PREFIXES = {
+    "Zcash": "uview",
+    "Zcash Testnet": "uviewtest",
 }
 
 
@@ -81,6 +87,36 @@ def encode(receivers: dict[Typecode, bytes], coin: CoinInfo) -> str:
     f4jumble(memoryview(w))
     converted = convertbits(w, 8, 5)
     return bech32_encode(hrp, converted, Encoding.BECH32M)
+
+
+def encode_fvk(raw_fvk: AnyBytes, coin: CoinInfo) -> str:
+    """Encode one canonical Orchard-only Unified Full Viewing Key."""
+    from trezor import utils
+    from trezor.crypto.bech32 import bech32_encode
+
+    from .f4jumble import f4jumble
+
+    if len(raw_fvk) != 96:
+        raise ValueError("Invalid Orchard viewing key length")
+
+    hrp = FVK_PREFIXES[coin.coin_name]
+    # typecode + one-byte CompactSize length + FVK + ZIP-316 padding
+    encoded = bytearray(114)
+    converted = None
+    try:
+        w = memoryview(encoded)
+        w[0] = Typecode.ORCHARD
+        w[1] = len(raw_fvk)
+        w[2:98] = raw_fvk
+        w[98:] = padding(hrp)
+        f4jumble(w)
+        converted = convertbits(encoded, 8, 5)
+        return bech32_encode(hrp, converted, Encoding.BECH32M)
+    finally:
+        utils.memzero(encoded)
+        if converted is not None:
+            for i in range(len(converted)):
+                converted[i] = 0
 
 
 def decode(addr_str: str, coin: CoinInfo) -> dict[int, bytes]:

@@ -300,6 +300,54 @@ class TestZcashAddress(unittest.TestCase):
             receivers = unified_addresses.decode(address, COIN)
             self.assertEqual(receivers, get_receivers(tv))
 
+    def test_encode_orchard_full_viewing_key(self):
+        raw_fvk = bytes.fromhex(
+            "20f8c2edbe19901c0d1b5cc7ab185e67354511bfc5174fe6bc0e6362c5880b28"
+            "fabbf237258f8d03b200ad7fe0f3fa7e80e628f2b745dc9983b038c3a81f8237"
+            "b6654db322e68436a972c6d3bc56e5560fb8658055524a11d6ee62e5a7d7a516"
+        )
+        vectors = (
+            (
+                "Zcash",
+                "uview17j0q0nnczz63ducvkhe409f4r8sa2gx88unakv64k95dpe4r2hvn3lhe2gdfn00vsl830682a7tdhzwuhtsw2dp7usgxzdgqxujgu4pv50xrhuakfuk294xjcuhrs5ag0esenlp4wsawqmuqaaspykcplgk0vrds7fm0hrp3up2mmzgh7rdfhycgu2xp8",
+            ),
+            (
+                "Zcash Testnet",
+                "uviewtest1frzzf669pvkxdjsgwf6y43tvuulek5l3fujvjsfrddrqs07mvpmaa2tua4jhdw4n3ekkqdxq9zgl53r8axe6l3sdzddlwuv3fz6tkyzv4xfkpfmkuevv2q46sapk5d3lhp7m5te04k7ulpv9j3sa08w7akay2xlpj68ly3355l0pgcydz3kvu5c335ggc",
+            ),
+        )
+        for coin_name, expected in vectors:
+            encoded = unified_addresses.encode_fvk(raw_fvk, coininfo.by_name(coin_name))
+            self.assertEqual(encoded, expected)
+            self._assert_canonical_fvk(encoded, raw_fvk)
+
+    def test_full_viewing_key_policy(self):
+        for length in (0, 95, 97):
+            with self.assertRaises(ValueError):
+                unified_addresses.encode_fvk(bytes(length), COIN)
+
+        invalid_coin = coininfo.by_name("Bitcoin")
+        with self.assertRaises(KeyError):
+            unified_addresses.encode_fvk(bytes(96), invalid_coin)
+
+    @staticmethod
+    def _assert_canonical_fvk(encoded, raw_fvk):
+        from trezor.crypto.bech32 import Encoding, bech32_decode, convertbits
+        from trezor.utils import memzero
+
+        from apps.zcash.f4jumble import f4unjumble
+
+        hrp, data, encoding = bech32_decode(encoded, 1000)
+        assert encoding == Encoding.BECH32M
+        decoded = bytearray(convertbits(data, 5, 8, False))
+        try:
+            f4unjumble(memoryview(decoded))
+            assert decoded[:2] == b"\x03\x60"
+            assert decoded[2:98] == raw_fvk
+            assert decoded[98:] == unified_addresses.padding(hrp)
+        finally:
+            memzero(decoded)
+
 
 if __name__ == "__main__":
     unittest.main()

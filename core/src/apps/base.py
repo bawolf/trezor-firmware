@@ -175,6 +175,9 @@ def get_features() -> Features:
     if utils.USE_MINISCRIPT:
         f.capabilities.append(Capability.Miniscript)
 
+    if utils.USE_ZCASH_SHIELDED:
+        f.capabilities.append(Capability.Zcash_Shielded)
+
     # Only some models are capable of SD card
     if utils.USE_SD_CARD:
         from trezor import sdcard

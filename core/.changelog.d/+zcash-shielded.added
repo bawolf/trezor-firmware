@@ -1,0 +1,1 @@
+[T3B1,T3T1,T3W1] Zcash: Added shielded (Orchard) address display and viewing-key export to firmware built with `ZCASH_SHIELDED=1`, reported as `Capability_Zcash_Shielded`.

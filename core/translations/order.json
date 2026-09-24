@@ -1297,5 +1297,9 @@
   "1295": "buttons__cancel_sign",
   "1296": "address__title_multisig_xpub_template",
   "1297": "stellar__deploy_contract",
-  "1298": "stellar__wasm_hash"
+  "1298": "stellar__wasm_hash",
+  "1299": "zcash__weak_backup_warning",
+  "1300": "zcash__export_viewing_key",
+  "1301": "zcash__viewing_key_warning",
+  "1302": "zcash__seed_fingerprint_warning"
 }
