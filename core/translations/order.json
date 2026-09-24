@@ -1301,5 +1301,11 @@
   "1299": "zcash__weak_backup_warning",
   "1300": "zcash__export_viewing_key",
   "1301": "zcash__viewing_key_warning",
-  "1302": "zcash__seed_fingerprint_warning"
+  "1302": "zcash__seed_fingerprint_warning",
+  "1303": "zcash__memo",
+  "1304": "zcash__memo_hash",
+  "1305": "zcash__transparent_payment_warning",
+  "1306": "zcash__expires_at_block",
+  "1307": "zcash__total_actions",
+  "1308": "zcash__public_amount"
 }

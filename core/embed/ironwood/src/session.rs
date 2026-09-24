@@ -61,8 +61,7 @@ pub enum Event {
     None,
     /// A verified value-bearing payment output. Not consent: no token exists
     /// yet and any later rejection discards everything (design §2 step 9).
-    /// `user_address` is the wallet's untrusted string for it, which the
-    /// handler may show only if it contains `output.receiver` (§7).
+    /// `user_address` is the wallet's recipient string, untrusted (design §7).
     ConfirmOutput {
         output: ReviewedOutput,
         user_address: Option<String>,

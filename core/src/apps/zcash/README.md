@@ -21,6 +21,11 @@ Transparent Zcash transactions are signed by the Bitcoin app, which uses
   Unified Full Viewing Key behind a hold-to-confirm screen; the ZIP-32 seed
   fingerprint is a separate opt-in with its own warning, because it links
   every account of the seed.
+- `sign_pczt.py` (`ZcashSignPczt`): pulls a PCZT from the host in 1,024-byte
+  chunks, verifies it action by action in the native session, confirms every
+  payment (and its memo) as it arrives and then the totals, and returns one
+  spend authorization signature per real spend. The rules it enforces are
+  in [Zcash shielded signing](../../../../docs/common/zcash-ironwood-signing.md).
 - `helpers.py`: the network, account, path and session rules the workflows
   share, and the ZIP-315 weak-backup warning shown to 12-word and 128-bit
   wallets.
@@ -34,3 +39,4 @@ in `core/embed/ironwood`.
 - [ZIP 32: Shielded Hierarchical Deterministic Wallets](https://zips.z.cash/zip-0032)
 - [ZIP 315: Best Practices for Wallet Handling of Multiple Pools](https://zips.z.cash/zip-0315)
 - [ZIP 316: Unified Addresses and Unified Viewing Keys](https://zips.z.cash/zip-0316)
+- [ZIP 317: Proportional Transfer Fee Mechanism](https://zips.z.cash/zip-0317)

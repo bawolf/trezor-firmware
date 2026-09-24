@@ -193,8 +193,7 @@ pub struct Output<'a> {
     pub rseed: &'a [u8; 32],
     pub ock: Option<&'a [u8; 32]>,
     pub zip32_derivation: Option<Zip32Derivation<'a>>,
-    /// The recipient string the wallet showed its user (§7). Untrusted: the
-    /// handler shows it only after proving it contains `recipient`.
+    /// The wallet's recipient string, untrusted (design §7).
     pub user_address: Option<&'a str>,
 }
 

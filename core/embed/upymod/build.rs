@@ -1279,6 +1279,7 @@ impl<'a> MpyBuilder<'a> {
                 files.remove(src, "apps/zcash/get_address.py");
                 files.remove(src, "apps/zcash/get_viewing_key.py");
                 files.remove(src, "apps/zcash/helpers.py");
+                files.remove(src, "apps/zcash/sign_pczt.py");
             }
 
             files.add(src, "apps/webauthn/*.py")?;
