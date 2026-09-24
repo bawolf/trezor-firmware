@@ -78,17 +78,34 @@ num-derive = "0.4.2"
 num-traits = { version = "0.2.19", default-features = false, features = ["libm"] }
 ironwood = { path = "ironwood", default-features = false }
 ironwood-pasta-curves = { package = "pasta_curves", version = "=0.5.1", default-features = false, features = ["alloc", "uninline-portable"] }
+# Default (no `computed-generators`) links the FAST precomputed-table Sinsemilla.
+# Production firmware turns computed generators ON via the crate's own
+# `computed-generators` feature (see `ironwood`'s feature wiring in the `rust`
+# crate manifest and the `ironwood` crate's `computed-generators` feature): that is
+# the small-flash lever. Leaving it OFF here means host regression builds
+# (`cargo test -p ironwood`) link the table generators and run in minutes
+# instead of tens of minutes. The streaming Session == reference Engine
+# equivalence is representation-independent, so the corpus is valid under either.
+ironwood-sinsemilla = { package = "sinsemilla", version = "=0.1.0", default-features = false }
 orchard = { version = "=0.15.3", default-features = false }
 pareen = { version = "0.3.3", path = "../../rust/pareen", default-features = false, features = ["libm", "easer"] }
+pczt = { version = "=0.9.3", default-features = false, features = ["orchard"] }
 qrcodegen-no-heap = { version = "1.8.1", path = "../vendor/QR-Code-generator/rust-no-heap" }
+rand_chacha = { version = "=0.3.1", default-features = false }
+rand_core = { version = "=0.6.4", default-features = false }
+sapling = { package = "sapling-crypto", version = "=0.7.0", default-features = false }
 spin = { version = "0.9.9", features = ["rwlock", "spin_mutex", "lazy"], default-features = false }
 static-alloc = "0.2.6"
+transparent = { package = "zcash_transparent", version = "=0.10.0", default-features = false }
 trezor-thp = { path = "../../rust/trezor-thp" }
 trezor-tjpgdec = { version = "0.1.0", path = "../../rust/trezor-tjpgdec" }
 trezor-ward = { path = "../../rust/trezor-ward" }
 ufmt = "0.2.0"
 unsize = "1.1.0"
 without-alloc = "0.2.2"
+zcash_note_encryption = { version = "=0.4.1", default-features = false }
+zcash_primitives = { version = "=0.30.1", default-features = false }
+zcash_protocol = { version = "=0.10.5", default-features = false }
 zeroize = { version = "1.8.2", default-features = false, features = ["zeroize_derive"] }
 # Host-only (ironwood dev-dependency): the canonical ZIP-32 seed fingerprint
 # the crate's own `seed_fingerprint` is tested against.
