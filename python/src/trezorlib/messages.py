@@ -274,6 +274,7 @@ class Capability(IntEnum):
     TouchWakeup = 26
     Ethereum_EIP7702 = 28
     Miniscript = 29
+    Zcash_Shielded = 30
 
 
 class SdProtectOperationType(IntEnum):
@@ -550,6 +551,11 @@ class TronRawContractType(IntEnum):
     WithdrawExpireUnfreezeContract = 56
     DelegateResourceContract = 57
     UnDelegateResourceContract = 58
+
+
+class ZcashNetwork(IntEnum):
+    Mainnet = 0
+    Testnet = 1
 
 
 class MessageType(IntEnum):
@@ -851,6 +857,14 @@ class MessageType(IntEnum):
     BenchmarkResult = 9103
     TelemetryGet = 1100
     Telemetry = 1101
+    ZcashGetAddress = 2300
+    ZcashAddress = 2301
+    ZcashGetViewingKey = 2302
+    ZcashViewingKey = 2303
+    ZcashSignPczt = 2304
+    ZcashPcztRequest = 2305
+    ZcashPcztAck = 2306
+    ZcashSpendAuthSignatures = 2307
 
 
 class BenchmarkListNames(protobuf.MessageType):
@@ -10256,3 +10270,157 @@ class WebAuthnCredential(protobuf.MessageType):
         self.use_sign_count = use_sign_count
         self.algorithm = algorithm
         self.curve = curve
+
+
+class ZcashGetAddress(protobuf.MessageType):
+    MESSAGE_WIRE_TYPE = 2300
+    FIELDS = {
+        1: protobuf.Field("network", "ZcashNetwork", repeated=False, required=True),
+        2: protobuf.Field("account", "uint32", repeated=False, required=True),
+        3: protobuf.Field("diversifier_index", "bytes", repeated=False, required=True),
+        4: protobuf.Field("chunkify", "bool", repeated=False, required=False, default=None),
+    }
+
+    def __init__(
+        self,
+        *,
+        network: "ZcashNetwork",
+        account: "int",
+        diversifier_index: "bytes",
+        chunkify: Optional["bool"] = None,
+    ) -> None:
+        self.network = network
+        self.account = account
+        self.diversifier_index = diversifier_index
+        self.chunkify = chunkify
+
+
+class ZcashAddress(protobuf.MessageType):
+    MESSAGE_WIRE_TYPE = 2301
+    FIELDS = {
+        1: protobuf.Field("address", "string", repeated=False, required=True),
+    }
+
+    def __init__(
+        self,
+        *,
+        address: "str",
+    ) -> None:
+        self.address = address
+
+
+class ZcashGetViewingKey(protobuf.MessageType):
+    MESSAGE_WIRE_TYPE = 2302
+    FIELDS = {
+        1: protobuf.Field("network", "ZcashNetwork", repeated=False, required=True),
+        2: protobuf.Field("account", "uint32", repeated=False, required=True),
+        3: protobuf.Field("include_seed_fingerprint", "bool", repeated=False, required=False, default=False),
+    }
+
+    def __init__(
+        self,
+        *,
+        network: "ZcashNetwork",
+        account: "int",
+        include_seed_fingerprint: Optional["bool"] = False,
+    ) -> None:
+        self.network = network
+        self.account = account
+        self.include_seed_fingerprint = include_seed_fingerprint
+
+
+class ZcashViewingKey(protobuf.MessageType):
+    MESSAGE_WIRE_TYPE = 2303
+    FIELDS = {
+        1: protobuf.Field("key", "string", repeated=False, required=True),
+        2: protobuf.Field("seed_fingerprint", "bytes", repeated=False, required=False, default=None),
+    }
+
+    def __init__(
+        self,
+        *,
+        key: "str",
+        seed_fingerprint: Optional["bytes"] = None,
+    ) -> None:
+        self.key = key
+        self.seed_fingerprint = seed_fingerprint
+
+
+class ZcashSignPczt(protobuf.MessageType):
+    MESSAGE_WIRE_TYPE = 2304
+    FIELDS = {
+        1: protobuf.Field("network", "ZcashNetwork", repeated=False, required=True),
+        2: protobuf.Field("account", "uint32", repeated=False, required=True),
+        3: protobuf.Field("pczt_length", "uint32", repeated=False, required=True),
+        4: protobuf.Field("host_reference_height", "uint32", repeated=False, required=True),
+    }
+
+    def __init__(
+        self,
+        *,
+        network: "ZcashNetwork",
+        account: "int",
+        pczt_length: "int",
+        host_reference_height: "int",
+    ) -> None:
+        self.network = network
+        self.account = account
+        self.pczt_length = pczt_length
+        self.host_reference_height = host_reference_height
+
+
+class ZcashPcztRequest(protobuf.MessageType):
+    MESSAGE_WIRE_TYPE = 2305
+    FIELDS = {
+        1: protobuf.Field("transfer_id", "bytes", repeated=False, required=True),
+        2: protobuf.Field("offset", "uint32", repeated=False, required=True),
+        3: protobuf.Field("length", "uint32", repeated=False, required=True),
+    }
+
+    def __init__(
+        self,
+        *,
+        transfer_id: "bytes",
+        offset: "int",
+        length: "int",
+    ) -> None:
+        self.transfer_id = transfer_id
+        self.offset = offset
+        self.length = length
+
+
+class ZcashPcztAck(protobuf.MessageType):
+    MESSAGE_WIRE_TYPE = 2306
+    FIELDS = {
+        1: protobuf.Field("transfer_id", "bytes", repeated=False, required=True),
+        2: protobuf.Field("offset", "uint32", repeated=False, required=True),
+        3: protobuf.Field("data", "bytes", repeated=False, required=True),
+    }
+
+    def __init__(
+        self,
+        *,
+        transfer_id: "bytes",
+        offset: "int",
+        data: "bytes",
+    ) -> None:
+        self.transfer_id = transfer_id
+        self.offset = offset
+        self.data = data
+
+
+class ZcashSpendAuthSignatures(protobuf.MessageType):
+    MESSAGE_WIRE_TYPE = 2307
+    FIELDS = {
+        1: protobuf.Field("transfer_id", "bytes", repeated=False, required=True),
+        2: protobuf.Field("records", "bytes", repeated=False, required=True),
+    }
+
+    def __init__(
+        self,
+        *,
+        transfer_id: "bytes",
+        records: "bytes",
+    ) -> None:
+        self.transfer_id = transfer_id
+        self.records = records
