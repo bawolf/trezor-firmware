@@ -1690,6 +1690,12 @@ pub enum TranslatedString {
     zcash__viewing_key_warning = 1301,  // "The connected app will be able to see and link all activity for this account, but cannot spend."
     #[cfg(feature = "universal_fw")]
     zcash__seed_fingerprint_warning = 1302,  // "This also reveals a fingerprint of your recovery seed, which links all of your Zcash accounts."
+    #[cfg(feature = "universal_fw")]
+    zcash__memo = 1303,  // "Memo (text)"
+    #[cfg(feature = "universal_fw")]
+    zcash__memo_hash = 1304,  // "Memo (hash)"
+    #[cfg(feature = "universal_fw")]
+    zcash__transparent_payment_warning = 1305,  // "This payment is transparent: amount and recipient are public."
 }
 
 impl TranslatedString {
@@ -3000,6 +3006,9 @@ impl TranslatedString {
                 "Export Zcash viewing key?",
                 "The connected app will be able to see and link all activity for this account, but cannot spend.",
                 "This also reveals a fingerprint of your recovery seed, which links all of your Zcash accounts.",
+                "Memo (text)",
+                "Memo (hash)",
+                "This payment is transparent: amount and recipient are public.",
             );
 
             #[cfg(all(feature = "debug", feature = "universal_fw"))]
@@ -4308,6 +4317,9 @@ impl TranslatedString {
                 19203,
                 19298,
                 19392,
+                19403,
+                19414,
+                19475,
             ];
 
             #[cfg(all(feature = "debug", not(feature = "universal_fw")))]
@@ -5615,6 +5627,9 @@ impl TranslatedString {
                 "Export Zcash viewing key?",
                 "The connected app will be able to see and link all activity for this account, but cannot spend.",
                 "This also reveals a fingerprint of your recovery seed, which links all of your Zcash accounts.",
+                "Memo (text)",
+                "Memo (hash)",
+                "This payment is transparent: amount and recipient are public.",
             );
 
             #[cfg(all(feature = "debug", not(feature = "universal_fw")))]
@@ -6923,6 +6938,9 @@ impl TranslatedString {
                 19203,
                 19298,
                 19392,
+                19403,
+                19414,
+                19475,
             ];
 
             #[cfg(all(not(feature = "debug"), feature = "universal_fw"))]
@@ -8230,6 +8248,9 @@ impl TranslatedString {
                 "Export Zcash viewing key?",
                 "The connected app will be able to see and link all activity for this account, but cannot spend.",
                 "This also reveals a fingerprint of your recovery seed, which links all of your Zcash accounts.",
+                "Memo (text)",
+                "Memo (hash)",
+                "This payment is transparent: amount and recipient are public.",
             );
 
             #[cfg(all(not(feature = "debug"), feature = "universal_fw"))]
@@ -9538,6 +9559,9 @@ impl TranslatedString {
                 19203,
                 19298,
                 19392,
+                19403,
+                19414,
+                19475,
             ];
 
             #[cfg(all(not(feature = "debug"), not(feature = "universal_fw")))]
@@ -10845,6 +10869,9 @@ impl TranslatedString {
                 "Export Zcash viewing key?",
                 "The connected app will be able to see and link all activity for this account, but cannot spend.",
                 "This also reveals a fingerprint of your recovery seed, which links all of your Zcash accounts.",
+                "Memo (text)",
+                "Memo (hash)",
+                "This payment is transparent: amount and recipient are public.",
             );
 
             #[cfg(all(not(feature = "debug"), not(feature = "universal_fw")))]
@@ -12153,6 +12180,9 @@ impl TranslatedString {
                 19203,
                 19298,
                 19392,
+                19403,
+                19414,
+                19475,
             ];
 
         } else if #[cfg(feature = "layout_caesar")] {
@@ -13461,6 +13491,9 @@ impl TranslatedString {
                 "Export Zcash viewing key?",
                 "The connected app will be able to see and link all activity for this account, but cannot spend.",
                 "This also reveals a fingerprint of your recovery seed, which links all of your Zcash accounts.",
+                "Memo (text)",
+                "Memo (hash)",
+                "This payment is transparent: amount and recipient are public.",
             );
 
             #[cfg(all(feature = "debug", feature = "universal_fw"))]
@@ -14769,6 +14802,9 @@ impl TranslatedString {
                 17075,
                 17170,
                 17264,
+                17275,
+                17286,
+                17347,
             ];
 
             #[cfg(all(feature = "debug", not(feature = "universal_fw")))]
@@ -16076,6 +16112,9 @@ impl TranslatedString {
                 "Export Zcash viewing key?",
                 "The connected app will be able to see and link all activity for this account, but cannot spend.",
                 "This also reveals a fingerprint of your recovery seed, which links all of your Zcash accounts.",
+                "Memo (text)",
+                "Memo (hash)",
+                "This payment is transparent: amount and recipient are public.",
             );
 
             #[cfg(all(feature = "debug", not(feature = "universal_fw")))]
@@ -17384,6 +17423,9 @@ impl TranslatedString {
                 17075,
                 17170,
                 17264,
+                17275,
+                17286,
+                17347,
             ];
 
             #[cfg(all(not(feature = "debug"), feature = "universal_fw"))]
@@ -18691,6 +18733,9 @@ impl TranslatedString {
                 "Export Zcash viewing key?",
                 "The connected app will be able to see and link all activity for this account, but cannot spend.",
                 "This also reveals a fingerprint of your recovery seed, which links all of your Zcash accounts.",
+                "Memo (text)",
+                "Memo (hash)",
+                "This payment is transparent: amount and recipient are public.",
             );
 
             #[cfg(all(not(feature = "debug"), feature = "universal_fw"))]
@@ -19999,6 +20044,9 @@ impl TranslatedString {
                 17075,
                 17170,
                 17264,
+                17275,
+                17286,
+                17347,
             ];
 
             #[cfg(all(not(feature = "debug"), not(feature = "universal_fw")))]
@@ -21306,6 +21354,9 @@ impl TranslatedString {
                 "Export Zcash viewing key?",
                 "The connected app will be able to see and link all activity for this account, but cannot spend.",
                 "This also reveals a fingerprint of your recovery seed, which links all of your Zcash accounts.",
+                "Memo (text)",
+                "Memo (hash)",
+                "This payment is transparent: amount and recipient are public.",
             );
 
             #[cfg(all(not(feature = "debug"), not(feature = "universal_fw")))]
@@ -22614,6 +22665,9 @@ impl TranslatedString {
                 17075,
                 17170,
                 17264,
+                17275,
+                17286,
+                17347,
             ];
 
         } else if #[cfg(feature = "layout_delizia")] {
@@ -23922,6 +23976,9 @@ impl TranslatedString {
                 "Export Zcash viewing key?",
                 "The connected app will be able to see and link all activity for this account, but cannot spend.",
                 "This also reveals a fingerprint of your recovery seed, which links all of your Zcash accounts.",
+                "Memo (text)",
+                "Memo (hash)",
+                "This payment is transparent: amount and recipient are public.",
             );
 
             #[cfg(all(feature = "debug", feature = "universal_fw"))]
@@ -25230,6 +25287,9 @@ impl TranslatedString {
                 19056,
                 19151,
                 19245,
+                19256,
+                19267,
+                19328,
             ];
 
             #[cfg(all(feature = "debug", not(feature = "universal_fw")))]
@@ -26537,6 +26597,9 @@ impl TranslatedString {
                 "Export Zcash viewing key?",
                 "The connected app will be able to see and link all activity for this account, but cannot spend.",
                 "This also reveals a fingerprint of your recovery seed, which links all of your Zcash accounts.",
+                "Memo (text)",
+                "Memo (hash)",
+                "This payment is transparent: amount and recipient are public.",
             );
 
             #[cfg(all(feature = "debug", not(feature = "universal_fw")))]
@@ -27845,6 +27908,9 @@ impl TranslatedString {
                 19056,
                 19151,
                 19245,
+                19256,
+                19267,
+                19328,
             ];
 
             #[cfg(all(not(feature = "debug"), feature = "universal_fw"))]
@@ -29152,6 +29218,9 @@ impl TranslatedString {
                 "Export Zcash viewing key?",
                 "The connected app will be able to see and link all activity for this account, but cannot spend.",
                 "This also reveals a fingerprint of your recovery seed, which links all of your Zcash accounts.",
+                "Memo (text)",
+                "Memo (hash)",
+                "This payment is transparent: amount and recipient are public.",
             );
 
             #[cfg(all(not(feature = "debug"), feature = "universal_fw"))]
@@ -30460,6 +30529,9 @@ impl TranslatedString {
                 19056,
                 19151,
                 19245,
+                19256,
+                19267,
+                19328,
             ];
 
             #[cfg(all(not(feature = "debug"), not(feature = "universal_fw")))]
@@ -31767,6 +31839,9 @@ impl TranslatedString {
                 "Export Zcash viewing key?",
                 "The connected app will be able to see and link all activity for this account, but cannot spend.",
                 "This also reveals a fingerprint of your recovery seed, which links all of your Zcash accounts.",
+                "Memo (text)",
+                "Memo (hash)",
+                "This payment is transparent: amount and recipient are public.",
             );
 
             #[cfg(all(not(feature = "debug"), not(feature = "universal_fw")))]
@@ -33075,6 +33150,9 @@ impl TranslatedString {
                 19056,
                 19151,
                 19245,
+                19256,
+                19267,
+                19328,
             ];
 
         } else if #[cfg(feature = "layout_eckhart")] {
@@ -34383,6 +34461,9 @@ impl TranslatedString {
                 "Export Zcash viewing key?",
                 "The connected app will be able to see and link all activity for this account, but cannot spend.",
                 "This also reveals a fingerprint of your recovery seed, which links all of your Zcash accounts.",
+                "Memo (text)",
+                "Memo (hash)",
+                "This payment is transparent: amount and recipient are public.",
             );
 
             #[cfg(all(feature = "debug", feature = "universal_fw"))]
@@ -35691,6 +35772,9 @@ impl TranslatedString {
                 20535,
                 20630,
                 20724,
+                20735,
+                20746,
+                20807,
             ];
 
             #[cfg(all(feature = "debug", not(feature = "universal_fw")))]
@@ -36998,6 +37082,9 @@ impl TranslatedString {
                 "Export Zcash viewing key?",
                 "The connected app will be able to see and link all activity for this account, but cannot spend.",
                 "This also reveals a fingerprint of your recovery seed, which links all of your Zcash accounts.",
+                "Memo (text)",
+                "Memo (hash)",
+                "This payment is transparent: amount and recipient are public.",
             );
 
             #[cfg(all(feature = "debug", not(feature = "universal_fw")))]
@@ -38306,6 +38393,9 @@ impl TranslatedString {
                 20535,
                 20630,
                 20724,
+                20735,
+                20746,
+                20807,
             ];
 
             #[cfg(all(not(feature = "debug"), feature = "universal_fw"))]
@@ -39613,6 +39703,9 @@ impl TranslatedString {
                 "Export Zcash viewing key?",
                 "The connected app will be able to see and link all activity for this account, but cannot spend.",
                 "This also reveals a fingerprint of your recovery seed, which links all of your Zcash accounts.",
+                "Memo (text)",
+                "Memo (hash)",
+                "This payment is transparent: amount and recipient are public.",
             );
 
             #[cfg(all(not(feature = "debug"), feature = "universal_fw"))]
@@ -40921,6 +41014,9 @@ impl TranslatedString {
                 20535,
                 20630,
                 20724,
+                20735,
+                20746,
+                20807,
             ];
 
             #[cfg(all(not(feature = "debug"), not(feature = "universal_fw")))]
@@ -42228,6 +42324,9 @@ impl TranslatedString {
                 "Export Zcash viewing key?",
                 "The connected app will be able to see and link all activity for this account, but cannot spend.",
                 "This also reveals a fingerprint of your recovery seed, which links all of your Zcash accounts.",
+                "Memo (text)",
+                "Memo (hash)",
+                "This payment is transparent: amount and recipient are public.",
             );
 
             #[cfg(all(not(feature = "debug"), not(feature = "universal_fw")))]
@@ -43536,6 +43635,9 @@ impl TranslatedString {
                 20535,
                 20630,
                 20724,
+                20735,
+                20746,
+                20807,
             ];
 
         }
@@ -45218,7 +45320,13 @@ impl TranslatedString {
         #[cfg(feature = "universal_fw")]
         (Qstr::MP_QSTR_zcash__export_viewing_key, Self::zcash__export_viewing_key),
         #[cfg(feature = "universal_fw")]
+        (Qstr::MP_QSTR_zcash__memo, Self::zcash__memo),
+        #[cfg(feature = "universal_fw")]
+        (Qstr::MP_QSTR_zcash__memo_hash, Self::zcash__memo_hash),
+        #[cfg(feature = "universal_fw")]
         (Qstr::MP_QSTR_zcash__seed_fingerprint_warning, Self::zcash__seed_fingerprint_warning),
+        #[cfg(feature = "universal_fw")]
+        (Qstr::MP_QSTR_zcash__transparent_payment_warning, Self::zcash__transparent_payment_warning),
         #[cfg(feature = "universal_fw")]
         (Qstr::MP_QSTR_zcash__viewing_key_warning, Self::zcash__viewing_key_warning),
         #[cfg(feature = "universal_fw")]
