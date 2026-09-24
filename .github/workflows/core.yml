@@ -710,7 +710,8 @@ jobs:
   # Zcash / Ironwood tests.
   #
   # The signing core is a host-testable Rust crate, so most of the correctness
-  # argument runs without an emulator.
+  # argument runs without an emulator. The fast suites run on every PR; the
+  # corpus and mutation sweeps take about fifteen minutes and run nightly.
   core_ironwood_rust_test:
     name: Zcash Ironwood crate tests
     runs-on: ubuntu-latest
@@ -723,6 +724,20 @@ jobs:
       - uses: ./.github/actions/environment
       - run: nix-shell --run "uv run make -C core test_rust_ironwood"
       - run: nix-shell --run "cd core/embed && cargo clippy -p ironwood --all-targets --features test -- -D warnings"
+      - run: nix-shell --run "cd core/embed && cargo clippy -p ironwood --all-targets --features test,computed-generators -- -D warnings"
+
+  core_ironwood_corpus_test:
+    if: github.event_name == 'schedule'
+    name: Zcash Ironwood corpus and mutation sweeps
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # actions/checkout@v6.0.2
+        with:
+          submodules: recursive
+          persist-credentials: false
+      - uses: ./.github/actions/environment
+      - run: nix-shell --run "uv run make -C core test_rust_ironwood_corpus"
 
   # Device tests for the Zcash Ironwood flows. They need an `--ironwood`
   # emulator, which is why they are their own job and their own artifact:

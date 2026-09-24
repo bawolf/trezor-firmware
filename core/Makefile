@@ -2,7 +2,7 @@
 .PHONY: help \
 	vendor \
 	run emu \
-	test test_rust test_rust_ironwood \
+	test test_rust test_rust_ironwood test_rust_ironwood_corpus \
 	test_emu_sanity test_emu test_emu_multicore test_emu_monero \
 	test_emu_zcash test_emu_zcash_ui test_emu_zcash_ui_record \
 	test_emu_u2f test_emu_fido2 \
@@ -155,6 +155,15 @@ test_rust: ## run rs unit tests
 test_rust_ironwood: ## run the host Ironwood (Zcash) crate tests, without the long corpus
 	cd embed ; cargo test -p ironwood --all-targets --features test --release \
 		-- --skip corpus_ --skip sampled_
+	# The device-arena traces, on the Sinsemilla the firmware links. Cargo
+	# builds them only with `computed-generators` (ironwood/Cargo.toml).
+	cd embed ; cargo test -p ironwood --features test,computed-generators --release \
+		--test rooted_tier --test rooted_tier_prewarm_first --test rooted_tier_vk_first \
+		--test scratch_tier
+
+test_rust_ironwood_corpus: ## run the long Ironwood corpus and mutation sweeps (~15 min)
+	cd embed ; cargo test -p ironwood --all-targets --features test --release \
+		-- corpus_ sampled_
 
 test_emu_sanity: ## make sure the emulator doesn't crash on startup
 	timeout -v 10 $(EMU) --disable-animation --headless --temporary-profile --command true
