@@ -8,6 +8,7 @@ members = [
     "sys",
     "sec",
     "io",
+    "ironwood",
     "upymod",
     "rust",
     "projects/*",
@@ -65,6 +66,8 @@ debug = false
 strip = true
 
 [workspace.dependencies]
+aes = { version = "=0.8.4", default-features = false, features = ["zeroize"] }
+blake2b_simd = { version = "=1.0.2", default-features = false, features = ["uninline_portable"] }
 cfg-if = "1.0"
 cty = "0.2.2"
 easer = { version = "0.3.0", default-features = false, features = ["libm"] }
@@ -73,6 +76,7 @@ log = { version = "0.4.29", features = ["max_level_trace", "release_max_level_of
 minicbor = { version = "1.0.0", default-features = false }
 num-derive = "0.4.2"
 num-traits = { version = "0.2.19", default-features = false, features = ["libm"] }
+ironwood-pasta-curves = { package = "pasta_curves", version = "=0.5.1", default-features = false, features = ["alloc", "uninline-portable"] }
 pareen = { version = "0.3.3", path = "../../rust/pareen", default-features = false, features = ["libm", "easer"] }
 qrcodegen-no-heap = { version = "1.8.1", path = "../vendor/QR-Code-generator/rust-no-heap" }
 spin = { version = "0.9.9", features = ["rwlock", "spin_mutex", "lazy"], default-features = false }
@@ -84,6 +88,9 @@ ufmt = "0.2.0"
 unsize = "1.1.0"
 without-alloc = "0.2.2"
 zeroize = { version = "1.8.2", default-features = false, features = ["zeroize_derive"] }
+# Host-only (ironwood dev-dependency): the canonical ZIP-32 seed fingerprint
+# the crate's own `seed_fingerprint` is tested against.
+zip32 = { version = "=0.2.1", default-features = false }
 
 models = { path = "models" }
 rtl = { path = "rtl" }
