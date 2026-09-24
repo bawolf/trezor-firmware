@@ -116,6 +116,18 @@ fn build_impl(args: ResolvedBuildArgs, is_dependency: bool) -> Result<()> {
 
     let elf = helpers::elf_path(&args)?;
 
+    // Memory usage BEFORE the artifact is published. The map file is the
+    // linker's, so it is complete the moment `cargo build` returns; running
+    // the region floors here means a build that is over budget leaves no
+    // signed binary in `pub/` for someone to pick up, rather than failing
+    // only in the exit code after it has.
+    if !args.emulator && !is_dependency {
+        let mapfile = elf
+            .with_file_name(args.project.binary_name())
+            .with_extension("map");
+        memusage::print_memusage(&mapfile, &args.memory_requirements())?;
+    }
+
     if !args.emulator {
         let use_dev_keys = args.bootloader_devel || !args.production;
 
@@ -161,14 +173,6 @@ fn build_impl(args: ResolvedBuildArgs, is_dependency: bool) -> Result<()> {
 
     // Copy build artifacts (ELF, map files) to the `artifacts` directory
     artifacts::collect_artifacts(&args, is_dependency)?;
-
-    // Print memory usage
-    if !args.emulator && !is_dependency {
-        let mapfile = elf
-            .with_file_name(args.project.binary_name())
-            .with_extension("map");
-        memusage::print_memusage(&mapfile)?;
-    }
 
     Ok(())
 }

@@ -261,6 +261,12 @@ build_options! {
     #[arg(long, num_args = 0..=1, default_missing_value = "true")]
     opt emit_memory_analysis: bool,
 
+    /// Fails the build unless a RAM region still has free bytes to spare,
+    /// as `REGION=BYTES` (e.g. `AUX1_RAM=4096`). A section placed in a nearly
+    /// full region otherwise only breaks on the commit that overflows it.
+    #[arg(long, value_name = "REGION=BYTES")]
+    opt require_free: String,
+
     /// Output cargo timings
     #[arg(long, num_args = 0..=1, default_missing_value = "true")]
     opt timings: bool,
@@ -275,6 +281,11 @@ build_options! {
 }
 
 impl ResolvedBuildArgs {
+    /// The `REGION=BYTES` free-space floors this build must clear.
+    pub fn memory_requirements(&self) -> Vec<String> {
+        self.require_free.clone().into_iter().collect()
+    }
+
     /// Determines the Cargo profile to use
     pub fn cargo_profile_name(&self) -> &'static str {
         if self.debug {

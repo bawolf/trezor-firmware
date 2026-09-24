@@ -33,8 +33,11 @@ fn is_nobits_section(name: &str) -> bool {
 }
 
 /// Prints a table of memory usage by region, based on the contents of
-/// the given map file.
-pub fn print_memusage(mapfile: &Path) -> Result<()> {
+/// the given map file. `requirements` are `REGION=BYTES` free-space floors
+/// the build must clear, in the order they should be reported; a region named
+/// twice is held to the larger of the two, so a default floor cannot be
+/// loosened by naming the same region on the command line.
+pub fn print_memusage(mapfile: &Path, requirements: &[String]) -> Result<()> {
     let content = fs::read_to_string(mapfile)
         .with_context(|| format!("Failed to read `{}`", mapfile.display()))?;
 
@@ -58,8 +61,18 @@ pub fn print_memusage(mapfile: &Path) -> Result<()> {
         "Region", "Used", "Total", "Usage"
     );
 
-    for region in regions {
-        let mut used = used_bytes_for_region(&region, &sections);
+    let mut floors: Vec<(String, u64)> = Vec::new();
+    for requirement in requirements {
+        let (name, bytes) = parse_requirement(requirement)?;
+        match floors.iter_mut().find(|(known, _)| *known == name) {
+            Some((_, known)) => *known = (*known).max(bytes),
+            None => floors.push((name, bytes)),
+        }
+    }
+    let mut satisfied: Vec<&str> = Vec::new();
+
+    for region in &regions {
+        let mut used = used_bytes_for_region(region, &sections);
 
         // Exclude the fixed-size image padding from the reported usage so the
         // figure reflects real content. The padding only applies to the FLASH
@@ -86,9 +99,41 @@ pub fn print_memusage(mapfile: &Path) -> Result<()> {
             percent,
             note
         );
+
+        if let Some((name, floor)) = floors.iter().find(|(name, _)| region.name == *name) {
+            satisfied.push(name);
+            let free = region.length.saturating_sub(used);
+            if free < *floor {
+                bail!(
+                    "{} has {} free, below the required {}",
+                    region.name,
+                    format_bytes(free),
+                    format_bytes(*floor)
+                );
+            }
+        }
+    }
+
+    if let Some((name, _)) = floors
+        .iter()
+        .find(|(name, _)| !satisfied.contains(&name.as_str()))
+    {
+        bail!("Map file does not define a `{name}` region");
     }
 
     Ok(())
+}
+
+/// Parses a `REGION=BYTES` free-space requirement.
+fn parse_requirement(value: &str) -> Result<(String, u64)> {
+    let (name, bytes) = value
+        .split_once('=')
+        .ok_or_else(|| anyhow::anyhow!("Expected `REGION=BYTES`, got `{value}`"))?;
+    let bytes = bytes
+        .trim()
+        .parse::<u64>()
+        .with_context(|| format!("Failed to parse byte count `{bytes}`"))?;
+    Ok((name.trim().to_string(), bytes))
 }
 
 /// Parses the value of a symbol assignment from the map file, i.e. a line of
@@ -368,7 +413,8 @@ fn format_bytes(value: u64) -> String {
 #[cfg(test)]
 mod tests {
     use super::{
-        parse_memory_regions, parse_output_sections, parse_symbol_value, used_bytes_for_region,
+        parse_memory_regions, parse_output_sections, parse_requirement, parse_symbol_value,
+        used_bytes_for_region,
     };
 
     #[test]
@@ -503,6 +549,16 @@ Linker script and memory map
         let sections = parse_output_sections(map).expect("sections should parse");
         assert_eq!(sections.len(), 1);
         assert_eq!(sections[0].name, ".bss");
+    }
+
+    #[test]
+    fn parses_a_free_space_requirement() {
+        assert_eq!(
+            parse_requirement("AUX1_RAM=4096").unwrap(),
+            ("AUX1_RAM".to_string(), 4096)
+        );
+        assert!(parse_requirement("AUX1_RAM").is_err());
+        assert!(parse_requirement("AUX1_RAM=lots").is_err());
     }
 
     #[test]
