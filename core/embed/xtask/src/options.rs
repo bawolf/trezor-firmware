@@ -1,4 +1,4 @@
-use anyhow::Result;
+use anyhow::{Result, bail};
 use clap::Args;
 use serde::Deserialize;
 
@@ -107,12 +107,14 @@ macro_rules! build_options {
                 let o = preset_options
                     .overlay(args.options.clone());
 
-                Ok(Self {
+                let resolved = Self {
                     project: args.project,
                     model: args.model,
                     emulator: args.emulator,
                     $($name: <$ty as ResolveValue>::resolve(o.$name),)+
-                })
+                };
+                resolved.validate()?;
+                Ok(resolved)
             }
         }
 
@@ -210,6 +212,12 @@ build_options! {
     #[arg(long, num_args = 0..=1, default_missing_value = "true")]
     map ward: bool,
 
+    /// Enable experimental Ironwood (Zcash) support. Firmware builds only,
+    /// and only for the models in `IRONWOOD_MODELS`; the error message on an
+    /// unsupported target lists them, so this text does not repeat the list.
+    #[arg(long, num_args = 0..=1, default_missing_value = "true")]
+    map ironwood: bool,
+
     /// Disable UI animations
     #[arg(long, num_args = 0..=1, default_missing_value = "true")]
     map disable_animation: bool,
@@ -261,6 +269,12 @@ build_options! {
     #[arg(long, num_args = 0..=1, default_missing_value = "true")]
     opt emit_memory_analysis: bool,
 
+    /// Fails the build unless a RAM region still has free bytes to spare,
+    /// as `REGION=BYTES` (e.g. `AUX1_RAM=4096`). A section placed in a nearly
+    /// full region otherwise only breaks on the commit that overflows it.
+    #[arg(long, value_name = "REGION=BYTES")]
+    opt require_free: String,
+
     /// Output cargo timings
     #[arg(long, num_args = 0..=1, default_missing_value = "true")]
     opt timings: bool,
@@ -274,7 +288,99 @@ build_options! {
     opt xbuild_trace: bool,
 }
 
+/// Models whose firmware may be built with `--ironwood`.
+///
+/// All three are STM32U5 / Cortex-M33 (`thumbv8m.main-none-eabihf`) parts, so
+/// the `no_std` signer core is architecture-identical. The zcash apps go
+/// through the model-agnostic `trezor.ui.layouts` facade, so the delizia
+/// (T3T1), eckhart (T3W1) and caesar (T3B1) layouts all serve them without
+/// app-level branching.
+///
+/// The STM32F4 / Cortex-M4 models (T2T1 Model T, T2B1 Safe 3 gen 1, D001) are
+/// excluded on capacity, not on architecture: their `.stack`, `.buf` and
+/// `.heap` all share a single 191 KiB AUX1_RAM, so the boot-lifetime 96 KiB
+/// signing REGION cannot coexist with a workable MicroPython heap, and they
+/// have no U5 crypto accelerators. The remaining exclusions are not technical:
+/// T3T2 is unreleased, and D002/D003 are STM32U5 bring-up devkits, so none of
+/// them ships product firmware and none has been measured. (T3T2's 1640 KiB
+/// slot is not the obstacle -- the T3B1 image fits in 1463.5 KiB.)
+///
+/// This list is the single source of truth: the rejection message and both
+/// the positive and the negative test derive from it, so adding a model is a
+/// one-line change here.
+pub(crate) const IRONWOOD_MODELS: &[Model] = &[Model::T3B1, Model::T3T1, Model::T3W1];
+
+/// Bytes of AUX1_RAM an `--ironwood` build must leave free on a model whose
+/// `.zcash_region` shares a bank with `.bss`.
+///
+/// The 40 KiB signing region is linked into AUX1_RAM, which is also the bank
+/// `.bss` grows into, so unrelated `.bss` growth is what would push it out --
+/// as a bank overflow at link time, on a commit that has nothing to do with
+/// Zcash. This turns that into a named build error while there is still slack
+/// to argue about.
+pub(crate) const IRONWOOD_AUX1_FLOOR: u64 = 4096;
+
+/// Models that carry [`IRONWOOD_AUX1_FLOOR`]: the two-bank parts. T3W1 has one
+/// bank that ends in `.heap`, which is `ABSOLUTE(ORIGIN + LENGTH)`, so its
+/// AUX1 slack IS the heap and always reads zero -- a floor there would fail
+/// every build.
+pub(crate) const IRONWOOD_FLOOR_MODELS: &[Model] = &[Model::T3B1, Model::T3T1];
+
+/// The models `--ironwood` accepts, as the rejection message spells them.
+pub(crate) fn ironwood_models_phrase() -> String {
+    IRONWOOD_MODELS
+        .iter()
+        .map(|model| model.model_id())
+        .collect::<Vec<_>>()
+        .join(", ")
+}
+
+/// The rejection every unsupported `--ironwood` target gets. Shared with the
+/// tests so a new model needs no test edit.
+pub(crate) fn ironwood_unsupported_message() -> String {
+    format!(
+        "--ironwood is supported only for {} firmware builds",
+        ironwood_models_phrase()
+    )
+}
+
 impl ResolvedBuildArgs {
+    /// Validates options against the user-selected top-level build target.
+    ///
+    /// This runs while resolving [`BuildArgs`], before a firmware build clones
+    /// the resolved arguments for its dependencies. Options that a dependency
+    /// project does not map are intentionally ignored when resolving features
+    /// for that cloned dependency build.
+    fn validate(&self) -> Result<()> {
+        if self.ironwood
+            && (self.project != Project::Firmware || !IRONWOOD_MODELS.contains(&self.model))
+        {
+            bail!(ironwood_unsupported_message());
+        }
+        if self.ironwood && self.btc_only {
+            bail!("--ironwood cannot be combined with --btc-only");
+        }
+        Ok(())
+    }
+
+    /// The `REGION=BYTES` free-space floors this build must clear.
+    ///
+    /// The Ironwood AUX1 floor is applied by the build itself, not only by
+    /// the `core/Makefile` invocation that names it: a direct `cargo xtask
+    /// build --ironwood` is the same image on the same bank and has the same
+    /// way to fail. `--require-free` adds to this rather than replacing it,
+    /// and `print_memusage` holds a twice-named region to the larger floor,
+    /// so passing the same value from the Makefile is a no-op and passing a
+    /// smaller one cannot loosen it.
+    pub fn memory_requirements(&self) -> Vec<String> {
+        let mut requirements = Vec::new();
+        if self.ironwood && IRONWOOD_FLOOR_MODELS.contains(&self.model) {
+            requirements.push(format!("AUX1_RAM={IRONWOOD_AUX1_FLOOR}"));
+        }
+        requirements.extend(self.require_free.clone());
+        requirements
+    }
+
     /// Determines the Cargo profile to use
     pub fn cargo_profile_name(&self) -> &'static str {
         if self.debug {
@@ -402,5 +508,62 @@ mod tests {
     fn rejects_unknown_console_types() {
         let result: Result<OptionsMap, _> = toml::from_str(r#"dbg-console = { uart = ["x"] }"#);
         assert!(result.is_err());
+    }
+
+    /// The AUX1 floor is the build's, not the Makefile's: any entry point
+    /// that produces an Ironwood image on a two-bank model carries it.
+    #[test]
+    fn an_ironwood_build_floors_aux1_without_being_asked() {
+        for &model in IRONWOOD_FLOOR_MODELS {
+            let args = ResolvedBuildArgs {
+                model,
+                ironwood: true,
+                ..ResolvedBuildArgs::default()
+            };
+            assert_eq!(
+                args.memory_requirements(),
+                [format!("AUX1_RAM={IRONWOOD_AUX1_FLOOR}")],
+                "{model:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn a_floor_is_asked_for_only_where_it_means_something() {
+        // T3W1's AUX1 slack is its heap, so it reads zero free on a healthy
+        // build; and a non-Ironwood image has no `.zcash_region` to protect.
+        for args in [
+            ResolvedBuildArgs {
+                model: Model::T3W1,
+                ironwood: true,
+                ..ResolvedBuildArgs::default()
+            },
+            ResolvedBuildArgs {
+                model: Model::T3T1,
+                ironwood: false,
+                ..ResolvedBuildArgs::default()
+            },
+        ] {
+            assert!(args.memory_requirements().is_empty());
+        }
+    }
+
+    /// `core/Makefile` passes the same floor; both may be present and the
+    /// command line may add another region, but neither can drop the default.
+    #[test]
+    fn an_explicit_requirement_adds_to_the_floor_and_never_replaces_it() {
+        let args = ResolvedBuildArgs {
+            model: Model::T3T1,
+            ironwood: true,
+            require_free: Some("FLASH=1024".to_string()),
+            ..ResolvedBuildArgs::default()
+        };
+        assert_eq!(
+            args.memory_requirements(),
+            [
+                format!("AUX1_RAM={IRONWOOD_AUX1_FLOOR}"),
+                "FLASH=1024".to_string()
+            ]
+        );
     }
 }

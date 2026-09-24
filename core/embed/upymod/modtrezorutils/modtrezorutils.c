@@ -852,6 +852,8 @@ static const mp_obj_tuple_t mod_trezorutils_version_obj = {
 /// """Whether the hardware supports backlight brightness control."""
 /// USE_HAPTIC: bool
 /// """Whether the hardware supports haptic feedback."""
+/// USE_IRONWOOD: bool
+/// """Whether the native Ironwood receiver adapter is enabled."""
 /// USE_RGB_LED: bool
 /// """Whether the hardware supports RGB LED."""
 /// USE_OPTIGA: bool
@@ -1005,6 +1007,11 @@ static const mp_rom_map_elem_t mp_module_trezorutils_globals_table[] = {
     {MP_ROM_QSTR(MP_QSTR_USE_SERIAL_NUMBER), mp_const_true},
 #else
     {MP_ROM_QSTR(MP_QSTR_USE_SERIAL_NUMBER), mp_const_false},
+#endif
+#if USE_IRONWOOD
+    {MP_ROM_QSTR(MP_QSTR_USE_IRONWOOD), mp_const_true},
+#else
+    {MP_ROM_QSTR(MP_QSTR_USE_IRONWOOD), mp_const_false},
 #endif
 #if USE_MINISCRIPT
     {MP_ROM_QSTR(MP_QSTR_USE_MINISCRIPT), mp_const_true},

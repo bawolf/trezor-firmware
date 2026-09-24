@@ -2,7 +2,7 @@
 .PHONY: help \
 	vendor \
 	run emu \
-	test test_rust \
+	test test_rust test_rust_ironwood \
 	test_emu_sanity test_emu test_emu_multicore test_emu_monero \
 	test_emu_u2f test_emu_fido2 \
 	test_emu_click test_emu_click_ui test_emu_click_ui_multicore \
@@ -70,6 +70,21 @@ endif
 ifeq ($(MINISCRIPT),1)
 XTASK_BUILD_OPTS += --miniscript
 endif
+ifeq ($(IRONWOOD),1)
+XTASK_BUILD_OPTS += --ironwood
+# The Zcash signing arena is a 40 KiB section in AUX1, the bank .bss lives in
+# on the two-bank models, so unrelated .bss growth is what would push it out.
+# Fail while there is still slack to argue about rather than on the commit that
+# overflows the bank. T3W1 has one bank whose slack IS the heap, so no floor.
+#
+# `cargo xtask build --ironwood` applies this same floor on the same models by
+# itself (xtask/src/options.rs: IRONWOOD_AUX1_FLOOR), so it is enforced on
+# every build path, not only this one. Stated here as well because this is
+# what CI reads, and a twice-named region is held to the larger floor.
+ifneq (,$(filter $(TREZOR_MODEL),T3T1 T3B1))
+XTASK_BUILD_OPTS += --require-free AUX1_RAM=4096
+endif
+endif
 ifeq ($(N1W1),1)
 XTASK_BUILD_OPTS += --n1w1
 endif
@@ -135,6 +150,10 @@ test_rust: ## run rs unit tests
 	xtask test trezor_lib
 	# TODO:
 	# xtask test all
+
+test_rust_ironwood: ## run the host Ironwood (Zcash) crate tests, without the long corpus
+	cd embed ; cargo test -p ironwood --all-targets --features test --release \
+		-- --skip corpus_ --skip sampled_
 
 test_emu_sanity: ## make sure the emulator doesn't crash on startup
 	timeout -v 10 $(EMU) --disable-animation --headless --temporary-profile --command true

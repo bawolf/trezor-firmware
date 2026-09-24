@@ -182,7 +182,11 @@ pub fn configure_cargo(args: &ResolvedBuildArgs, cmd: &mut process::Command) -> 
     }
 
     if rebuild_std {
-        cmd.arg("-Zbuild-std=core");
+        if args.ironwood && matches!(args.project, crate::args::Project::Firmware) {
+            cmd.arg("-Zbuild-std=core,alloc");
+        } else {
+            cmd.arg("-Zbuild-std=core");
+        }
     }
 
     forward_color_choice(cmd);
@@ -192,8 +196,189 @@ pub fn configure_cargo(args: &ResolvedBuildArgs, cmd: &mut process::Command) -> 
 
 #[cfg(test)]
 mod tests {
+    use clap::ValueEnum;
+
     use super::*;
-    use crate::args::Project;
+    use crate::args::{BuildArgs, Model, Project};
+    use crate::options::{BuildOptions, IRONWOOD_MODELS, ironwood_unsupported_message};
+
+    fn ironwood_build_args(project: Project, model: Model) -> BuildArgs {
+        BuildArgs {
+            project,
+            model,
+            emulator: false,
+            preset: None,
+            options: BuildOptions {
+                ironwood: Some(true),
+                ..BuildOptions::default()
+            },
+        }
+    }
+
+    #[test]
+    fn omits_ironwood_by_default() {
+        let args = ResolvedBuildArgs {
+            model: Model::T3T1,
+            frozen: true,
+            pyopt: true,
+            ..ResolvedBuildArgs::default()
+        };
+
+        let features = resolve_features(&args).unwrap().features;
+        assert!(!features.contains(&"ironwood".to_string()));
+    }
+
+    #[test]
+    fn enables_ironwood_for_safe_5_firmware_emulator() {
+        let args = ResolvedBuildArgs {
+            model: Model::T3T1,
+            emulator: true,
+            ironwood: true,
+            frozen: true,
+            pyopt: true,
+            ..ResolvedBuildArgs::default()
+        };
+
+        let features = resolve_features(&args).unwrap().features;
+        assert!(features.contains(&"ironwood".to_string()));
+    }
+
+    /// Every model on the allow-list builds with the feature, and gets the
+    /// layout its model config selects. Derived from `IRONWOOD_MODELS`, so a
+    /// new model needs no edit here.
+    #[test]
+    fn enables_ironwood_for_every_allowed_model() {
+        for &model in IRONWOOD_MODELS {
+            let args = ResolvedBuildArgs {
+                model,
+                ironwood: true,
+                frozen: true,
+                pyopt: true,
+                ..ResolvedBuildArgs::default()
+            };
+
+            let features = resolve_features(&args).unwrap().features;
+            assert!(
+                features.contains(&"ironwood".to_string()),
+                "{} must build with ironwood",
+                model.model_id()
+            );
+        }
+    }
+
+    /// The three layouts the zcash screens must serve, one per allowed model.
+    #[test]
+    fn allowed_models_cover_caesar_delizia_and_eckhart() {
+        for (model, layout) in [
+            (Model::T3B1, "layout_caesar"),
+            (Model::T3T1, "layout_delizia"),
+            (Model::T3W1, "layout_eckhart"),
+        ] {
+            assert!(
+                IRONWOOD_MODELS.contains(&model),
+                "{} left the allow-list; this table needs updating",
+                model.model_id()
+            );
+            let args = ResolvedBuildArgs {
+                model,
+                ironwood: true,
+                frozen: true,
+                pyopt: true,
+                ..ResolvedBuildArgs::default()
+            };
+
+            let features = resolve_features(&args).unwrap().features;
+            assert!(features.contains(&layout.to_string()));
+        }
+    }
+
+    /// Everything not on the allow-list is refused, including the D00x
+    /// devkits a hand-written list kept forgetting.
+    #[test]
+    fn rejects_ironwood_for_other_models() {
+        let rejected: Vec<Model> = Model::value_variants()
+            .iter()
+            .copied()
+            .filter(|model| !IRONWOOD_MODELS.contains(model))
+            .collect();
+        assert!(!rejected.is_empty());
+        for model in rejected {
+            let error =
+                ResolvedBuildArgs::from_build_args(&ironwood_build_args(Project::Firmware, model))
+                    .unwrap_err();
+            assert_eq!(error.to_string(), ironwood_unsupported_message());
+        }
+    }
+
+    #[test]
+    fn rejects_ironwood_for_other_projects() {
+        let error =
+            ResolvedBuildArgs::from_build_args(&ironwood_build_args(Project::Kernel, Model::T3T1))
+                .unwrap_err();
+        assert_eq!(error.to_string(), ironwood_unsupported_message());
+    }
+
+    /// The message names every allowed model, so a user reading it does not
+    /// have to guess which targets `--ironwood` accepts.
+    #[test]
+    fn the_rejection_message_lists_every_allowed_model() {
+        let message = ironwood_unsupported_message();
+        for model in IRONWOOD_MODELS {
+            assert!(
+                message.contains(model.model_id()),
+                "{message:?} must name {}",
+                model.model_id()
+            );
+        }
+    }
+
+    #[test]
+    fn rejects_ironwood_for_bitcoin_only_firmware() {
+        let mut args = ironwood_build_args(Project::Firmware, Model::T3T1);
+        args.options.btc_only = Some(true);
+        let error = ResolvedBuildArgs::from_build_args(&args).unwrap_err();
+        assert_eq!(
+            error.to_string(),
+            "--ironwood cannot be combined with --btc-only"
+        );
+    }
+
+    #[test]
+    fn omits_ironwood_from_firmware_dependency_builds() {
+        let firmware_args = ResolvedBuildArgs::from_build_args(&ironwood_build_args(
+            Project::Firmware,
+            Model::T3T1,
+        ))
+        .unwrap();
+        let firmware_features = resolve_features(&firmware_args).unwrap().features;
+        assert!(firmware_features.contains(&"ironwood".to_string()));
+
+        let dependency_args = ResolvedBuildArgs {
+            project: Project::Kernel,
+            ..firmware_args
+        };
+
+        let features = resolve_features(&dependency_args).unwrap().features;
+        assert!(!features.contains(&"ironwood".to_string()));
+    }
+
+    #[test]
+    fn accepts_explicitly_disabled_ironwood_for_unsupported_targets() {
+        let args = BuildArgs {
+            project: Project::Kernel,
+            model: Model::T3W1,
+            emulator: false,
+            preset: None,
+            options: BuildOptions {
+                ironwood: Some(false),
+                ..BuildOptions::default()
+            },
+        };
+        let resolved = ResolvedBuildArgs::from_build_args(&args).unwrap();
+
+        let features = resolve_features(&resolved).unwrap().features;
+        assert!(!features.contains(&"ironwood".to_string()));
+    }
 
     #[test]
     fn rejects_insecure_storage_in_production_builds() {

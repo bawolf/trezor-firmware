@@ -33,8 +33,11 @@ fn is_nobits_section(name: &str) -> bool {
 }
 
 /// Prints a table of memory usage by region, based on the contents of
-/// the given map file.
-pub fn print_memusage(mapfile: &Path) -> Result<()> {
+/// the given map file. `requirements` are `REGION=BYTES` free-space floors
+/// the build must clear, in the order they should be reported; a region named
+/// twice is held to the larger of the two, so a default floor cannot be
+/// loosened by naming the same region on the command line.
+pub fn print_memusage(mapfile: &Path, requirements: &[String]) -> Result<()> {
     let content = fs::read_to_string(mapfile)
         .with_context(|| format!("Failed to read `{}`", mapfile.display()))?;
 
@@ -58,8 +61,18 @@ pub fn print_memusage(mapfile: &Path) -> Result<()> {
         "Region", "Used", "Total", "Usage"
     );
 
-    for region in regions {
-        let mut used = used_bytes_for_region(&region, &sections);
+    let mut floors: Vec<(String, u64)> = Vec::new();
+    for requirement in requirements {
+        let (name, bytes) = parse_requirement(requirement)?;
+        match floors.iter_mut().find(|(known, _)| *known == name) {
+            Some((_, known)) => *known = (*known).max(bytes),
+            None => floors.push((name, bytes)),
+        }
+    }
+    let mut satisfied: Vec<&str> = Vec::new();
+
+    for region in &regions {
+        let mut used = used_bytes_for_region(region, &sections);
 
         // Exclude the fixed-size image padding from the reported usage so the
         // figure reflects real content. The padding only applies to the FLASH
@@ -86,9 +99,41 @@ pub fn print_memusage(mapfile: &Path) -> Result<()> {
             percent,
             note
         );
+
+        if let Some((name, floor)) = floors.iter().find(|(name, _)| region.name == *name) {
+            satisfied.push(name);
+            let free = region.length.saturating_sub(used);
+            if free < *floor {
+                bail!(
+                    "{} has {} free, below the required {}",
+                    region.name,
+                    format_bytes(free),
+                    format_bytes(*floor)
+                );
+            }
+        }
+    }
+
+    if let Some((name, _)) = floors
+        .iter()
+        .find(|(name, _)| !satisfied.contains(&name.as_str()))
+    {
+        bail!("Map file does not define a `{name}` region");
     }
 
     Ok(())
+}
+
+/// Parses a `REGION=BYTES` free-space requirement.
+fn parse_requirement(value: &str) -> Result<(String, u64)> {
+    let (name, bytes) = value
+        .split_once('=')
+        .ok_or_else(|| anyhow::anyhow!("Expected `REGION=BYTES`, got `{value}`"))?;
+    let bytes = bytes
+        .trim()
+        .parse::<u64>()
+        .with_context(|| format!("Failed to parse byte count `{bytes}`"))?;
+    Ok((name.trim().to_string(), bytes))
 }
 
 /// Parses the value of a symbol assignment from the map file, i.e. a line of
@@ -200,6 +245,17 @@ fn parse_output_sections(content: &str) -> Result<Vec<OutputSection>> {
     // This section contains a lot of other information,
     // but we only care about lines that start with '.'
 
+    // GNU ld pads the name to 15 characters and wraps a name that does not fit
+    // onto its own line, putting the address and size on the next one:
+
+    //.no_dma_buffers
+    //                0x3001dd7c      0x6fd4
+
+    // A section dropped for being 16 characters long is silently missing from
+    // its region's total, which is how a nearly full RAM bank can look
+    // half empty.
+    let mut pending: Option<&str> = None;
+
     for line in content.lines() {
         let trimmed = line.trim_start();
 
@@ -210,23 +266,37 @@ fn parse_output_sections(content: &str) -> Result<Vec<OutputSection>> {
             continue;
         }
 
-        if !line.starts_with('.') {
-            continue;
-        }
-
-        let mut parts = line.split_whitespace();
-        let Some(name) = parts.next() else {
-            continue;
+        let mut parts = trimmed.split_whitespace();
+        let name = if line.starts_with('.') {
+            pending = None;
+            let Some(name) = parts.next() else {
+                continue;
+            };
+            if parts.clone().next().is_none() {
+                // Nothing but the name on this line: it was too long for the
+                // column, so its figures are on the next one.
+                pending = Some(name);
+                continue;
+            }
+            name
+        } else {
+            // Only the line immediately after a wrapped name carries its
+            // figures; anything else drops it, as an unparsable line always was.
+            let Some(name) = pending.take() else {
+                continue;
+            };
+            name
         };
+
         let Some(address) = parts.next() else {
             continue;
         };
         let Some(size) = parts.next() else {
             continue;
         };
-
-        let address = parse_hex(address)?;
-        let size = parse_hex(size)?;
+        let (Ok(address), Ok(size)) = (parse_hex(address), parse_hex(size)) else {
+            continue;
+        };
         if size == 0 {
             continue;
         }
@@ -343,7 +413,8 @@ fn format_bytes(value: u64) -> String {
 #[cfg(test)]
 mod tests {
     use super::{
-        parse_memory_regions, parse_output_sections, parse_symbol_value, used_bytes_for_region,
+        parse_memory_regions, parse_output_sections, parse_requirement, parse_symbol_value,
+        used_bytes_for_region,
     };
 
     #[test]
@@ -431,6 +502,63 @@ Linker script and memory map
         assert_eq!(used_bytes_for_region(flash, &sections), 0x120);
         // RAM: .data + .bss + .stack VMAs are all counted as usual.
         assert_eq!(used_bytes_for_region(ram, &sections), 0x10060);
+    }
+
+    #[test]
+    fn counts_a_section_whose_name_wraps_onto_its_own_line() {
+        // GNU ld pads the name column to 15 characters and wraps anything
+        // longer. `.no_dma_buffers` is 15 characters plus the leading dot, so
+        // on T3T1 it wraps -- and dropping it hid 28 KB of AUX1.
+        let map = r#"
+Memory Configuration
+
+Name             Origin             Length             Attributes
+AUX1_RAM         0x30000000         0x00030000         rw
+*default*        0x00000000         0xffffffff
+
+Linker script and memory map
+
+.bss            0x30000000      0x1000
+.no_dma_buffers
+                0x30001000      0x2000
+.zcash_region   0x30003000      0xa000
+"#;
+
+        let regions = parse_memory_regions(map).expect("memory regions should parse");
+        let sections = parse_output_sections(map).expect("sections should parse");
+
+        let names: Vec<_> = sections.iter().map(|s| s.name.as_str()).collect();
+        assert_eq!(names, [".bss", ".no_dma_buffers", ".zcash_region"]);
+
+        let aux1 = regions.iter().find(|r| r.name == "AUX1_RAM").unwrap();
+        assert_eq!(used_bytes_for_region(aux1, &sections), 0xd000);
+    }
+
+    #[test]
+    fn a_wrapped_name_without_figures_is_dropped() {
+        // A name alone at the end of the map, or followed by a symbol
+        // assignment rather than its figures, must not invent a section.
+        let map = r#"
+Linker script and memory map
+
+.no_dma_buffers
+                0x000018e4                        __flash_padding_size = 0x18e4
+.bss            0x30000000      0x1000
+"#;
+
+        let sections = parse_output_sections(map).expect("sections should parse");
+        assert_eq!(sections.len(), 1);
+        assert_eq!(sections[0].name, ".bss");
+    }
+
+    #[test]
+    fn parses_a_free_space_requirement() {
+        assert_eq!(
+            parse_requirement("AUX1_RAM=4096").unwrap(),
+            ("AUX1_RAM".to_string(), 4096)
+        );
+        assert!(parse_requirement("AUX1_RAM").is_err());
+        assert!(parse_requirement("AUX1_RAM=lots").is_err());
     }
 
     #[test]
