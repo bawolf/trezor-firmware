@@ -616,6 +616,14 @@ def pytest_addoption(parser: "Parser") -> None:
         default=False,
         help="Issue a warning when GC leak detected (otherwise, fail the test)",
     )
+    parser.addoption(
+        "--ironwood",
+        action="store_true",
+        default=False,
+        help="Run tests marked `ironwood`. They need firmware built with the "
+        "`--ironwood` xtask flag (make IRONWOOD=1); a stock build answers "
+        '"Ironwood is not supported".',
+    )
 
 
 def pytest_configure(config: "Config") -> None:
@@ -674,6 +682,12 @@ def pytest_runtest_setup(item: pytest.Item) -> None:
     models_filter = ModelsFilter(item)
     if not models_filter:
         raise RuntimeError("Don't skip tests for all trezor models!")
+
+    # Ironwood tests run only when `--ironwood` asks for them. Skipping them on a
+    # missing `Capability.Zcash_Shielded` would let a run against the wrong
+    # firmware pass silently; `test_capabilities` checks the flag against it.
+    if item.get_closest_marker("ironwood") and not item.config.getoption("--ironwood"):
+        pytest.skip("Skipping Ironwood test; pass --ironwood against an Ironwood build")
 
 
 @pytest.hookimpl(tryfirst=True, hookwrapper=True)

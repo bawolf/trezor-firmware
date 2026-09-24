@@ -25,12 +25,15 @@ from trezorlib.protobuf import MessageType
 from ..click_tests.device_menu.common import open_device_menu
 
 
-def test_capabilities(session: Session):
+def test_capabilities(session: Session, request: pytest.FixtureRequest):
     assert (messages.Capability.Translations in session.features.capabilities) == (
         session.model is not models.T1B1
     )
     assert (messages.Capability.BLE in session.features.capabilities) == (
         session.model is models.T3W1
+    )
+    assert (messages.Capability.Zcash_Shielded in session.features.capabilities) == (
+        request.config.getoption("--ironwood")
     )
 
 

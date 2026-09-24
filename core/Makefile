@@ -4,6 +4,7 @@
 	run emu \
 	test test_rust test_rust_ironwood \
 	test_emu_sanity test_emu test_emu_multicore test_emu_monero \
+	test_emu_zcash test_emu_zcash_ui test_emu_zcash_ui_record \
 	test_emu_u2f test_emu_fido2 \
 	test_emu_click test_emu_click_ui test_emu_click_ui_multicore \
 	test_emu_persistence test_emu_persistence_ui test_emu_upgrade \
@@ -165,6 +166,21 @@ test_emu_multicore: ## run device tests using multiple cores
 	$(PYTEST) -n $(MULTICORE) $(TESTPATH)/device_tests $(TESTOPTS) --timeout $(PYTEST_TIMEOUT) \
 		--control-emulators --model=core --random-order-seed=$(RANDOM) \
 		--lang=$(TEST_LANG)
+
+test_emu_zcash: ## run Zcash Ironwood device tests (needs an IRONWOOD=1 emulator)
+	$(EMU_TEST) $(PYTEST) $(TESTPATH)/device_tests/zcash \
+		$(TESTPATH)/device_tests/test_basic.py::test_capabilities --ironwood $(TESTOPTS) \
+		--lang=$(TEST_LANG)
+
+test_emu_zcash_ui: ## run Zcash Ironwood device tests with UI testing
+	$(EMU_TEST) $(PYTEST) $(TESTPATH)/device_tests/zcash \
+		$(TESTPATH)/device_tests/test_basic.py::test_capabilities --ironwood $(TESTOPTS) \
+		--ui=test --lang=$(TEST_LANG)
+
+test_emu_zcash_ui_record: ## record screens for the Zcash Ironwood device tests
+	$(EMU_TEST) $(PYTEST) $(TESTPATH)/device_tests/zcash \
+		$(TESTPATH)/device_tests/test_basic.py::test_capabilities --ironwood $(TESTOPTS) \
+		--ui=record --lang=$(TEST_LANG)
 
 test_emu_monero: ## run selected monero device tests from monero-agent
 	cd tests ; $(EMU_TEST) ./run_tests_device_emu_monero.sh $(TESTOPTS)
