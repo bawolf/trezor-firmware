@@ -1591,8 +1591,14 @@ static void _librust_qstrs(void) {
   MP_QSTR_u2f__set_template;
   MP_QSTR_u2f__title_get;
   MP_QSTR_u2f__title_set;
+  MP_QSTR_zcash__expires_at_block;
   MP_QSTR_zcash__export_viewing_key;
+  MP_QSTR_zcash__memo;
+  MP_QSTR_zcash__memo_hash;
+  MP_QSTR_zcash__public_amount;
   MP_QSTR_zcash__seed_fingerprint_warning;
+  MP_QSTR_zcash__total_actions;
+  MP_QSTR_zcash__transparent_payment_warning;
   MP_QSTR_zcash__viewing_key_warning;
   MP_QSTR_zcash__weak_backup_warning;
 #endif
@@ -1604,5 +1610,10 @@ static void _librust_qstrs(void) {
   MP_QSTR_derive_receiver;
   MP_QSTR_derive_viewing_key;
   MP_QSTR_seed_fingerprint;
+  MP_QSTR_session_approve;
+  MP_QSTR_session_begin;
+  MP_QSTR_session_cancel;
+  MP_QSTR_session_feed;
+  MP_QSTR_session_sign;
 #endif
 }

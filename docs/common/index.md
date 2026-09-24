@@ -25,3 +25,4 @@ Tools for managing coin definitions and related data.
 ## Message Workflows
 
 - [Bitcoin transaction signing](bitcoin-signing.md)
+- [Zcash shielded signing](zcash-ironwood-signing.md)

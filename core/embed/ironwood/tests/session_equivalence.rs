@@ -1026,6 +1026,8 @@ fn fresh_session() -> Session<ChaCha20Rng> {
 struct Run {
     /// Every `ConfirmOutput`, in order.
     confirmed: Vec<ReviewedOutput>,
+    /// The `user_address` of each `ConfirmOutput`, in the same order.
+    user_addresses: Vec<Option<String>>,
     /// Every `ConfirmTransparentOutput`, in order.
     transparent: Vec<ironwood::TransparentOutput>,
     review: Option<Review>,
@@ -1042,6 +1044,7 @@ fn stream_into(
     session.begin(declared, &keys().0, &SEED_FINGERPRINT)?;
     let mut run = Run {
         confirmed: Vec::new(),
+        user_addresses: Vec::new(),
         transparent: Vec::new(),
         review: None,
     };
@@ -1060,10 +1063,14 @@ fn stream_into(
             rest = &rest[consumed..];
             match event {
                 Event::None => {}
-                Event::ConfirmOutput { output, .. } => {
+                Event::ConfirmOutput {
+                    output,
+                    user_address,
+                } => {
                     assert!(run.review.is_none(), "confirmation after review");
                     assert_eq!(output.kind, OutputKind::Payment);
                     run.confirmed.push(output);
+                    run.user_addresses.push(user_address);
                 }
                 Event::ConfirmTransparentOutput(output) => {
                     assert!(run.review.is_none(), "confirmation after review");
@@ -1080,36 +1087,17 @@ fn stream_into(
     Ok(run)
 }
 
-/// The `user_address` of each payment confirmation, in order.
-fn confirmed_user_addresses(bytes: &[u8]) -> Vec<Option<String>> {
-    let mut session = fresh_session();
-    session
-        .begin(bytes.len(), &keys().0, &SEED_FINGERPRINT)
-        .unwrap();
-    let mut addresses = Vec::new();
-    let mut rest = bytes;
-    while !rest.is_empty() {
-        let (consumed, event) = session.feed(rest, &keys().0).unwrap();
-        rest = &rest[consumed..];
-        if let Event::ConfirmOutput { user_address, .. } = event {
-            addresses.push(user_address);
-        }
-    }
-    addresses
-}
-
 #[test]
-fn a_payment_confirmation_carries_the_wallet_string_for_the_handler_to_check() {
+fn a_payment_confirmation_carries_its_user_address() {
     let bare = fixture();
-    assert_eq!(confirmed_user_addresses(&bare), [None]);
     let named = mutate_bytes(&bare, |v| {
         let i = payment(v);
         with_action(v, i)["output"]["user_address"] = json!("u1recipient");
     });
-    assert_eq!(
-        confirmed_user_addresses(&named),
-        [Some("u1recipient".to_string())]
-    );
+    for (bytes, expected) in [(bare, None), (named, Some("u1recipient".to_string()))] {
+        let run = run(&mut fresh_session(), &bytes, bytes.len()).unwrap();
+        assert_eq!(run.user_addresses, [expected]);
+    }
 }
 
 fn run(session: &mut Session<ChaCha20Rng>, bytes: &[u8], chunk: usize) -> Result<Run> {

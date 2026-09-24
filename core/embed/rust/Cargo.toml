@@ -30,6 +30,7 @@ pareen.workspace = true
 qrcodegen-no-heap.workspace = true
 ironwood = { workspace = true, optional = true }
 orchard = { workspace = true, optional = true }
+rand_core = { workspace = true, optional = true }
 spin.workspace = true
 static-alloc.workspace = true
 trezor-thp = { workspace = true, optional = true }
@@ -80,7 +81,12 @@ layout_delizia = []
 layout_eckhart = []
 zcash_shielded = [
     "dep:orchard",
+    "dep:rand_core",
     "dep:ironwood",
+    # Flash lever: production firmware links the small-flash computed-generators
+    # Sinsemilla. Host regression (`cargo test -p ironwood`) omits it and
+    # links the fast table generators instead (see the crate feature comment).
+    "ironwood/computed-generators",
 ]
 micropython = ["dep:upymod"]
 miniscript = []

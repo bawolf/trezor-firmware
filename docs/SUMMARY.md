@@ -43,6 +43,7 @@
     - [Specification](common/thp/specification.md)
     - [Sessions](common/thp/sessions.md)
   - [Bitcoin signing](common/bitcoin-signing.md)
+  - [Zcash shielded signing](common/zcash-ironwood-signing.md)
   - [Reproducible builds](common/reproducible-build.md)
   - [Message Workflows](common/message-workflows.md)
   - [External definitions](common/external-definitions.md)

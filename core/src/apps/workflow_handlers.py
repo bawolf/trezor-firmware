@@ -247,6 +247,8 @@ def _find_message_handler_module(msg_type: int) -> str:
             return "apps.zcash.get_address"
         if utils.USE_ZCASH_SHIELDED and msg_type == MessageType.ZcashGetViewingKey:
             return "apps.zcash.get_viewing_key"
+        if utils.USE_ZCASH_SHIELDED and msg_type == MessageType.ZcashSignPczt:
+            return "apps.zcash.sign_pczt"
 
     raise ValueError
 
