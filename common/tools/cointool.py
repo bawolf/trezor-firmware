@@ -159,6 +159,7 @@ ALTCOIN_PREFIXES = (
     "tezos",
     "tron",
     "u2f",
+    "zcash",
 )
 
 DEBUG_PREFIXES = ("debug",)

@@ -196,6 +196,7 @@ message Features {
         reserved 27;                                          // reserved for internal use
         Capability_Ethereum_EIP7702 = 28;                     // Experimental EIP-7702 support
         Capability_Miniscript = 29 [(bitcoin_only) = true];   // Experimental Miniscript support
+        Capability_Zcash_Shielded = 30;                       // Experimental Zcash shielded (Orchard/Ironwood) support
     }
 }
 
