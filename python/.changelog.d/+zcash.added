@@ -1,0 +1,1 @@
+Added `trezorlib.zcash`: Zcash shielded address, viewing-key export and PCZT signing workflows.
