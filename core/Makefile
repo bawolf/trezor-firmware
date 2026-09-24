@@ -177,15 +177,18 @@ test_emu_multicore: ## run device tests using multiple cores
 		--lang=$(TEST_LANG)
 
 test_emu_zcash: ## run Zcash Ironwood device tests (needs an IRONWOOD=1 emulator)
-	$(EMU_TEST) $(PYTEST) $(TESTPATH)/device_tests/zcash --ironwood $(TESTOPTS) \
+	$(EMU_TEST) $(PYTEST) $(TESTPATH)/device_tests/zcash \
+		$(TESTPATH)/device_tests/test_basic.py::test_capabilities --ironwood $(TESTOPTS) \
 		--lang=$(TEST_LANG)
 
 test_emu_zcash_ui: ## run Zcash Ironwood device tests with UI testing
-	$(EMU_TEST) $(PYTEST) $(TESTPATH)/device_tests/zcash --ironwood $(TESTOPTS) \
+	$(EMU_TEST) $(PYTEST) $(TESTPATH)/device_tests/zcash \
+		$(TESTPATH)/device_tests/test_basic.py::test_capabilities --ironwood $(TESTOPTS) \
 		--ui=test --lang=$(TEST_LANG)
 
 test_emu_zcash_ui_record: ## record screens for the Zcash Ironwood device tests
-	$(EMU_TEST) $(PYTEST) $(TESTPATH)/device_tests/zcash --ironwood $(TESTOPTS) \
+	$(EMU_TEST) $(PYTEST) $(TESTPATH)/device_tests/zcash \
+		$(TESTPATH)/device_tests/test_basic.py::test_capabilities --ironwood $(TESTOPTS) \
 		--ui=record --lang=$(TEST_LANG)
 
 test_emu_monero: ## run selected monero device tests from monero-agent

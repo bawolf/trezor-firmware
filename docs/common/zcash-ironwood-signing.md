@@ -50,6 +50,12 @@ applies the records to its own copy with the `pczt` crate's
 `apply_orchard_spend_auth_signature`, which re-verifies each signature
 against the indexed action's `rk` and the host-computed sighash.
 
+A host detects the app by `Capability_Zcash_Shielded` in
+`Features.capabilities`, which only firmware built with `--ironwood` reports.
+Shielded support is a feature of the existing `bitcoin:ZEC` coin, not a new
+coin, so `common/defs/support.json`, which is keyed by coin, has no entry for
+it.
+
 ## 4. Device state machine
 
 `Init → Header → Action(i) → Trailer → VerifyDummies → Totals → Approved →

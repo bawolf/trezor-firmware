@@ -243,6 +243,7 @@ if TYPE_CHECKING:
         TouchWakeup = 26
         Ethereum_EIP7702 = 28
         Miniscript = 29
+        Zcash_Shielded = 30
 
     class SdProtectOperationType(IntEnum):
         DISABLE = 0

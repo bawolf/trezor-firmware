@@ -62,8 +62,9 @@ BLOCK = range(2300, 2400)
 # without coordination.
 FREED_WIRE_IDS = (2307, 2308)
 
-# No Capability bit is claimed for Zcash either.
-CANDIDATE_CAPABILITY = 30
+# The one Capability value Zcash claims, the lowest unused one. Provisional
+# like the block above.
+PROVISIONAL_CAPABILITY = 30
 
 # The donor's private identifiers, which must remain entirely unimplemented.
 DONOR_WIRE_IDS = range(32000, 32009)
@@ -144,15 +145,19 @@ def test_signing_has_exactly_one_response_shape() -> None:
     assert "pczt_length" not in fields and "data" not in fields
 
 
-def test_the_block_is_ours_alone_and_no_capability_is_claimed() -> None:
-    """Nothing but Zcash lives in the 2300 block, and we claim no Capability bit."""
+def test_the_block_is_ours_alone() -> None:
+    """Nothing but Zcash lives in the 2300 block."""
     ours = {value for value, _ in PROVISIONAL.values()} | set(FREED_WIRE_IDS)
     for message in messages.MessageType:
         if int(message) in BLOCK:
             assert message.name.startswith("Zcash"), message.name
             assert int(message) in ours
-    assert CANDIDATE_CAPABILITY not in {int(c) for c in messages.Capability}
-    assert not hasattr(messages.Capability, "Zcash")
+
+
+def test_one_provisional_capability() -> None:
+    zcash = [c for c in messages.Capability if c.name.startswith("Zcash")]
+    assert zcash == [messages.Capability.Zcash_Shielded]
+    assert messages.Capability.Zcash_Shielded == PROVISIONAL_CAPABILITY
 
 
 @requires_repo_schema
@@ -252,6 +257,20 @@ def _roundtrip(msg: protobuf.MessageType) -> protobuf.MessageType:
     protobuf.dump_message(buf, msg)
     buf.seek(0)
     return protobuf.load_message(buf, type(msg))
+
+
+def test_features_decode_the_capability() -> None:
+    """`client.features.capabilities` names the value the device reports."""
+    features = _roundtrip(
+        messages.Features(
+            major_version=2,
+            minor_version=12,
+            patch_version=6,
+            capabilities=[PROVISIONAL_CAPABILITY],
+        )
+    )
+    assert features.capabilities == [messages.Capability.Zcash_Shielded]
+    assert type(features.capabilities[0]) is messages.Capability
 
 
 @pytest.mark.parametrize("network", NETWORKS)

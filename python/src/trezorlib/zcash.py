@@ -124,10 +124,6 @@ _BECH32M_CONST = 0x2BC830A3
 _ORCHARD_FVK_BYTES = 96
 _UNIFIED_FVK_BYTES = 114
 
-# Capability gating is deliberately absent. `Features.Capability` value 30 is
-# only the lowest free candidate at this baseline, not an upstream assignment,
-# so no `@workflow(capability=...)` is declared until coordination fixes an ID.
-
 
 def _check_network(network: messages.ZcashNetwork) -> None:
     # Production policy is MAINNET/TESTNET only. There is deliberately no
@@ -158,7 +154,7 @@ def _check_uint32(value: int, name: str) -> None:
 # ====== Client functions ====== #
 
 
-@workflow()
+@workflow(capability=messages.Capability.Zcash_Shielded)
 def get_address(
     session: "Session",
     network: messages.ZcashNetwork,
@@ -195,7 +191,7 @@ def get_address(
     return _check_encoded_text(session, address, network, "address")
 
 
-@workflow()
+@workflow(capability=messages.Capability.Zcash_Shielded)
 def export_viewing_key(
     session: "Session",
     network: messages.ZcashNetwork,
@@ -254,7 +250,7 @@ def get_viewing_key(
     return export_viewing_key(session, network, account).key
 
 
-@workflow()
+@workflow(capability=messages.Capability.Zcash_Shielded)
 def sign_pczt(
     session: "Session",
     pczt: bytes,

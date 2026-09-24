@@ -683,8 +683,9 @@ def pytest_runtest_setup(item: pytest.Item) -> None:
     if not models_filter:
         raise RuntimeError("Don't skip tests for all trezor models!")
 
-    # Ironwood is a build-time flag with no Capability bit on the wire, so the
-    # test run has to be told which kind of firmware it is talking to.
+    # Ironwood tests run only when `--ironwood` asks for them. Skipping them on a
+    # missing `Capability.Zcash_Shielded` would let a run against the wrong
+    # firmware pass silently; `test_capabilities` checks the flag against it.
     if item.get_closest_marker("ironwood") and not item.config.getoption("--ironwood"):
         pytest.skip("Skipping Ironwood test; pass --ironwood against an Ironwood build")
 
