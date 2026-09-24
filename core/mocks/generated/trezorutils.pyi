@@ -264,6 +264,8 @@ USE_BACKLIGHT: bool
 """Whether the hardware supports backlight brightness control."""
 USE_HAPTIC: bool
 """Whether the hardware supports haptic feedback."""
+USE_ZCASH_SHIELDED: bool
+"""Whether shielded Zcash (Orchard/Ironwood) support is built in."""
 USE_RGB_LED: bool
 """Whether the hardware supports RGB LED."""
 USE_OPTIGA: bool

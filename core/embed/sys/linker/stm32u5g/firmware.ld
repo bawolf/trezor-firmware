@@ -85,6 +85,16 @@ SECTIONS {
     . = ALIGN(4);
   } >AUX1_RAM
 
+  /* The Zcash signing allocator's boot-rooted arena, empty unless the image
+     was built with ZCASH_SHIELDED. This model has one RAM bank, so .heap takes
+     whatever is left either way and the placement is for section-name parity
+     with the two-bank models. 16-byte aligned: the arena's free list is on a
+     16-byte grid. */
+  .zcash_region (NOLOAD): ALIGN(16) {
+    *(.zcash_region*);
+    . = ALIGN(4);
+  } >AUX1_RAM
+
   .heap : ALIGN(4) {
     . = 37K; /* this acts as a build time assertion that at least this much memory is available for heap use */
     . = ABSOLUTE(ORIGIN(AUX1_RAM) + LENGTH(AUX1_RAM)); /* this explicitly sets the end of the heap */

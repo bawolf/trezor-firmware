@@ -44,6 +44,7 @@ from trezorutils import (  # noqa: F401
     USE_TOUCH_WAKEUP,
     USE_TROPIC,
     USE_WARD,
+    USE_ZCASH_SHIELDED,
     VERSION,
     bootloader_locked,
     check_firmware_header,

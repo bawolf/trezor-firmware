@@ -76,7 +76,9 @@ log = { version = "0.4.29", features = ["max_level_trace", "release_max_level_of
 minicbor = { version = "1.0.0", default-features = false }
 num-derive = "0.4.2"
 num-traits = { version = "0.2.19", default-features = false, features = ["libm"] }
+ironwood = { path = "ironwood", default-features = false }
 ironwood-pasta-curves = { package = "pasta_curves", version = "=0.5.1", default-features = false, features = ["alloc", "uninline-portable"] }
+orchard = { version = "=0.15.3", default-features = false }
 pareen = { version = "0.3.3", path = "../../rust/pareen", default-features = false, features = ["libm", "easer"] }
 qrcodegen-no-heap = { version = "1.8.1", path = "../vendor/QR-Code-generator/rust-no-heap" }
 spin = { version = "0.9.9", features = ["rwlock", "spin_mutex", "lazy"], default-features = false }
@@ -123,3 +125,7 @@ toml = "0.8.23"
 zlib-rs = "0.6.3"
 
 xbuild = { path = "xbuild" }
+
+[patch.crates-io]
+sinsemilla = { git = "https://github.com/bawolf/sinsemilla", rev = "6ca88ff52835899c87ff83489b95c5cda887e8a4" }
+orchard = { git = "https://github.com/bawolf/orchard", rev = "d4792911986deda16cc3d689a97f316655f08e84" }

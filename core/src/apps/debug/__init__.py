@@ -449,12 +449,34 @@ if __debug__:
     ) -> DebugLinkGcInfo:
         from trezor.messages import DebugLinkGcInfo, DebugLinkGcInfoItem
 
-        return DebugLinkGcInfo(
-            items=[
-                DebugLinkGcInfoItem(name=name, value=value)
-                for name, value in utils.get_gc_info().items()
-            ]
-        )
+        items = [
+            DebugLinkGcInfoItem(name=name, value=value)
+            for name, value in utils.get_gc_info().items()
+        ]
+        # The Zcash signing region is not on the GC heap -- it is the rooted
+        # `.zcash_region` tier plus whatever scratch a live session borrowed --
+        # so `gc.mem_info()` cannot see it and there is no other host-side way
+        # to read it. The payload is already a free-form name/value list, so
+        # the four arena figures ride along rather than earn a message of
+        # their own. `debug_region_info()` is `None` unless this is a
+        # debuglink DEVICE build, and the items are then simply absent; a
+        # reader must skip, not assume zero.
+        if utils.USE_ZCASH_SHIELDED:
+            from trezorzcash import debug_region_info
+
+            region = debug_region_info()
+            if region is not None:
+                names = (
+                    "persist_in_use",
+                    "persist_peak",
+                    "scratch_in_use",
+                    "scratch_peak",
+                )
+                items += [
+                    DebugLinkGcInfoItem(name=name, value=value)
+                    for name, value in zip(names, region)
+                ]
+        return DebugLinkGcInfo(items=items)
 
     async def dispatch_DebugLinkSetLogFilter(
         msg: DebugLinkSetLogFilter,
