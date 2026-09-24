@@ -22,9 +22,13 @@ so the stock device-test jobs never see them; `make test_emu_zcash_ui` runs
 them with `--ui-check-missing` against a `--zcash-shielded` emulator.
 """
 
+import json
+
 from trezorlib import messages
 from trezorlib.debuglink import DebugSession as Session
 from trezorlib.debuglink import LayoutType
+
+from ..common import COMMON_FIXTURES_DIR
 
 MNEMONIC = "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about"
 NETWORKS = {
@@ -55,3 +59,17 @@ def screen_text(session: Session) -> str:
 def address_pieces(screen: str, address: str) -> list[str]:
     """The runs of `address` on the screen, dropping labels like "Mainnet"."""
     return [word for word in screen.split() if word and word in address]
+
+
+def vector(name: str) -> tuple[dict, dict]:
+    """One checked-in signing vector by name, for flows parametrization cannot express."""
+    for path in (
+        "sign_pczt.json",
+        "sign_pczt.memos.json",
+        "sign_pczt.transparent.json",
+    ):
+        fixture = json.loads((COMMON_FIXTURES_DIR / "zcash" / path).read_text())
+        for test in fixture["tests"]:
+            if test["name"] == name:
+                return test["parameters"], test["result"]
+    raise KeyError(name)
