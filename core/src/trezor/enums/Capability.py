@@ -32,3 +32,4 @@ if not utils.BITCOIN_ONLY:
     Solana = 18
     Tron = 24
     Ethereum_EIP7702 = 28
+    Zcash_Shielded = 30

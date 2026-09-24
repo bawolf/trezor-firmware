@@ -43,6 +43,7 @@ mod generated {
         "tezos" => messages_tezos
         "tron" => messages_tron
         "webauthn" => messages_webauthn
+        "zcash" => messages_zcash
     }
 }
 

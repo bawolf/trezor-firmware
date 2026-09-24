@@ -243,6 +243,7 @@ if TYPE_CHECKING:
         TouchWakeup = 26
         Ethereum_EIP7702 = 28
         Miniscript = 29
+        Zcash_Shielded = 30
 
     class SdProtectOperationType(IntEnum):
         DISABLE = 0
@@ -483,6 +484,10 @@ if TYPE_CHECKING:
         WithdrawExpireUnfreezeContract = 56
         DelegateResourceContract = 57
         UnDelegateResourceContract = 58
+
+    class ZcashNetwork(IntEnum):
+        Mainnet = 0
+        Testnet = 1
 
     class MessageType(IntEnum):
         Initialize = 0
@@ -783,3 +788,11 @@ if TYPE_CHECKING:
         BenchmarkResult = 9103
         TelemetryGet = 1100
         Telemetry = 1101
+        ZcashGetAddress = 2300
+        ZcashAddress = 2301
+        ZcashGetViewingKey = 2302
+        ZcashViewingKey = 2303
+        ZcashSignPczt = 2304
+        ZcashPcztRequest = 2305
+        ZcashPcztAck = 2306
+        ZcashSpendAuthSignatures = 2307

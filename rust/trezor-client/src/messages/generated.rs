@@ -354,3 +354,15 @@ trezor_message_impl! {
     WebAuthnRemoveResidentCredential => MessageType_WebAuthnRemoveResidentCredential,
     WebAuthnCredentialsAck => MessageType_WebAuthnCredentialsAck,
 }
+
+#[cfg(feature = "zcash")]
+trezor_message_impl! {
+    ZcashGetAddress => MessageType_ZcashGetAddress,
+    ZcashAddress => MessageType_ZcashAddress,
+    ZcashGetViewingKey => MessageType_ZcashGetViewingKey,
+    ZcashViewingKey => MessageType_ZcashViewingKey,
+    ZcashSignPczt => MessageType_ZcashSignPczt,
+    ZcashPcztRequest => MessageType_ZcashPcztRequest,
+    ZcashPcztAck => MessageType_ZcashPcztAck,
+    ZcashSpendAuthSignatures => MessageType_ZcashSpendAuthSignatures,
+}
