@@ -1,0 +1,165 @@
+syntax = "proto2";
+package hw.trezor.messages.zcash;
+
+// Sugar for easier handling in Java
+option java_outer_classname = "TrezorMessageZcash";
+option java_package = "com.satoshilabs.trezor.lib.protobuf";
+
+// Transfer constants shared by host and device:
+//   MAX_PCZT_BYTES    = 65536  (bound on the uploaded PCZT; the device never
+//                               returns a PCZT)
+//   CHUNK_BYTES       = 1024
+//   TRANSFER_ID_BYTES = 16
+//   RECORD_BYTES      = 66     (one spend authorization signature record)
+//   MAX_ACTIONS       = 32
+//
+// Every field that selects what the device derives, reviews, or signs is
+// required, so that an omitted scalar cannot silently select network,
+// account, height, offset, or length zero. The only optional fields are
+// opt-ins that add something on top of that: an extra export
+// (include_seed_fingerprint) or a screen-formatting preference (chunkify).
+// Absent means off.
+
+/**
+ * Network selecting firmware-owned consensus and encoding constants.
+ * MAINNET maps to coin type 133, TESTNET to coin type 1. There is
+ * deliberately no Regtest value: production handlers accept only these two.
+ */
+enum ZcashNetwork {
+    ZcashNetwork_Mainnet = 0;
+    ZcashNetwork_Testnet = 1;
+}
+
+/**
+ * Request: Ask device for a Zcash Unified Address.
+ * Retrieval always performs trusted on-device confirmation of the complete
+ * canonical address; there is no show_display=false path.
+ * @start
+ * @next ZcashAddress
+ * @next Failure
+ */
+message ZcashGetAddress {
+    required ZcashNetwork network = 1;     // selects coin type and address encoding
+    required uint32 account = 2;           // ZIP-32 account index in 0..2^31-1; the device
+                                           // derives m/32'/coin_type'/account' itself
+    required bytes diversifier_index = 3;  // exactly 11 bytes, little-endian
+    optional bool chunkify = 4;            // display the address in chunks of 4 characters
+}
+
+/**
+ * Response: Canonical network-encoded Unified Address containing the receiver
+ * shared by Orchard and Ironwood. Released only after on-device confirmation.
+ * @end
+ */
+message ZcashAddress {
+    required string address = 1;
+}
+
+/**
+ * Request: Ask device for an Orchard-only Unified Full Viewing Key.
+ * A dedicated on-device privacy confirmation is mandatory for every export,
+ * and a second one when the seed fingerprint is requested as well.
+ * @start
+ * @next ZcashViewingKey
+ * @next Failure
+ */
+message ZcashGetViewingKey {
+    required ZcashNetwork network = 1;
+    required uint32 account = 2;  // ZIP-32 account index in 0..2^31-1
+    // Also export the ZIP-32 seed fingerprint. Off by default: the
+    // fingerprint identifies the seed, not the account, so requesting it
+    // adds a second on-device warning saying so. A host only needs it to
+    // stamp a PCZT zip32_derivation; the standard SDK accepts an account
+    // with no derivation at all, and the device admits such a PCZT.
+    optional bool include_seed_fingerprint = 3 [default = false];
+}
+
+/**
+ * Response: One network-encoded, Orchard-only UFVK for the selected account.
+ * It contains no transparent or Sapling component, no seed, no spending key,
+ * and no spend-authorizing scalar. Possession can reveal and link wallet
+ * activity and can derive the account's viewing material and addresses, but
+ * cannot confer spend authority.
+ * seed_fingerprint is the ZIP-32 seed fingerprint of the wallet seed
+ * (BLAKE2b-256 of the seed under the ZIP-32 personalization, 32 bytes): a
+ * public identifier, not key material. A wallet stores it next to the
+ * account index and the device admits a PCZT zip32_derivation only when it
+ * names this fingerprint and the consented account path.
+ * It is present only when the request set include_seed_fingerprint, and is
+ * then released behind an additional on-device warning, because unlike the
+ * account viewing key it identifies the seed: it is the same value for every
+ * account index and for both networks, so a host that holds it can link all
+ * of this wallet's Zcash accounts. Absent otherwise.
+ * For a wallet restored from a SLIP-39 backup the device derives from a
+ * 16-byte secret, which is below ZIP 32's 32-byte minimum: there the device
+ * applies the same BLAKE2b-256 construction with length byte 16, a
+ * Trezor-only extension that ZIP 32 does not define and the zip32 crate
+ * refuses. For such a wallet this exported value is authoritative -- store
+ * it, do not recompute it. For every seed length ZIP 32 admits (32..252
+ * bytes) it is byte-for-byte the canonical ZIP-32 fingerprint.
+ * @end
+ */
+message ZcashViewingKey {
+    required string key = 1;
+    optional bytes seed_fingerprint = 2;  // exactly 32 bytes when present
+}
+
+/**
+ * Request: Ask device to review, authorize, and sign an Ironwood v2 PCZT.
+ * The device pulls the exact declared byte count in contiguous chunks and
+ * consumes them as a stream, never retaining the whole PCZT. Once every
+ * real spend is signed it returns the spend authorization signatures as
+ * detached records (ZcashSpendAuthSignatures); the host applies them to its
+ * own copy of the PCZT. That is the single response shape of this workflow:
+ * the device never sends a PCZT back, in whole or in chunks.
+ * @start
+ * @next ZcashPcztRequest
+ * @next Failure
+ */
+message ZcashSignPczt {
+    required ZcashNetwork network = 1;
+    required uint32 account = 2;                // ZIP-32 account index in 0..2^31-1
+    required uint32 pczt_length = 3;            // total upload length, 1..MAX_PCZT_BYTES
+    required uint32 host_reference_height = 4;  // host assertion only: NOT a header, checkpoint,
+                                                // proof, or authenticated statement of chain state
+}
+
+/**
+ * Response: Device requests one contiguous chunk of the uploaded PCZT.
+ * Requests advance contiguously from offset zero to the declared length with
+ * no gaps, duplicates, sparse writes, blind retry, or resume tokens.
+ * @next ZcashPcztAck
+ */
+message ZcashPcztRequest {
+    required bytes transfer_id = 1;  // exactly TRANSFER_ID_BYTES, fresh per workflow
+    required uint32 offset = 2;
+    required uint32 length = 3;      // exactly min(CHUNK_BYTES, remaining)
+}
+
+/**
+ * Request: Host supplies the exact requested chunk.
+ * @next ZcashPcztRequest
+ * @next ZcashSpendAuthSignatures
+ * @next Failure
+ */
+message ZcashPcztAck {
+    required bytes transfer_id = 1;  // repeats the requested transfer ID exactly
+    required uint32 offset = 2;      // repeats the requested offset exactly
+    required bytes data = 3;         // length is exactly the requested length
+}
+
+/**
+ * Response: Spend authorization signatures for every real Ironwood spend of
+ * the uploaded PCZT, sent only once all of them exist. `records` is the
+ * concatenation of fixed 66-byte records in ascending action order:
+ *   pool u8 (0x03 = Ironwood) | action_index u8 | signature [64 bytes]
+ * The host applies each record with the pczt crate's
+ * apply_orchard_spend_auth_signature, which verifies it against the indexed
+ * action's rk and the host-computed sighash, so a record cannot be replayed
+ * into another transaction, pool, or action index.
+ * @end
+ */
+message ZcashSpendAuthSignatures {
+    required bytes transfer_id = 1;  // the transfer the records belong to
+    required bytes records = 2;      // n * 66 bytes, 1 <= n <= 32 (MAX_ACTIONS)
+}
