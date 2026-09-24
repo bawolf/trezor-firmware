@@ -52,6 +52,24 @@ MP_REGISTER_MODULE(MP_QSTR_coveragedata, mp_module_coveragedata);
 MP_REGISTER_MODULE(MP_QSTR_trezorlog, mp_module_trezorlog);
 #endif
 
+#ifdef USE_ZCASH_SHIELDED
+// The Zcash signing scratch is a MicroPython `bytearray` that
+// `apps.zcash.sign_pczt` allocates at exactly `trezorzcash.SCRATCH_BYTES`
+// and the Rust arena in `rust/src/ironwood/arena.rs` then carves from
+// directly, on a 16-byte unit. `Arenas::install_scratch` aligns the base up
+// to that unit first, so the buffer is the whole tier only while MicroPython
+// places item data on a 16-byte boundary -- which it does because it
+// allocates through `gc_alloc`, whose blocks are `MICROPY_BYTES_PER_GC_BLOCK`
+// wide. A coarser grid is fine; a finer one silently costs the tier its last
+// alignment bytes and turns every Zcash sign into "Invalid signing scratch
+// buffer". Say so here rather than at the first sign on the first device.
+_Static_assert((MICROPY_BYTES_PER_GC_BLOCK) % 16 == 0,
+               "The Zcash signing scratch needs GC blocks that are a "
+               "multiple of the arena's 16-byte unit "
+               "(core/embed/rust/src/ironwood/arena.rs: UNIT)");
+MP_REGISTER_MODULE(MP_QSTR_trezorzcash, mp_module_trezorzcash);
+#endif
+
 #ifdef USE_MINISCRIPT
 MP_REGISTER_MODULE(MP_QSTR_trezorminiscript, mp_module_trezorminiscript);
 #endif

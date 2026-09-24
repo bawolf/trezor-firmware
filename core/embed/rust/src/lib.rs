@@ -22,6 +22,21 @@
     feature(lang_items)
 )]
 #![cfg_attr(feature = "layout_bolt", feature(trait_alias))]
+#![cfg_attr(
+    all(feature = "zcash_shielded", target_arch = "arm"),
+    feature(alloc_error_handler)
+)]
+
+#[cfg(feature = "zcash_shielded")]
+extern crate alloc;
+// A debug emulator links the toolchain's prebuilt `liballoc`, which is compiled
+// to unwind and so references `_Unwind_Resume`. Nothing here unwinds, but rustc
+// links this `no_std` binary without default libraries. On Linux the symbol is
+// in libgcc_s; macOS gets it from libSystem. std's `unwind` crate links it the
+// same way.
+#[cfg(all(feature = "zcash_shielded", target_os = "linux"))]
+#[link(name = "gcc_s")]
+unsafe extern "C" {}
 
 #[macro_use]
 extern crate num_derive;
@@ -35,6 +50,10 @@ mod coverage;
 #[cfg(feature = "universal_fw")]
 mod definitions;
 mod io;
+// Also under `test`: the arena mechanics inside are target-independent and
+// host-tested, and the rest of the module is feature-gated within.
+#[cfg(any(feature = "zcash_shielded", test))]
+mod ironwood;
 mod maybe_trace;
 #[cfg(feature = "micropython")]
 mod micropython;

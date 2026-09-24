@@ -68,6 +68,7 @@ touch_wakeup = ["io/touch_wakeup"]
 tropic = ["sec/tropic"]
 universal_fw = ["crypto/universal_fw", "io/usb_iface_webauthn"]
 ward = []
+zcash_shielded = []
 
 # --------------------------------------------------------------------------
 # Automatically derived features (do not enable from outside)
