@@ -21,6 +21,12 @@ APP_COMMON_BUSY_DEADLINE_MS = const(3 | SESSIONLESS_FLAG)
 APP_MISC_COSI_NONCE = const(4 | SESSIONLESS_FLAG)
 APP_MISC_COSI_COMMITMENT = const(5 | SESSIONLESS_FLAG)
 APP_RECOVERY_REPEATED_BACKUP_UNLOCKED = const(6 | SESSIONLESS_FLAG)
+# Memoized Zcash weak-backup predicate (0/1); unset until first computed.
+# Sessionless: the backup type is device-wide and this cache is cleared on
+# wipe/recovery, so it is recomputed whenever the mnemonic can change. Lets
+# `apps.zcash.helpers.has_weak_backup()` avoid re-copying the mnemonic secret
+# onto the GC heap on every receive, export and sign.
+APP_ZCASH_WEAK_BACKUP = const(7 | SESSIONLESS_FLAG)
 
 
 if TYPE_CHECKING:
@@ -126,6 +132,8 @@ class SessionlessCache(DataCache):
             32,  # APP_MISC_COSI_COMMITMENT
             0,  # APP_RECOVERY_REPEATED_BACKUP_UNLOCKED
         )
+        if utils.USE_ZCASH_SHIELDED:
+            self.fields += (1,)  # APP_ZCASH_WEAK_BACKUP
         super().__init__()
 
     def get(self, key: int, default: T | None = None) -> bytes | T | None:  # noqa: F811
