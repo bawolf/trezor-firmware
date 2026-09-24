@@ -1,0 +1,21 @@
+[package]
+name = "ironwood"
+version = "0.0.0"
+edition = "2024"
+links = "ironwood"
+
+[features]
+default = []
+# Host-only test access. The crate rejects this feature on bare-metal targets.
+test = []
+
+[dependencies]
+# Exact versions live in the embed workspace manifest. Every production
+# dependency is default-off; the crate enables only the portable features it uses.
+aes.workspace = true
+blake2b_simd.workspace = true
+ironwood-pasta-curves.workspace = true
+zeroize = { workspace = true }
+
+[dev-dependencies]
+zip32.workspace = true
