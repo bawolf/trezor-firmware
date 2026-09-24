@@ -623,6 +623,22 @@ pub enum MessageType {
     MessageType_TelemetryGet = 1100,
     // @@protoc_insertion_point(enum_value:hw.trezor.messages.MessageType.MessageType_Telemetry)
     MessageType_Telemetry = 1101,
+    // @@protoc_insertion_point(enum_value:hw.trezor.messages.MessageType.MessageType_ZcashGetAddress)
+    MessageType_ZcashGetAddress = 2300,
+    // @@protoc_insertion_point(enum_value:hw.trezor.messages.MessageType.MessageType_ZcashAddress)
+    MessageType_ZcashAddress = 2301,
+    // @@protoc_insertion_point(enum_value:hw.trezor.messages.MessageType.MessageType_ZcashGetViewingKey)
+    MessageType_ZcashGetViewingKey = 2302,
+    // @@protoc_insertion_point(enum_value:hw.trezor.messages.MessageType.MessageType_ZcashViewingKey)
+    MessageType_ZcashViewingKey = 2303,
+    // @@protoc_insertion_point(enum_value:hw.trezor.messages.MessageType.MessageType_ZcashSignPczt)
+    MessageType_ZcashSignPczt = 2304,
+    // @@protoc_insertion_point(enum_value:hw.trezor.messages.MessageType.MessageType_ZcashPcztRequest)
+    MessageType_ZcashPcztRequest = 2305,
+    // @@protoc_insertion_point(enum_value:hw.trezor.messages.MessageType.MessageType_ZcashPcztAck)
+    MessageType_ZcashPcztAck = 2306,
+    // @@protoc_insertion_point(enum_value:hw.trezor.messages.MessageType.MessageType_ZcashSpendAuthSignatures)
+    MessageType_ZcashSpendAuthSignatures = 2307,
 }
 
 impl ::protobuf::Enum for MessageType {
@@ -932,6 +948,14 @@ impl ::protobuf::Enum for MessageType {
             9103 => ::std::option::Option::Some(MessageType::MessageType_BenchmarkResult),
             1100 => ::std::option::Option::Some(MessageType::MessageType_TelemetryGet),
             1101 => ::std::option::Option::Some(MessageType::MessageType_Telemetry),
+            2300 => ::std::option::Option::Some(MessageType::MessageType_ZcashGetAddress),
+            2301 => ::std::option::Option::Some(MessageType::MessageType_ZcashAddress),
+            2302 => ::std::option::Option::Some(MessageType::MessageType_ZcashGetViewingKey),
+            2303 => ::std::option::Option::Some(MessageType::MessageType_ZcashViewingKey),
+            2304 => ::std::option::Option::Some(MessageType::MessageType_ZcashSignPczt),
+            2305 => ::std::option::Option::Some(MessageType::MessageType_ZcashPcztRequest),
+            2306 => ::std::option::Option::Some(MessageType::MessageType_ZcashPcztAck),
+            2307 => ::std::option::Option::Some(MessageType::MessageType_ZcashSpendAuthSignatures),
             _ => ::std::option::Option::None
         }
     }
@@ -1236,6 +1260,14 @@ impl ::protobuf::Enum for MessageType {
             "MessageType_BenchmarkResult" => ::std::option::Option::Some(MessageType::MessageType_BenchmarkResult),
             "MessageType_TelemetryGet" => ::std::option::Option::Some(MessageType::MessageType_TelemetryGet),
             "MessageType_Telemetry" => ::std::option::Option::Some(MessageType::MessageType_Telemetry),
+            "MessageType_ZcashGetAddress" => ::std::option::Option::Some(MessageType::MessageType_ZcashGetAddress),
+            "MessageType_ZcashAddress" => ::std::option::Option::Some(MessageType::MessageType_ZcashAddress),
+            "MessageType_ZcashGetViewingKey" => ::std::option::Option::Some(MessageType::MessageType_ZcashGetViewingKey),
+            "MessageType_ZcashViewingKey" => ::std::option::Option::Some(MessageType::MessageType_ZcashViewingKey),
+            "MessageType_ZcashSignPczt" => ::std::option::Option::Some(MessageType::MessageType_ZcashSignPczt),
+            "MessageType_ZcashPcztRequest" => ::std::option::Option::Some(MessageType::MessageType_ZcashPcztRequest),
+            "MessageType_ZcashPcztAck" => ::std::option::Option::Some(MessageType::MessageType_ZcashPcztAck),
+            "MessageType_ZcashSpendAuthSignatures" => ::std::option::Option::Some(MessageType::MessageType_ZcashSpendAuthSignatures),
             _ => ::std::option::Option::None
         }
     }
@@ -1539,6 +1571,14 @@ impl ::protobuf::Enum for MessageType {
         MessageType::MessageType_BenchmarkResult,
         MessageType::MessageType_TelemetryGet,
         MessageType::MessageType_Telemetry,
+        MessageType::MessageType_ZcashGetAddress,
+        MessageType::MessageType_ZcashAddress,
+        MessageType::MessageType_ZcashGetViewingKey,
+        MessageType::MessageType_ZcashViewingKey,
+        MessageType::MessageType_ZcashSignPczt,
+        MessageType::MessageType_ZcashPcztRequest,
+        MessageType::MessageType_ZcashPcztAck,
+        MessageType::MessageType_ZcashSpendAuthSignatures,
     ];
 }
 
@@ -1848,6 +1888,14 @@ impl ::protobuf::EnumFull for MessageType {
             MessageType::MessageType_BenchmarkResult => 295,
             MessageType::MessageType_TelemetryGet => 296,
             MessageType::MessageType_Telemetry => 297,
+            MessageType::MessageType_ZcashGetAddress => 298,
+            MessageType::MessageType_ZcashAddress => 299,
+            MessageType::MessageType_ZcashGetViewingKey => 300,
+            MessageType::MessageType_ZcashViewingKey => 301,
+            MessageType::MessageType_ZcashSignPczt => 302,
+            MessageType::MessageType_ZcashPcztRequest => 303,
+            MessageType::MessageType_ZcashPcztAck => 304,
+            MessageType::MessageType_ZcashSpendAuthSignatures => 305,
         };
         Self::enum_descriptor().value_by_index(index)
     }
@@ -1866,7 +1914,7 @@ impl MessageType {
 }
 
 static file_descriptor_proto_data: &'static [u8] = b"\
-    \n\x0emessages.proto\x12\x12hw.trezor.messages\x1a\roptions.proto*\xe4i\
+    \n\x0emessages.proto\x12\x12hw.trezor.messages\x1a\roptions.proto*\xa9l\
     \n\x0bMessageType\x12(\n\x16MessageType_Initialize\x10\0\x1a\x0c\xb0\xb5\
     \x18\x01\x80\xa6\x1d\x01\x90\xb5\x18\x01\x12\x1e\n\x10MessageType_Ping\
     \x10\x01\x1a\x08\x80\xa6\x1d\x01\x90\xb5\x18\x01\x12%\n\x13MessageType_S\
@@ -2209,17 +2257,25 @@ static file_descriptor_proto_data: &'static [u8] = b"\
     MessageType_BenchmarkResult\x10\x8fG\x1a\x04\x80\xa6\x1d\x01\x12'\n\x18M\
     essageType_TelemetryGet\x10\xcc\x08\x1a\x08\x80\xa6\x1d\x01\x90\xb5\x18\
     \x01\x12$\n\x15MessageType_Telemetry\x10\xcd\x08\x1a\x08\x80\xa6\x1d\x01\
-    \x98\xb5\x18\x01\x1a\x08\xc8\xf3\x18\x01\xd0\xf3\x18\x01\"\x04\x08Z\x10\
-    \\\"\x04\x08M\x10N\"\x04\x08G\x10J\"\x06\x08\xd9\x03\x10\xda\x03\"\x04\
-    \x08r\x10z\"\x05\x08{\x10\x95\x01\"\x06\x08\xdb\x01\x10\xdb\x01\"\x06\
-    \x08\xe0\x01\x10\xe0\x01\"\x06\x08\xe2\x01\x10\xe2\x01\"\x06\x08\xe3\x01\
-    \x10\xe3\x01\"\x06\x08\xe4\x01\x10\xe4\x01\"\x06\x08\xe5\x01\x10\xe5\x01\
-    \"\x06\x08\xe7\x01\x10\xe7\x01\"\x06\x08\xe8\x01\x10\xe8\x01\"\x06\x08\
-    \xe9\x01\x10\xe9\x01\"\x06\x08\xea\x01\x10\xea\x01\"\x06\x08\xec\x01\x10\
-    \xec\x01\"\x06\x08\xed\x01\x10\xed\x01\"\x06\x08\xac\x02\x10\xb0\x02\"\
-    \x06\x08\xb5\x02\x10\xb8\x02\"\x06\x08\xbc\x05\x10\xc5\x05\"\x06\x08\xe9\
-    \x07\x10\xf7\x07\"\x06\x08\xfa\x07\x10\xcb\x08B8\n#com.satoshilabs.trezo\
-    r.lib.protobufB\rTrezorMessage\x80\xa6\x1d\x01\
+    \x98\xb5\x18\x01\x12&\n\x1bMessageType_ZcashGetAddress\x10\xfc\x11\x1a\
+    \x04\x90\xb5\x18\x01\x12#\n\x18MessageType_ZcashAddress\x10\xfd\x11\x1a\
+    \x04\x98\xb5\x18\x01\x12)\n\x1eMessageType_ZcashGetViewingKey\x10\xfe\
+    \x11\x1a\x04\x90\xb5\x18\x01\x12&\n\x1bMessageType_ZcashViewingKey\x10\
+    \xff\x11\x1a\x04\x98\xb5\x18\x01\x12$\n\x19MessageType_ZcashSignPczt\x10\
+    \x80\x12\x1a\x04\x90\xb5\x18\x01\x12'\n\x1cMessageType_ZcashPcztRequest\
+    \x10\x81\x12\x1a\x04\x98\xb5\x18\x01\x12#\n\x18MessageType_ZcashPcztAck\
+    \x10\x82\x12\x1a\x04\x90\xb5\x18\x01\x12/\n$MessageType_ZcashSpendAuthSi\
+    gnatures\x10\x83\x12\x1a\x04\x98\xb5\x18\x01\x1a\x08\xc8\xf3\x18\x01\xd0\
+    \xf3\x18\x01\"\x04\x08Z\x10\\\"\x04\x08M\x10N\"\x04\x08G\x10J\"\x06\x08\
+    \xd9\x03\x10\xda\x03\"\x04\x08r\x10z\"\x05\x08{\x10\x95\x01\"\x06\x08\
+    \xdb\x01\x10\xdb\x01\"\x06\x08\xe0\x01\x10\xe0\x01\"\x06\x08\xe2\x01\x10\
+    \xe2\x01\"\x06\x08\xe3\x01\x10\xe3\x01\"\x06\x08\xe4\x01\x10\xe4\x01\"\
+    \x06\x08\xe5\x01\x10\xe5\x01\"\x06\x08\xe7\x01\x10\xe7\x01\"\x06\x08\xe8\
+    \x01\x10\xe8\x01\"\x06\x08\xe9\x01\x10\xe9\x01\"\x06\x08\xea\x01\x10\xea\
+    \x01\"\x06\x08\xec\x01\x10\xec\x01\"\x06\x08\xed\x01\x10\xed\x01\"\x06\
+    \x08\xac\x02\x10\xb0\x02\"\x06\x08\xb5\x02\x10\xb8\x02\"\x06\x08\xbc\x05\
+    \x10\xc5\x05\"\x06\x08\xe9\x07\x10\xf7\x07\"\x06\x08\xfa\x07\x10\xcb\x08\
+    B8\n#com.satoshilabs.trezor.lib.protobufB\rTrezorMessage\x80\xa6\x1d\x01\
 ";
 
 /// `FileDescriptorProto` object which was a source for this generated file
