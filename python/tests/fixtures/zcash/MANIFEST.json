@@ -1,0 +1,69 @@
+{
+  "schema": "trezor-ironwood-host-fixture-manifest/1",
+  "purpose": "Host-side PCZT transfer-shape vectors for trezorlib.zcash.sign_pczt. The host never parses PCZT bytes, so these exercise the chunked transfer protocol only. They are NOT positive signing coverage; the contract's positive signing controls belong to the firmware/native lane. The per-fixture PCZT structure fields (signature, output and padding counts, shielded_sighash) are recorded as provenance for the firmware lane; the host tests read only file, byte_length, sha256, chunks_at_1024 and action_count.",
+  "provisional_wire_id_revision": "2300-2306 and 2309 (requested, not upstream-assigned; 2307 and 2308 are reserved, never reused)",
+  "contract": "common/protob/messages-zcash.proto and trezorlib.zcash transfer constants",
+  "source_evidence": "preserved arena-peak-8action-01 synthetic fixture corpus",
+  "source_dir": "inputs/pczt",
+  "source_manifest": "inputs/pczt/syn-manifest.json",
+  "source_manifest_sha256": "c70a27a4c30f3d1a39ad7eb8559cd2e7d3f76b6f43eb9cfbc4aee6de29be4137",
+  "corpus_height": 10000000,
+  "corpus_fee_cap": 100000,
+  "limitations": [
+    "The fixture hashes were compared outside this repository against two donor records. This checkout can verify integrity against this manifest, but cannot independently reproduce that provenance comparison.",
+    "The generator command that produced the corpus is not recorded in the preserved evidence. Closing that provenance gap belongs to the lane that owns the pinned builder.",
+    "These are synthetic regtest-context fixtures. They live only under tests and are not reachable from any production protobuf, handler, or policy path."
+  ],
+  "fixtures": [
+    {
+      "file": "one-action.pczt",
+      "donor_file": "syn-outputs-1.pczt",
+      "byte_length": 1236,
+      "sha256": "1f357ad54256243f4b675da10f167308bbeeb4211d42ca444318ee397fd1bd51",
+      "chunks_at_1024": 2,
+      "action_count": 1,
+      "real_input_count": 1,
+      "required_signature_count": 1,
+      "existing_signature_count": 0,
+      "positive_output_count": 1,
+      "padding_input_count": 0,
+      "padding_output_count": 0,
+      "shielded_sighash": "d05e6329d865cccf25e6031d6a4202d38b2bd5e93b10d86f2f3cba5f7677577f",
+      "source_manifest_name": "outputs-1.pczt"
+    },
+    {
+      "file": "two-actions.pczt",
+      "donor_file": "syn-inputs-2.pczt",
+      "byte_length": 2429,
+      "sha256": "81c90aa4154e1d5c5de537d270ca64f9746ed4040663f0bc4abd02b5c630352e",
+      "chunks_at_1024": 3,
+      "action_count": 2,
+      "real_input_count": 2,
+      "required_signature_count": 2,
+      "existing_signature_count": 0,
+      "positive_output_count": 1,
+      "padding_input_count": 0,
+      "padding_output_count": 1,
+      "shielded_sighash": "3a9807c49d50d59b69d497da79317c14fe9e32a8ad6f6bdfab330a2a4edaba92",
+      "source_manifest_name": "inputs-2.pczt"
+    },
+    {
+      "file": "eight-actions.pczt",
+      "donor_file": "syn-outputs-8.pczt",
+      "byte_length": 10037,
+      "sha256": "e5e7906557a95680b16709d2e923e68e343d9f572713a1ac65909eddb11ebe87",
+      "chunks_at_1024": 10,
+      "action_count": 8,
+      "real_input_count": 1,
+      "required_signature_count": 1,
+      "existing_signature_count": 7,
+      "positive_output_count": 8,
+      "padding_input_count": 7,
+      "padding_output_count": 0,
+      "shielded_sighash": "2427ef1f7ec25e7e61c0b36709c62a4e83685aabac0b37bbb0bae08a94bbe5de",
+      "source_manifest_name": "outputs-8.pczt"
+    }
+  ],
+  "second_attestation_source": "MANIFEST.json (the donor lane's own file manifest)",
+  "second_attestation_sha256": "44684018b2ee5c7c3408c466e167fd4bdd345e35bb911853b6ef117a30183468"
+}
