@@ -200,6 +200,17 @@ fn parse_output_sections(content: &str) -> Result<Vec<OutputSection>> {
     // This section contains a lot of other information,
     // but we only care about lines that start with '.'
 
+    // GNU ld pads the name to 15 characters and wraps a name that does not fit
+    // onto its own line, putting the address and size on the next one:
+
+    //.no_dma_buffers
+    //                0x3001dd7c      0x6fd4
+
+    // A section dropped for being 16 characters long is silently missing from
+    // its region's total, which is how a nearly full RAM bank can look
+    // half empty.
+    let mut pending: Option<&str> = None;
+
     for line in content.lines() {
         let trimmed = line.trim_start();
 
@@ -210,23 +221,37 @@ fn parse_output_sections(content: &str) -> Result<Vec<OutputSection>> {
             continue;
         }
 
-        if !line.starts_with('.') {
-            continue;
-        }
-
-        let mut parts = line.split_whitespace();
-        let Some(name) = parts.next() else {
-            continue;
+        let mut parts = trimmed.split_whitespace();
+        let name = if line.starts_with('.') {
+            pending = None;
+            let Some(name) = parts.next() else {
+                continue;
+            };
+            if parts.clone().next().is_none() {
+                // Nothing but the name on this line: it was too long for the
+                // column, so its figures are on the next one.
+                pending = Some(name);
+                continue;
+            }
+            name
+        } else {
+            // Only the line immediately after a wrapped name carries its
+            // figures; anything else drops it, as an unparsable line always was.
+            let Some(name) = pending.take() else {
+                continue;
+            };
+            name
         };
+
         let Some(address) = parts.next() else {
             continue;
         };
         let Some(size) = parts.next() else {
             continue;
         };
-
-        let address = parse_hex(address)?;
-        let size = parse_hex(size)?;
+        let (Ok(address), Ok(size)) = (parse_hex(address), parse_hex(size)) else {
+            continue;
+        };
         if size == 0 {
             continue;
         }
@@ -431,6 +456,53 @@ Linker script and memory map
         assert_eq!(used_bytes_for_region(flash, &sections), 0x120);
         // RAM: .data + .bss + .stack VMAs are all counted as usual.
         assert_eq!(used_bytes_for_region(ram, &sections), 0x10060);
+    }
+
+    #[test]
+    fn counts_a_section_whose_name_wraps_onto_its_own_line() {
+        // GNU ld pads the name column to 15 characters and wraps anything
+        // longer. `.no_dma_buffers` is 15 characters plus the leading dot, so
+        // on T3T1 it wraps -- and dropping it hid 28 KB of AUX1.
+        let map = r#"
+Memory Configuration
+
+Name             Origin             Length             Attributes
+AUX1_RAM         0x30000000         0x00030000         rw
+*default*        0x00000000         0xffffffff
+
+Linker script and memory map
+
+.bss            0x30000000      0x1000
+.no_dma_buffers
+                0x30001000      0x2000
+.data           0x30003000      0xa000
+"#;
+
+        let regions = parse_memory_regions(map).expect("memory regions should parse");
+        let sections = parse_output_sections(map).expect("sections should parse");
+
+        let names: Vec<_> = sections.iter().map(|s| s.name.as_str()).collect();
+        assert_eq!(names, [".bss", ".no_dma_buffers", ".data"]);
+
+        let aux1 = regions.iter().find(|r| r.name == "AUX1_RAM").unwrap();
+        assert_eq!(used_bytes_for_region(aux1, &sections), 0xd000);
+    }
+
+    #[test]
+    fn a_wrapped_name_without_figures_is_dropped() {
+        // A name alone at the end of the map, or followed by a symbol
+        // assignment rather than its figures, must not invent a section.
+        let map = r#"
+Linker script and memory map
+
+.no_dma_buffers
+                0x000018e4                        __flash_padding_size = 0x18e4
+.bss            0x30000000      0x1000
+"#;
+
+        let sections = parse_output_sections(map).expect("sections should parse");
+        assert_eq!(sections.len(), 1);
+        assert_eq!(sections[0].name, ".bss");
     }
 
     #[test]
