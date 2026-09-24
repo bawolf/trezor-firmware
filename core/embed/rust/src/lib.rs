@@ -28,6 +28,15 @@
 
 #[cfg(feature = "ironwood")]
 extern crate alloc;
+// A debug emulator links the toolchain's prebuilt `liballoc`, which is compiled
+// to unwind and so references `_Unwind_Resume`. Nothing here unwinds, but rustc
+// links this `no_std` binary without default libraries. On Linux the symbol is
+// in libgcc_s; macOS gets it from libSystem. std's `unwind` crate links it the
+// same way.
+#[cfg(all(feature = "ironwood", target_os = "linux"))]
+#[link(name = "gcc_s")]
+unsafe extern "C" {}
+
 #[macro_use]
 extern crate num_derive;
 
