@@ -52,9 +52,17 @@ against the indexed action's `rk` and the host-computed sighash.
 
 A host detects the app by `Capability_Zcash_Shielded` in
 `Features.capabilities`, which only firmware built with `--ironwood` reports.
-Shielded support is a feature of the existing `bitcoin:ZEC` coin, not a new
-coin, so `common/defs/support.json`, which is keyed by coin, has no entry for
-it.
+The host must check that list itself: trezorlib's `@workflow(capability=...)`
+annotation is informational and does not refuse a device that lacks the
+capability. CI boots an Ironwood image only on T3T1, so the capability's
+presence is asserted on that model alone; the T3B1 and T3W1 Ironwood images
+are built but not run.
+
+`common/defs/support.json` is unchanged. It records the firmware release from
+which each model supports a coin, and `bitcoin:ZEC` already has an entry for
+every model; shielded signing is an off-by-default build-time feature that
+ships in no release. External contributors also do not edit that file unless
+asked (`common/defs/README.md`).
 
 ## 4. Device state machine
 
