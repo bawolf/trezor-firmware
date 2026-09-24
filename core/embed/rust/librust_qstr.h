@@ -64,6 +64,7 @@ static void _librust_qstrs(void) {
   MP_QSTR_RemovePin;
   MP_QSTR_RemoveWipeCode;
   MP_QSTR_ReviewFailedBackup;
+  MP_QSTR_SCRATCH_BYTES;
   MP_QSTR_SEND_BUFFER_OVERHEAD;
   MP_QSTR_STANDARD;
   MP_QSTR_SUCCESS;
@@ -352,6 +353,7 @@ static void _librust_qstrs(void) {
   MP_QSTR_data_hash;
   MP_QSTR_data_len;
   MP_QSTR_debug;
+  MP_QSTR_debug_region_info;
   MP_QSTR_decode;
   MP_QSTR_deinit;
   MP_QSTR_description;
@@ -1593,5 +1595,10 @@ static void _librust_qstrs(void) {
 #if !PYOPT
   MP_QSTR_debug__loading_seed;
   MP_QSTR_debug__loading_seed_not_recommended;
+#endif
+#ifdef USE_ZCASH_SHIELDED
+  MP_QSTR_derive_receiver;
+  MP_QSTR_derive_viewing_key;
+  MP_QSTR_seed_fingerprint;
 #endif
 }

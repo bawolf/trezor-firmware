@@ -1,4 +1,4 @@
-use anyhow::Result;
+use anyhow::{Result, bail};
 use clap::Args;
 use serde::Deserialize;
 
@@ -107,12 +107,14 @@ macro_rules! build_options {
                 let o = preset_options
                     .overlay(args.options.clone());
 
-                Ok(Self {
+                let resolved = Self {
                     project: args.project,
                     model: args.model,
                     emulator: args.emulator,
                     $($name: <$ty as ResolveValue>::resolve(o.$name),)+
-                })
+                };
+                resolved.validate()?;
+                Ok(resolved)
             }
         }
 
@@ -210,6 +212,12 @@ build_options! {
     #[arg(long, num_args = 0..=1, default_missing_value = "true")]
     map ward: bool,
 
+    /// Enable shielded Zcash (Orchard/Ironwood) support. Firmware builds
+    /// only, and only for the models in `ZCASH_SHIELDED_MODELS`; the error
+    /// message on an unsupported target lists them.
+    #[arg(long, num_args = 0..=1, default_missing_value = "true")]
+    map zcash_shielded: bool,
+
     /// Disable UI animations
     #[arg(long, num_args = 0..=1, default_missing_value = "true")]
     map disable_animation: bool,
@@ -280,10 +288,96 @@ build_options! {
     opt xbuild_trace: bool,
 }
 
+/// Models whose firmware may be built with `--zcash-shielded`.
+///
+/// All three are STM32U5 / Cortex-M33 (`thumbv8m.main-none-eabihf`) parts, so
+/// the `no_std` signer core is architecture-identical. The zcash apps go
+/// through the model-agnostic `trezor.ui.layouts` facade, so the delizia
+/// (T3T1), eckhart (T3W1) and caesar (T3B1) layouts all serve them without
+/// app-level branching.
+///
+/// The STM32F4 / Cortex-M4 models (T2T1 Model T, T2B1 Safe 3 gen 1, D001) are
+/// excluded on capacity, not on architecture: their `.stack`, `.buf` and
+/// `.heap` all share a single 191 KiB AUX1_RAM, so the boot-lifetime 40 KiB
+/// signing region cannot coexist with a workable MicroPython heap, and they
+/// have no U5 crypto accelerators. The remaining exclusions are not technical:
+/// T3T2 is unreleased, and D002/D003 are STM32U5 bring-up devkits, so none of
+/// them ships product firmware and none has been measured. (T3T2's 1640 KiB
+/// slot is not the obstacle -- the T3B1 image fits in 1463.5 KiB.)
+///
+/// This list is the single source of truth: the rejection message and both
+/// the positive and the negative test derive from it, so adding a model is a
+/// one-line change here.
+pub(crate) const ZCASH_SHIELDED_MODELS: &[Model] = &[Model::T3B1, Model::T3T1, Model::T3W1];
+
+/// Bytes of AUX1_RAM an `--zcash-shielded` build must leave free on a model
+/// whose `.zcash_region` shares a bank with `.bss`.
+///
+/// The 40 KiB signing region is linked into AUX1_RAM, which is also the bank
+/// `.bss` grows into, so unrelated `.bss` growth is what would push it out --
+/// as a bank overflow at link time, on a commit that has nothing to do with
+/// Zcash. This turns that into a named build error while there is still slack
+/// to argue about.
+pub(crate) const ZCASH_SHIELDED_AUX1_FLOOR: u64 = 4096;
+
+/// Models that carry [`ZCASH_SHIELDED_AUX1_FLOOR`]: the two-bank parts. T3W1
+/// has one bank that ends in `.heap`, which is `ABSOLUTE(ORIGIN + LENGTH)`, so
+/// its AUX1 slack IS the heap and always reads zero -- a floor there would fail
+/// every build.
+pub(crate) const ZCASH_SHIELDED_FLOOR_MODELS: &[Model] = &[Model::T3B1, Model::T3T1];
+
+/// The models `--zcash-shielded` accepts, as the rejection message spells them.
+pub(crate) fn zcash_shielded_models_phrase() -> String {
+    ZCASH_SHIELDED_MODELS
+        .iter()
+        .map(|model| model.model_id())
+        .collect::<Vec<_>>()
+        .join(", ")
+}
+
+/// The rejection every unsupported `--zcash-shielded` target gets. Shared with
+/// the tests so a new model needs no test edit.
+pub(crate) fn zcash_shielded_unsupported_message() -> String {
+    format!(
+        "--zcash-shielded is supported only for {} firmware builds",
+        zcash_shielded_models_phrase()
+    )
+}
+
 impl ResolvedBuildArgs {
+    /// Validates options against the user-selected top-level build target.
+    ///
+    /// `--zcash-shielded` is a firmware option: like `--miniscript`, it is
+    /// ignored for the other projects, which do not map it, so one set of
+    /// build options serves every `core/Makefile` target.
+    fn validate(&self) -> Result<()> {
+        if !self.zcash_shielded || self.project != Project::Firmware {
+            return Ok(());
+        }
+        if !ZCASH_SHIELDED_MODELS.contains(&self.model) {
+            bail!(zcash_shielded_unsupported_message());
+        }
+        if self.btc_only {
+            bail!("--zcash-shielded cannot be combined with --btc-only");
+        }
+        Ok(())
+    }
+
     /// The `REGION=BYTES` free-space floors this build must clear.
+    ///
+    /// The Zcash AUX1 floor applies to every `--zcash-shielded` firmware build.
+    /// `--require-free` adds to it; `print_memusage` holds a twice-named region
+    /// to the larger floor, so a smaller value cannot loosen it.
     pub fn memory_requirements(&self) -> Vec<String> {
-        self.require_free.clone().into_iter().collect()
+        let mut requirements = Vec::new();
+        if self.zcash_shielded
+            && self.project == Project::Firmware
+            && ZCASH_SHIELDED_FLOOR_MODELS.contains(&self.model)
+        {
+            requirements.push(format!("AUX1_RAM={ZCASH_SHIELDED_AUX1_FLOOR}"));
+        }
+        requirements.extend(self.require_free.clone());
+        requirements
     }
 
     /// Determines the Cargo profile to use
@@ -413,5 +507,62 @@ mod tests {
     fn rejects_unknown_console_types() {
         let result: Result<OptionsMap, _> = toml::from_str(r#"dbg-console = { uart = ["x"] }"#);
         assert!(result.is_err());
+    }
+
+    /// The AUX1 floor is the build's, not the Makefile's: any entry point
+    /// that produces a shielded-Zcash image on a two-bank model carries it.
+    #[test]
+    fn a_zcash_shielded_build_floors_aux1_without_being_asked() {
+        for &model in ZCASH_SHIELDED_FLOOR_MODELS {
+            let args = ResolvedBuildArgs {
+                model,
+                zcash_shielded: true,
+                ..ResolvedBuildArgs::default()
+            };
+            assert_eq!(
+                args.memory_requirements(),
+                [format!("AUX1_RAM={ZCASH_SHIELDED_AUX1_FLOOR}")],
+                "{model:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn a_floor_is_asked_for_only_where_it_means_something() {
+        // T3W1's AUX1 slack is its heap, so it reads zero free on a healthy
+        // build; and a stock image has no `.zcash_region` to protect.
+        for args in [
+            ResolvedBuildArgs {
+                model: Model::T3W1,
+                zcash_shielded: true,
+                ..ResolvedBuildArgs::default()
+            },
+            ResolvedBuildArgs {
+                model: Model::T3T1,
+                zcash_shielded: false,
+                ..ResolvedBuildArgs::default()
+            },
+        ] {
+            assert!(args.memory_requirements().is_empty());
+        }
+    }
+
+    /// `core/Makefile` passes the same floor; both may be present and the
+    /// command line may add another region, but neither can drop the default.
+    #[test]
+    fn an_explicit_requirement_adds_to_the_floor_and_never_replaces_it() {
+        let args = ResolvedBuildArgs {
+            model: Model::T3T1,
+            zcash_shielded: true,
+            require_free: Some("FLASH=1024".to_string()),
+            ..ResolvedBuildArgs::default()
+        };
+        assert_eq!(
+            args.memory_requirements(),
+            [
+                format!("AUX1_RAM={ZCASH_SHIELDED_AUX1_FLOOR}"),
+                "FLASH=1024".to_string()
+            ]
+        );
     }
 }

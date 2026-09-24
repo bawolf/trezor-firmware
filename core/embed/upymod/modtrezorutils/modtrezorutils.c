@@ -852,6 +852,8 @@ static const mp_obj_tuple_t mod_trezorutils_version_obj = {
 /// """Whether the hardware supports backlight brightness control."""
 /// USE_HAPTIC: bool
 /// """Whether the hardware supports haptic feedback."""
+/// USE_ZCASH_SHIELDED: bool
+/// """Whether shielded Zcash (Orchard/Ironwood) support is built in."""
 /// USE_RGB_LED: bool
 /// """Whether the hardware supports RGB LED."""
 /// USE_OPTIGA: bool
@@ -1005,6 +1007,11 @@ static const mp_rom_map_elem_t mp_module_trezorutils_globals_table[] = {
     {MP_ROM_QSTR(MP_QSTR_USE_SERIAL_NUMBER), mp_const_true},
 #else
     {MP_ROM_QSTR(MP_QSTR_USE_SERIAL_NUMBER), mp_const_false},
+#endif
+#if USE_ZCASH_SHIELDED
+    {MP_ROM_QSTR(MP_QSTR_USE_ZCASH_SHIELDED), mp_const_true},
+#else
+    {MP_ROM_QSTR(MP_QSTR_USE_ZCASH_SHIELDED), mp_const_false},
 #endif
 #if USE_MINISCRIPT
     {MP_ROM_QSTR(MP_QSTR_USE_MINISCRIPT), mp_const_true},

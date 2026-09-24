@@ -78,3 +78,4 @@ source-lines                  = { true = ["micropy_enable_source_lines"] }
 storage-insecure-testing-mode = { true = ["storage_insecure_testing_mode"] }
 unsafe-fw                     = { true = ["unsafe_fw"] }
 ward                          = { true = ["ward"] }
+zcash-shielded                = { true = ["zcash_shielded"] }
