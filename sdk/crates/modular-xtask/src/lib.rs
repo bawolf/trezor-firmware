@@ -37,10 +37,18 @@ use crate::args::Cmd;
 /// `workspace_root` (the app's or app workspace's own root, not necessarily
 /// the process's cwd), restoring the original directory afterwards -- even
 /// if the command itself returns an error.
+///
+/// An app whose dependencies cannot share `workspace_root`'s lockfile can be
+/// a workspace of its own in the subdirectory named after it; a command for
+/// that app runs there instead.
 pub fn run_cmd(cmd: &args::Cmd, workspace_root: &std::path::Path) -> anyhow::Result<()> {
     let prev_dir = std::env::current_dir()?;
 
-    std::env::set_current_dir(workspace_root)?;
+    let own_workspace = cmd
+        .project()
+        .map(|project| workspace_root.join(project))
+        .filter(|dir| helpers::is_own_workspace(dir));
+    std::env::set_current_dir(own_workspace.as_deref().unwrap_or(workspace_root))?;
 
     let result = match cmd {
         Cmd::Build(args) => cargo::build(args),

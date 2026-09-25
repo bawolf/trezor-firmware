@@ -75,6 +75,30 @@ pub fn is_workspace() -> Result<bool> {
     }
 }
 
+/// Returns whether `dir` holds a cargo workspace root of its own.
+pub fn is_own_workspace(dir: &Path) -> bool {
+    let manifest = dir.join("Cargo.toml");
+    manifest.is_file()
+        && MetadataCommand::new()
+            .manifest_path(&manifest)
+            .no_deps()
+            .exec()
+            .is_ok_and(|metadata| {
+                dir.canonicalize().ok().as_deref() == Some(metadata.workspace_root.as_std_path())
+            })
+}
+
+/// Returns the directory of the package named `package_name`: the project
+/// root of a standalone app, or the app's own directory in a workspace.
+pub fn package_dir(package_name: &str) -> Result<PathBuf> {
+    let package = app_package(package_name)?;
+    package
+        .manifest_path
+        .parent()
+        .map(|dir| dir.as_std_path().to_path_buf())
+        .context("Package manifest has no parent directory")
+}
+
 /// Returns the metadata of the workspace package named `package_name`.
 pub fn app_package(package_name: &str) -> Result<Package> {
     let metadata = MetadataCommand::new()

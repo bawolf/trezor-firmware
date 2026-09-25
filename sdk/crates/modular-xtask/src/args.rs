@@ -158,6 +158,26 @@ pub enum Cmd {
     TranslationStyleCheck(ProjectArgs),
 }
 
+impl Cmd {
+    /// The app package the command names, if any.
+    pub fn project(&self) -> Option<&str> {
+        let project = match self {
+            Cmd::Build(args) | Cmd::Clippy(args) | Cmd::Check(args) | Cmd::Size(args) => {
+                &args.project
+            }
+            Cmd::UnitTests(args) => &args.project,
+            Cmd::DeviceTests(args) => &args.project,
+            Cmd::Upload(args) => &args.project,
+            Cmd::PyStyle(args)
+            | Cmd::PyStyleCheck(args)
+            | Cmd::TranslationStyle(args)
+            | Cmd::TranslationStyleCheck(args) => &args.project,
+            Cmd::Clean | Cmd::Fmt | Cmd::FmtCheck => return None,
+        };
+        Some(project.as_str()).filter(|project| !project.is_empty())
+    }
+}
+
 /// Arguments for `xtask modular build`/`clippy`/`check`/`size`, i.e.
 /// everything that needs a resolved feature set, profile, and (for a
 /// non-emulator build) target triple. See [`BuildArgs::resolve_features`]
