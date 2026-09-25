@@ -20,7 +20,8 @@ fn field_bit(value: &Fp, index: usize) -> u8 {
     (bytes[index / 8] >> (index % 8)) & 1
 }
 
-pub fn commit_ivk(ak: Fp, nk: Fp, rivk: Scalar) -> Result<Fp> {
+/// `progress` is called after each of the 51 chunks, the slow part.
+pub fn commit_ivk(ak: Fp, nk: Fp, rivk: Scalar, progress: &mut dyn FnMut()) -> Result<Fp> {
     let mut acc = generators::ivk_commitment_q();
     // `hash_to_curve` returns a closure holding the domain-separated hasher
     // state, so it is built once and applied to all 51 chunks.
@@ -39,6 +40,7 @@ pub fn commit_ivk(ak: Fp, nk: Fp, rivk: Scalar) -> Result<Fp> {
         }
         let s = hash_s(&u32::from(index).to_le_bytes());
         acc = incomplete_add(incomplete_add(acc, s)?, acc)?;
+        progress();
     }
 
     let commitment = acc + generators::ivk_commitment_base() * rivk;

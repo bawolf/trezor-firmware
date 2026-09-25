@@ -75,7 +75,8 @@ impl ExtendedSpendingKey {
     }
 
     fn validate(&self) -> Result<()> {
-        FullViewingKey::from_spending_key(&self.spending_key)?.validate()
+        FullViewingKey::from_spending_key(&self.spending_key)?.validate(&mut || {})?;
+        Ok(())
     }
 }
 
@@ -107,8 +108,10 @@ impl FullViewingKey {
         Ok(Self { ak, nk, rivk })
     }
 
-    fn validate(&self) -> Result<()> {
-        self.incoming_viewing_key()?;
+    /// Checks the key as `orchard` does (valid external and internal ivk) and
+    /// returns the external ivk.
+    fn validate(&self, progress: &mut dyn FnMut()) -> Result<Scalar> {
+        let external = self.incoming_viewing_key(progress)?;
 
         let mut material = prf_expand(
             self.rivk.to_repr().as_ref(),
@@ -125,12 +128,12 @@ impl FullViewingKey {
             nk: self.nk,
             rivk: internal_rivk,
         };
-        internal.incoming_viewing_key()?;
-        Ok(())
+        internal.incoming_viewing_key(progress)?;
+        Ok(external)
     }
 
-    fn incoming_viewing_key(&self) -> Result<Scalar> {
-        let ivk_base = sinsemilla::commit_ivk(self.ak, self.nk, self.rivk)?;
+    fn incoming_viewing_key(&self, progress: &mut dyn FnMut()) -> Result<Scalar> {
+        let ivk_base = sinsemilla::commit_ivk(self.ak, self.nk, self.rivk, progress)?;
         let ivk = Option::<Scalar>::from(Scalar::from_repr(ivk_base.to_repr()))
             .ok_or(Error::InvalidKey)?;
         if bool::from(ivk.is_zero()) {
@@ -194,17 +197,49 @@ pub fn derive_external_receiver(
     diversifier_index: [u8; 11],
 ) -> Result<[u8; 43]> {
     let full_viewing_key = derive_account_full_viewing_key(seed, network, account)?;
+    let incoming_viewing_key = full_viewing_key.incoming_viewing_key(&mut || {})?;
+    Ok(external_receiver(
+        &full_viewing_key,
+        incoming_viewing_key,
+        diversifier_index,
+    ))
+}
 
+/// Derives one external Orchard receiver from an account's ZIP-32 spending
+/// key (`m/32'/coin_type'/account'`), for a caller that is handed the key
+/// rather than the seed. Rejects a key the `orchard` crate rejects.
+///
+/// `progress` is called once per Sinsemilla chunk of each ivk commitment, so
+/// that a caller on a slow device can report progress while it runs.
+#[inline(never)]
+pub fn derive_external_receiver_from_spending_key(
+    spending_key: &[u8; 32],
+    diversifier_index: [u8; 11],
+    progress: &mut dyn FnMut(),
+) -> Result<[u8; 43]> {
+    let full_viewing_key = FullViewingKey::from_spending_key(spending_key)?;
+    let incoming_viewing_key = full_viewing_key.validate(progress)?;
+    Ok(external_receiver(
+        &full_viewing_key,
+        incoming_viewing_key,
+        diversifier_index,
+    ))
+}
+
+fn external_receiver(
+    full_viewing_key: &FullViewingKey,
+    incoming_viewing_key: Scalar,
+    diversifier_index: [u8; 11],
+) -> [u8; 43] {
     let mut diversifier_key = full_viewing_key.diversifier_key();
     let diversifier = ff1::encrypt_diversifier_index(&diversifier_key, diversifier_index);
     diversifier_key.zeroize();
-    let incoming_viewing_key = full_viewing_key.incoming_viewing_key()?;
     let transmission_key = sinsemilla::diversify_hash(&diversifier) * incoming_viewing_key;
 
     let mut receiver = [0u8; 43];
     receiver[..11].copy_from_slice(&diversifier);
     receiver[11..].copy_from_slice(transmission_key.to_bytes().as_ref());
-    Ok(receiver)
+    receiver
 }
 
 /// Writes the account's Orchard full viewing key as `ak || nk || rivk`.
@@ -219,5 +254,20 @@ pub fn derive_full_viewing_key(
     output: &mut [u8; 96],
 ) -> Result<()> {
     derive_account_full_viewing_key(seed, network, account)?.write(output);
+    Ok(())
+}
+
+/// Writes the full viewing key of an account's ZIP-32 spending key as
+/// `ak || nk || rivk`. Rejects a key the `orchard` crate rejects. `progress`
+/// is called once per Sinsemilla chunk of each ivk commitment.
+#[inline(never)]
+pub fn derive_full_viewing_key_from_spending_key(
+    spending_key: &[u8; 32],
+    output: &mut [u8; 96],
+    progress: &mut dyn FnMut(),
+) -> Result<()> {
+    let full_viewing_key = FullViewingKey::from_spending_key(spending_key)?;
+    full_viewing_key.validate(progress)?;
+    full_viewing_key.write(output);
     Ok(())
 }

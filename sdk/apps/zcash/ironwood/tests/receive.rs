@@ -1,4 +1,9 @@
-use ironwood::receive::{Error, Network, derive_external_receiver, derive_full_viewing_key};
+use ironwood::receive::{
+    Error, Network, derive_external_receiver, derive_external_receiver_from_spending_key,
+    derive_full_viewing_key, derive_full_viewing_key_from_spending_key,
+};
+use orchard::keys::SpendingKey;
+use zip32::AccountId;
 
 const SEED: [u8; 32] = [
     0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25,
@@ -198,4 +203,45 @@ fn full_viewing_key_uses_receiver_policy_boundaries() {
         Err(Error::InvalidAccount),
     );
     derive_full_viewing_key(&SEED, Network::Testnet, (1 << 31) - 1, &mut output).unwrap();
+}
+
+/// The ZIP-32 account spending key the `orchard` crate derives for `SEED`.
+fn account_spending_key(coin_type: u32, account: u32) -> [u8; 32] {
+    let account = AccountId::try_from(account).unwrap();
+    *SpendingKey::from_zip32_seed(&SEED, coin_type, account)
+        .unwrap()
+        .to_bytes()
+}
+
+#[test]
+fn spending_key_entry_points_match_the_seed_ones() {
+    for (network, coin_type) in [(Network::Mainnet, 133), (Network::Testnet, 1)] {
+        let spending_key = account_spending_key(coin_type, 9);
+        for index in INDICES {
+            assert_eq!(
+                derive_external_receiver_from_spending_key(&spending_key, index, &mut || {}),
+                derive_external_receiver(&SEED, network, 9, index),
+            );
+        }
+        let mut from_seed = [0u8; 96];
+        let mut from_key = [0u8; 96];
+        derive_full_viewing_key(&SEED, network, 9, &mut from_seed).unwrap();
+        derive_full_viewing_key_from_spending_key(&spending_key, &mut from_key, &mut || {})
+            .unwrap();
+        assert_eq!(from_key, from_seed);
+    }
+}
+
+#[test]
+fn spending_key_entry_points_report_progress_per_sinsemilla_chunk() {
+    let spending_key = account_spending_key(1, 9);
+    let mut calls = 0;
+    derive_external_receiver_from_spending_key(&spending_key, [0; 11], &mut || calls += 1).unwrap();
+    assert_eq!(calls, 2 * 51);
+
+    let mut calls = 0;
+    let mut output = [0u8; 96];
+    derive_full_viewing_key_from_spending_key(&spending_key, &mut output, &mut || calls += 1)
+        .unwrap();
+    assert_eq!(calls, 2 * 51);
 }

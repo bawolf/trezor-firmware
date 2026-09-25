@@ -11,7 +11,10 @@ mod sinsemilla;
 const MAINNET_COIN_TYPE: u32 = 133;
 const TESTNET_COIN_TYPE: u32 = 1;
 
-pub use keys::{derive_external_receiver, derive_full_viewing_key};
+pub use keys::{
+    derive_external_receiver, derive_external_receiver_from_spending_key, derive_full_viewing_key,
+    derive_full_viewing_key_from_spending_key,
+};
 
 /// Network selected and validated by the device application.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -21,7 +24,8 @@ pub enum Network {
 }
 
 impl Network {
-    const fn coin_type(self) -> u32 {
+    /// SLIP-44 coin type, the second component of the ZIP-32 account path.
+    pub const fn coin_type(self) -> u32 {
         match self {
             Self::Mainnet => MAINNET_COIN_TYPE,
             Self::Testnet => TESTNET_COIN_TYPE,
