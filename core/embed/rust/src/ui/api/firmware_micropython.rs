@@ -4,8 +4,7 @@ use core::mem::MaybeUninit;
 use heapless::Vec;
 #[cfg(feature = "app_loading")]
 use rkyv::{
-    access_unchecked,
-    api::low::to_bytes_in_with_alloc,
+    api::low::{access, to_bytes_in_with_alloc},
     option::ArchivedOption,
     rancor::Failure,
     ser::{allocator::SubAllocator, writer::Buffer},
@@ -1263,8 +1262,10 @@ extern "C" fn new_process_ipc_message(n_args: usize, args: *const Obj, kwargs: *
     let block = |_args: &[Obj], kwargs: &Map| {
         let obj: Obj = kwargs.get(Qstr::MP_QSTR_data)?;
 
-        let archived =
-            unsafe { access_unchecked::<Archived<TrezorUiEnum>>(unwrap!(get_buffer(obj))) };
+        // The request comes from an untrusted app: validate it before reading.
+        let data = unwrap!(unsafe { get_buffer(obj) });
+        let archived = access::<Archived<TrezorUiEnum>, Failure>(data)
+            .map_err(|_| Error::ValueError(c"Invalid UI request"))?;
 
         // Helper to wrap a layout with br_code and optional br_name into the expected
         // tuple
@@ -1661,8 +1662,9 @@ extern "C" fn new_deserialize_progress_message(
             }
         }
 
-        // Deserialize the rkyv archived data directly from the static buffer
-        let archived = unsafe { rkyv::access_unchecked::<Archived<TrezorProgressEnum>>(data) };
+        // The request comes from an untrusted app: validate it before reading.
+        let archived = access::<Archived<TrezorProgressEnum>, Failure>(data)
+            .map_err(|_| Error::ValueError(c"Invalid progress request"))?;
 
         // Access the archived data zero-copy using safe Deref access
         let result: Obj = match archived {

@@ -503,6 +503,7 @@ static void _librust_qstrs(void) {
   MP_QSTR_max_ms;
   MP_QSTR_max_rounds;
   MP_QSTR_menu_title;
+  MP_QSTR_message_id;
   MP_QSTR_message_in;
   MP_QSTR_message_out;
   MP_QSTR_message_retransmit;
