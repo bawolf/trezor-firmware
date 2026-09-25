@@ -10,6 +10,21 @@
     "description": "THP related strings only in Eckhart"
   },
   {
+    "prefix": "n1w1__",
+    "allowedLayouts": [ "Eckhart" ],
+    "description": "N1W1 tag backup only in Eckhart"
+  },
+  {
+    "exact": [
+      "backup__type_create",
+      "backup__type_have",
+      "backup__type_n1w1",
+      "backup__type_wordlist"
+    ],
+    "allowedLayouts": [ "Eckhart" ],
+    "description": "Backup method selection only in Eckhart"
+  },
+  {
     "prefix": "sd_card__",
     "allowedLayouts": [ "Bolt", "Delizia" ],
     "description": "Only Bolt and Delizia have SD card support"
@@ -83,6 +98,93 @@
   },
   {
     "exact": [
+      "buttons__disconnect",
+      "buttons__forget",
+      "buttons__review",
+      "regulatory__title",
+      "wipe_code__change",
+      "wipe_code__remove",
+      "wipe_code__title",
+      "words__bluetooth",
+      "words__connected",
+      "words__disabled",
+      "words__disconnected",
+      "words__enabled",
+      "words__made_in",
+      "words__off",
+      "words__on"
+    ],
+    "allowedLayouts": [ "Eckhart" ],
+    "description": "Only used by menu of Eckhart"
+  },
+  {
+    "exact": [
+      "tutorial__did_you_know",
+      "tutorial__first_wallet",
+      "tutorial__lets_begin",
+      "tutorial__title_easy_navigation",
+      "tutorial__title_lets_begin",
+      "tutorial__welcome_safe5"
+    ],
+    "allowedLayouts": [ "Delizia" ],
+    "description": "Only used by tutorial of Delizia"
+  },
+  {
+    "exact": [
+      "instructions__menu_to_continue",
+      "tutorial__continue",
+      "tutorial__last_one",
+      "tutorial__menu_appendix",
+      "tutorial__navigation_ts7",
+      "tutorial__one_more_step",
+      "tutorial__power",
+      "tutorial__suite_restart",
+      "tutorial__tap_to_start",
+      "tutorial__welcome_safe7"
+    ],
+    "allowedLayouts": [ "Eckhart" ],
+    "description": "Only used by tutorial of Eckhart"
+  },
+  {
+    "exact": [
+      "instructions__hold_to_exit_tutorial",
+      "tutorial__exit",
+      "tutorial__menu",
+      "tutorial__ready_to_use_safe5",
+      "tutorial__restart_tutorial",
+      "tutorial__title_handy_menu",
+      "tutorial__title_hold",
+      "tutorial__title_well_done"
+    ],
+    "allowedLayouts": [ "Delizia", "Eckhart" ],
+    "description": "Only used by tutorials of Delizia and Eckhart"
+  },
+  {
+    "exact": [
+      "backup__create_backup_to_prevent_loss",
+      "backup__title_backup_completed",
+      "instructions__shares_start_with_1",
+      "reset__check_backup_instructions",
+      "reset__incorrect_word_selected",
+      "reset__num_of_shares_how_many",
+      "reset__num_of_shares_long_info_template",
+      "reset__repeat_for_all_shares",
+      "reset__select_threshold",
+      "reset__share_completed_template",
+      "reset__slip39_checklist_more_info_threshold_example_template",
+      "reset__slip39_checklist_more_info_threshold",
+      "reset__slip39_checklist_num_groups_x_template",
+      "reset__slip39_checklist_num_shares_x_template",
+      "reset__slip39_checklist_threshold_x_template",
+      "reset__slip39_checklist_write_down_recovery",
+      "reset__words_written_down_template",
+      "words__try_again"
+    ],
+    "allowedLayouts": [ "Delizia", "Eckhart" ],
+    "description": "Only used by backup and reset flows of Delizia and Eckhart layouts"
+  },
+  {
+    "exact": [
       "backup__can_back_up_anytime",
       "backup__new_wallet_successfully_created",
       "lockscreen__title_locked",
@@ -113,6 +215,8 @@
       "backup__want_to_skip",
       "buttons__check_again",
       "buttons__confirm_all",
+      "passphrase__title_hide",
+      "passphrase__title_source",
       "reset__button_create",
       "reset__button_recover",
       "reset__continue_with_share_template",
@@ -131,12 +235,13 @@
   {
     "exact": [
       "ethereum__approve_revoke",
+      "ethereum__approve",
       "fido__title_reset",
-      "passphrase__access_wallet",
-      "passphrase__wallet",
+      "homescreen__title_no_usb_connection",
       "pin__enabled",
       "progress__locking_device",
       "recovery__enter_different_share",
+      "recovery__title_cancel_dry_run",
       "recovery__you_have_entered",
       "reset__more_info_at",
       "reset__select_word_x_of_y_template",
@@ -149,6 +254,8 @@
   },
   {
     "exact": [
+      "passphrase__title_settings",
+      "pin__info",
       "wipe_code__info"
     ],
     "allowedLayouts": [ "Bolt", "Caesar", "Eckhart" ],
@@ -198,7 +305,8 @@
   },
   {
     "exact": [
-      "buttons__show_next"
+      "buttons__show_next",
+      "stellar__token_info"
     ],
     "allowedLayouts": [ "Bolt", "Eckhart" ],
     "description": "These are specific to Bolt and Eckhart layouts"
@@ -268,6 +376,7 @@
   {
     "exact": [
       "brightness__changed_title",
+      "ethereum__subtitle_input_data_bytes",
       "fido__more_credentials",
       "homescreen__settings_title",
       "instructions__hold_to_confirm",
@@ -277,15 +386,10 @@
       "instructions__tap_to_confirm",
       "instructions__tap_to_continue",
       "instructions__tap",
+      "passphrase__title_passphrase",
       "pin__cancel_description",
       "recovery__cancel_dry_run",
       "reset__cancel_create_wallet",
-      "tutorial__did_you_know",
-      "tutorial__first_wallet",
-      "tutorial__lets_begin",
-      "tutorial__title_easy_navigation",
-      "tutorial__title_lets_begin",
-      "tutorial__welcome_safe5",
       "words__not_recommended",
       "words__unlocked"
     ],
@@ -297,44 +401,23 @@
       "address__cancel_contact_support",
       "address__cancel_receive",
       "address__public_key_confirmed",
-      "backup__create_backup_to_prevent_loss",
-      "backup__title_backup_completed",
       "buttons__continue_anyway",
       "buttons__view_all_data",
+      "ethereum__auth_done",
+      "ethereum__delegate_done",
+      "ethereum__revoke_done",
       "fido__select_intro",
       "homescreen__set_default",
+      "instructions__continue_holding",
       "instructions__continue_in_app",
       "instructions__enter_next_share",
-      "instructions__hold_to_exit_tutorial",
       "instructions__hold_to_sign",
-      "instructions__shares_start_with_1",
       "instructions__view_all_data",
       "pin__cancel_info",
       "pin__cancel_setup",
-      "reset__check_backup_instructions",
-      "reset__incorrect_word_selected",
-      "reset__num_of_shares_how_many",
-      "reset__num_of_shares_long_info_template",
-      "reset__repeat_for_all_shares",
-      "reset__select_threshold",
-      "reset__share_completed_template",
-      "reset__slip39_checklist_more_info_threshold_example_template",
-      "reset__slip39_checklist_more_info_threshold",
-      "reset__slip39_checklist_num_groups_x_template",
-      "reset__slip39_checklist_num_shares_x_template",
-      "reset__slip39_checklist_threshold_x_template",
-      "reset__slip39_checklist_write_down_recovery",
-      "reset__words_written_down_template",
+      "send__cancel_sign",
       "send__incl_transaction_fee",
-      "tutorial__exit",
-      "tutorial__menu",
-      "tutorial__ready_to_use_safe5",
-      "tutorial__restart_tutorial",
-      "tutorial__title_handy_menu",
-      "tutorial__title_hold",
-      "tutorial__title_well_done",
-      "wipe_code__cancel_setup",
-      "words__try_again"
+      "wipe_code__cancel_setup"
     ],
     "allowedLayouts": [ "Delizia", "Eckhart" ],
     "description": "These are specific to Delizia and Eckhart layouts"
@@ -342,17 +425,15 @@
   {
     "exact": [
       "address__check_with_source",
+      "address__warning_not_yours",
       "backup__not_recommend",
       "buttons__authenticate",
-      "buttons__disconnect",
-      "buttons__forget",
       "homescreen__backup_needed_info",
       "instructions__hold_to_continue",
-      "instructions__menu_to_continue",
       "instructions__shares_start_with_x_template",
       "lockscreen__unlock",
-      "passphrase__access_hidden_wallet",
-      "passphrase__hidden_wallet",
+      "passphrase__show",
+      "pin__change",
       "pin__setup_completed",
       "recovery__share_does_not_match",
       "recovery__share_from_group_entered_template",
@@ -361,27 +442,7 @@
       "reset__select_word_from_share_template",
       "reset__select_word_template",
       "send__send_in_the_app",
-      "tutorial__continue",
-      "tutorial__last_one",
-      "tutorial__menu_appendix",
-      "tutorial__navigation_ts7",
-      "tutorial__one_more_step",
-      "tutorial__power",
-      "tutorial__suite_restart",
-      "tutorial__tap_to_start",
-      "tutorial__welcome_safe7",
-      "wipe_code__change",
-      "wipe_code__remove",
-      "wipe_code__title",
-      "words__bluetooth",
       "words__cancel_question",
-      "words__connected",
-      "words__disabled",
-      "words__disconnected",
-      "words__enabled",
-      "words__made_in",
-      "words__off",
-      "words__on",
       "words__receive",
       "words__recovery_share"
     ],

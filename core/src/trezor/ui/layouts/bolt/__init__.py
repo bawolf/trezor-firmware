@@ -355,11 +355,11 @@ async def show_address(
         elif result is INFO:
 
             def xpub_title(i: int) -> str:
-                result = f"MULTISIG XPUB #{i + 1}\n"
+                result = TR.address__title_multisig_xpub_template.format(i + 1)
                 result += (
-                    f"({TR.address__title_yours})"
+                    TR.address__title_yours
                     if i == multisig_index
-                    else f"({TR.address__title_cosigner})"
+                    else TR.address__title_cosigner
                 )
                 return result
 
@@ -368,8 +368,12 @@ async def show_address(
                 address=address if address_qr is None else address_qr,
                 case_sensitive=case_sensitive,
                 details_title=details_title,
-                account=account,
-                path=path,
+                account=(with_colon(TR.words__account), account) if account else None,
+                path=(
+                    (with_colon(TR.address_details__derivation_path), path)
+                    if path
+                    else None
+                ),
                 xpubs=[(xpub_title(i), xpub) for i, xpub in enumerate(xpubs)],
             ) as layout:
                 result = await interact(layout, None, raise_on_cancel=None)
@@ -1853,8 +1857,8 @@ if not utils.BITCOIN_ONLY:
     ) -> None:
         account_items = (
             [
-                (TR.words__account_colon, account_details[0], False),
-                (TR.address_details__derivation_path_colon, account_details[1], False),
+                (TR.words__account, account_details[0], False),
+                (TR.address_details__derivation_path, account_details[1], False),
             ]
             if account_details
             else None
@@ -1886,8 +1890,8 @@ if not utils.BITCOIN_ONLY:
             chunkify=chunkify,
             br_name="tron/send",
             info_items=[
-                (TR.words__account_colon, account_details[0], False),
-                (TR.address_details__derivation_path_colon, account_details[1], False),
+                (TR.words__account, account_details[0], False),
+                (TR.address_details__derivation_path, account_details[1], False),
             ],
             info_title=TR.address_details__account_info,
         )

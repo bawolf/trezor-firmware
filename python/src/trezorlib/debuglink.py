@@ -574,6 +574,10 @@ class DebugLink:
         return self.version >= (1, 11, 0)
 
     @property
+    def has_wipe(self) -> bool:
+        return self.version >= (2, 9, 1)
+
+    @property
     def layout_type(self) -> LayoutType:
         assert self.model is not None
         return LayoutType.from_model(self.model)
@@ -1753,7 +1757,7 @@ class TrezorTestContext:
         """
         if reseed and self.is_emulator:
             self.debug.reseed(0)
-        if self.model is models.T1B1:
+        if not self.debug.has_wipe:
             self.client._get_any_session().call(
                 messages.WipeDevice(),
                 expect=messages.Success,
@@ -2087,6 +2091,20 @@ class ScreenButtons:
                 (self._left(), self._grid(self._height(), 4, 3)),
                 (self._right(), self._grid(self._height(), 4, 3)),
             ]
+        else:
+            raise ValueError("Wrong layout type")
+
+    def actionbar_left(self) -> Coords:
+        """Left button of the ActionBar."""
+        if self.layout_type in (LayoutType.Delizia, LayoutType.Eckhart):
+            return (self._left(), self._bottom())
+        else:
+            raise ValueError("Wrong layout type")
+
+    def actionbar_right(self) -> Coords:
+        """Right button of the ActionBar."""
+        if self.layout_type in (LayoutType.Delizia, LayoutType.Eckhart):
+            return (self._right(), self._bottom())
         else:
             raise ValueError("Wrong layout type")
 

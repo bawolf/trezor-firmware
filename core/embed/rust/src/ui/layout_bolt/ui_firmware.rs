@@ -1,10 +1,12 @@
 use core::cmp::Ordering;
 
+#[cfg(feature = "universal_fw")]
+use super::component::FidoConfirm;
 use super::component::{
     check_homescreen_format, AddressDetails, Bip39Input, Button, ButtonMsg, ButtonPage,
-    ButtonStyleSheet, CancelConfirmMsg, CoinJoinProgress, Dialog, FidoConfirm, Frame, Homescreen,
-    IconDialog, Lockscreen, MnemonicKeyboard, NumberInputDialog, PassphraseKeyboard, PinKeyboard,
-    Progress, SelectMenu, SelectWordCount, SelectWordCountLayout, SetBrightnessDialog, ShareWords,
+    ButtonStyleSheet, CancelConfirmMsg, CoinJoinProgress, Dialog, Frame, Homescreen, IconDialog,
+    Lockscreen, MnemonicKeyboard, NumberInputDialog, PassphraseKeyboard, PinKeyboard, Progress,
+    SelectMenu, SelectWordCount, SelectWordCountLayout, SetBrightnessDialog, ShareWords,
     SimplePage, Slip39Input,
 };
 use super::{fonts, theme, UIBolt};
@@ -26,7 +28,6 @@ use crate::ui::component::text::TextStyle;
 use crate::ui::component::{
     Border, ComponentExt, Empty, FormattedText, Jpeg, Label, Never, Timeout,
 };
-use crate::ui::layout::menu_item_intent::MenuItemIntent;
 use crate::ui::layout::obj::{LayoutMaybeTrace, LayoutObj, RootComponent};
 use crate::ui::layout::util::{ConfirmValueParams, PropsList, RecoveryType};
 use crate::ui::notification::Notification;
@@ -223,6 +224,7 @@ impl FirmwareUI for UIBolt {
         Ok(layout)
     }
 
+    #[cfg(feature = "universal_fw")]
     fn confirm_fido(
         title: TString<'static>,
         app_name: TString<'static>,
@@ -790,8 +792,8 @@ impl FirmwareUI for UIBolt {
         address: TString<'static>,
         case_sensitive: bool,
         details_title: TString<'static>,
-        account: Option<TString<'static>>,
-        path: Option<TString<'static>>,
+        account: Option<(TString<'static>, TString<'static>)>,
+        path: Option<(TString<'static>, TString<'static>)>,
         xpubs: Obj,
     ) -> Result<impl LayoutMaybeTrace, Error> {
         let mut ad = AddressDetails::new(

@@ -1,3 +1,19 @@
+# This file is part of the Trezor project.
+#
+# Copyright (C) SatoshiLabs and contributors
+#
+# This library is free software: you can redistribute it and/or modify
+# it under the terms of the GNU Lesser General Public License version 3
+# as published by the Free Software Foundation.
+#
+# This library is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU Lesser General Public License for more details.
+#
+# You should have received a copy of the License along with this library.
+# If not, see <https://www.gnu.org/licenses/lgpl-3.0.html>.
+
 import re
 from typing import TYPE_CHECKING
 
@@ -91,10 +107,7 @@ def set_selection(debug: "DebugLink", diff: int) -> None:
 
         for _ in range(diff):
             debug.click(button)
-        if debug.layout_type in (LayoutType.Bolt, LayoutType.Eckhart):
-            debug.click(debug.screen_buttons.ok())
-        else:
-            debug.swipe_up()
+        debug.click(debug.screen_buttons.ok())
     elif debug.layout_type is LayoutType.Caesar:
         layout = debug.read_layout()
         if (

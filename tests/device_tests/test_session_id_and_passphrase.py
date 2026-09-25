@@ -1,6 +1,6 @@
 # This file is part of the Trezor project.
 #
-# Copyright (C) 2012-2019 SatoshiLabs and contributors
+# Copyright (C) SatoshiLabs and contributors
 #
 # This library is free software: you can redistribute it and/or modify
 # it under the terms of the GNU Lesser General Public License version 3
@@ -484,7 +484,7 @@ def test_hide_passphrase_from_host(test_ctx: TrezorTestContext):
             assert any(
                 needle in title
                 for needle in [
-                    TR.passphrase__hidden_wallet,
+                    TR.passphrase__wallet,
                     TR.passphrase__title_confirm,
                 ]
             )

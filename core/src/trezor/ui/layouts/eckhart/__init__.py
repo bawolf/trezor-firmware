@@ -224,22 +224,22 @@ def confirm_hide_passphrase_from_host() -> Awaitable[None]:
 async def confirm_hidden_passphrase_from_host() -> None:
     await confirm_action(
         "passphrase_host1_hidden",
-        TR.passphrase__hidden_wallet,
+        TR.passphrase__wallet,
         description=TR.passphrase__from_host_not_shown,
-        verb=TR.passphrase__access_hidden_wallet,
+        verb=TR.passphrase__access_wallet,
     )
 
 
 async def show_passphrase_from_host(passphrase: str | None) -> None:
     await confirm_action(
         "passphrase_host1",
-        TR.passphrase__hidden_wallet,
+        TR.passphrase__wallet,
         description=TR.passphrase__next_screen_will_show_passphrase,
         verb=TR.passphrase__show,
     )
 
     await confirm_value(
-        TR.passphrase__hidden_wallet,
+        TR.passphrase__wallet,
         passphrase or "",
         description="",
         br_name="passphrase_host2",
@@ -284,11 +284,11 @@ async def show_address(
     chunkify: bool = False,
 ) -> None:
     def xpub_title(i: int) -> str:
-        result = f"Multisig XPUB #{i + 1}\n"
+        result = TR.address__title_multisig_xpub_template.format(i + 1)
         result += (
-            f"({TR.address__title_yours.lower()})"
+            TR.address__title_yours
             if i == multisig_index
-            else f"({TR.address__title_cosigner.lower()})"
+            else TR.address__title_cosigner
         )
         return result
 

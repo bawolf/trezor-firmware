@@ -239,6 +239,7 @@ impl FirmwareUI for UICaesar {
         Err::<RootComponent<Empty, ModelUI>, Error>(Error::NotImplementedError)
     }
 
+    #[cfg(feature = "universal_fw")]
     fn confirm_fido(
         title: TString<'static>,
         app_name: TString<'static>,
@@ -983,8 +984,8 @@ impl FirmwareUI for UICaesar {
         address: TString<'static>,
         case_sensitive: bool,
         _details_title: TString<'static>,
-        account: Option<TString<'static>>,
-        path: Option<TString<'static>>,
+        account: Option<(TString<'static>, TString<'static>)>,
+        path: Option<(TString<'static>, TString<'static>)>,
         xpubs: Obj,
     ) -> Result<impl LayoutMaybeTrace, Error> {
         let mut ad = AddressDetails::new(address, case_sensitive, account, path)?;
@@ -1410,7 +1411,7 @@ impl FirmwareUI for UICaesar {
                     ButtonActions::prev_none_next(),
                 ),
                 2 => tutorial_screen(
-                    TR::buttons__hold_to_confirm.into(),
+                    TR::instructions__hold_to_confirm.into(),
                     TR::tutorial__press_and_hold,
                     ButtonLayout::arrow_none_htc(TR::buttons__hold_to_confirm.into()),
                     ButtonActions::prev_none_next(),

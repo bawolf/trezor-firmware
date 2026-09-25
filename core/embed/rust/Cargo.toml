@@ -32,6 +32,7 @@ spin.workspace = true
 static-alloc.workspace = true
 trezor-thp = { workspace = true, optional = true }
 trezor-tjpgdec.workspace = true
+trezor-ward = { workspace = true, optional = true }
 ufmt.workspace = true
 unsize.workspace = true
 without-alloc.workspace = true
@@ -96,7 +97,6 @@ touch = []
 touch_wakeup = []
 translations = ["crypto"]
 tropic = []
-ui = []
 ui_antialiasing = []
 ui_blurring = []
 ui_color_32bit = []
@@ -110,6 +110,7 @@ ui_overlay = []
 ui_performance_overlay = []
 universal_fw = []
 usb = []
+ward = ["dep:trezor-ward"]
 
 # --------------------------------------------------------------------------
 # Unit test configuration
@@ -157,7 +158,6 @@ test = [
     "ui_image_buffer",
     "ui_jpeg",
     "ui_overlay",
-    "ui",
     "universal_fw",
 ]
 

@@ -3,6 +3,7 @@
 #![deny(clippy::cast_lossless)]
 #![allow(clippy::new_without_default)]
 #![allow(clippy::ptr_offset_with_cast)] // workaround https://github.com/rust-lang/rust-bindgen/issues/3053
+#![deny(unused_imports)]
 #![deny(unsafe_op_in_unsafe_fn)]
 #![allow(internal_features)]
 // Allowing dead code not to cause a lot of warnings when building for a specific target
@@ -20,7 +21,7 @@
     ),
     feature(lang_items)
 )]
-#![cfg_attr(all(feature = "ui", feature = "layout_bolt"), feature(trait_alias))]
+#![cfg_attr(feature = "layout_bolt", feature(trait_alias))]
 
 #[macro_use]
 extern crate num_derive;
@@ -50,11 +51,12 @@ mod trace;
 #[cfg(feature = "translations")]
 mod translations;
 mod trezorhal;
+#[cfg(feature = "ward")]
+mod ward;
 
 // mod ui is `pub` because of the re-export pattern in individual models, which
 // would trigger a brickload of "unused symbol" warnings otherwise.
 // TODO: maybe get rid of the re-export pattern :shrugs:
-#[cfg(feature = "ui")]
 pub mod ui;
 
 pub mod util;

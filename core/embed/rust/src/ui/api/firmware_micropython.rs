@@ -264,6 +264,7 @@ extern "C" fn new_confirm_emphasized(n_args: usize, args: *const Obj, kwargs: *m
 }
 
 extern "C" fn new_confirm_fido(n_args: usize, args: *const Obj, kwargs: *mut Map) -> Obj {
+    #[cfg(feature = "universal_fw")]
     let block = move |_args: &[Obj], kwargs: &Map| {
         let title: TString = kwargs.get(Qstr::MP_QSTR_title)?.try_into()?;
         let app_name: TString = kwargs.get(Qstr::MP_QSTR_app_name)?.try_into()?;
@@ -273,6 +274,8 @@ extern "C" fn new_confirm_fido(n_args: usize, args: *const Obj, kwargs: *mut Map
         let layout = ModelUI::confirm_fido(title, app_name, icon, accounts)?;
         Ok(LayoutObj::new_root(layout)?.into())
     };
+    #[cfg(not(feature = "universal_fw"))]
+    let block = |_args: &[Obj], _kwargs: &Map| Err(Error::NotImplementedError);
     unsafe { util::try_with_args_and_kwargs(n_args, args, kwargs, block) }
 }
 
@@ -793,8 +796,16 @@ extern "C" fn new_show_address_details(n_args: usize, args: *const Obj, kwargs: 
         let details_title: TString = kwargs.get(Qstr::MP_QSTR_details_title)?.try_into()?;
         let address: TString = kwargs.get(Qstr::MP_QSTR_address)?.try_into()?;
         let case_sensitive: bool = kwargs.get(Qstr::MP_QSTR_case_sensitive)?.try_into()?;
-        let account: Option<TString> = kwargs.get(Qstr::MP_QSTR_account)?.try_into_option()?;
-        let path: Option<TString> = kwargs.get(Qstr::MP_QSTR_path)?.try_into_option()?;
+        let labeled = |obj: Obj| -> Result<Option<(TString, TString)>, Error> {
+            if obj == Obj::const_none() {
+                Ok(None)
+            } else {
+                let [label, content]: [TString; 2] = util::iter_into_array(obj)?;
+                Ok(Some((label, content)))
+            }
+        };
+        let account = labeled(kwargs.get(Qstr::MP_QSTR_account)?)?;
+        let path = labeled(kwargs.get(Qstr::MP_QSTR_path)?)?;
         let xpubs: Obj = kwargs.get(Qstr::MP_QSTR_xpubs)?;
 
         let layout = ModelUI::show_address_details(
@@ -1850,8 +1861,8 @@ pub static mp_module_trezorui_api: Module = obj_module! {
     ///     address: str,
     ///     case_sensitive: bool,
     ///     details_title: str,
-    ///     account: str | None,
-    ///     path: str | None,
+    ///     account: tuple[str, str] | None,
+    ///     path: tuple[str, str] | None,
     ///     xpubs: Sequence[tuple[str, str]],
     /// ) -> LayoutContext[UiResult]:
     ///     """Show address details - QR code, account, path, cosigner xpubs."""

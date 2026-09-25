@@ -121,6 +121,7 @@ static void _librust_qstrs(void) {
   MP_QSTR_address__qr_code;
   MP_QSTR_address__title_cosigner;
   MP_QSTR_address__title_cosigner_template;
+  MP_QSTR_address__title_multisig_xpub_template;
   MP_QSTR_address__title_provider_address;
   MP_QSTR_address__title_receive_address;
   MP_QSTR_address__title_refund_address;
@@ -129,7 +130,6 @@ static void _librust_qstrs(void) {
   MP_QSTR_address__xpub;
   MP_QSTR_address_details__account_info;
   MP_QSTR_address_details__derivation_path;
-  MP_QSTR_address_details__derivation_path_colon;
   MP_QSTR_address_details__title_receive_address;
   MP_QSTR_address_label;
   MP_QSTR_address_qr;
@@ -141,6 +141,7 @@ static void _librust_qstrs(void) {
   MP_QSTR_amount_label;
   MP_QSTR_amount_new;
   MP_QSTR_app_name;
+  MP_QSTR_app_root_min_timestamp;
   MP_QSTR_area_bytesize;
   MP_QSTR_args;
   MP_QSTR_attach_timer_fn;
@@ -544,12 +545,10 @@ static void _librust_qstrs(void) {
   MP_QSTR_paint;
   MP_QSTR_paired_devices;
   MP_QSTR_pairing_state;
-  MP_QSTR_passphrase__access_hidden_wallet;
   MP_QSTR_passphrase__access_wallet;
   MP_QSTR_passphrase__always_on_device;
   MP_QSTR_passphrase__continue_with_empty_passphrase;
   MP_QSTR_passphrase__from_host_not_shown;
-  MP_QSTR_passphrase__hidden_wallet;
   MP_QSTR_passphrase__hide;
   MP_QSTR_passphrase__next_screen_will_show_passphrase;
   MP_QSTR_passphrase__please_enter;
@@ -587,7 +586,6 @@ static void _librust_qstrs(void) {
   MP_QSTR_pin__please_check_again;
   MP_QSTR_pin__reenter;
   MP_QSTR_pin__reenter_new;
-  MP_QSTR_pin__reenter_new_description;
   MP_QSTR_pin__reenter_to_confirm;
   MP_QSTR_pin__remove;
   MP_QSTR_pin__setup_completed;
@@ -829,7 +827,6 @@ static void _librust_qstrs(void) {
   MP_QSTR_select_word_count;
   MP_QSTR_sell_amount;
   MP_QSTR_send__cancel_sign;
-  MP_QSTR_send__cancel_transaction;
   MP_QSTR_send__confirm_sending;
   MP_QSTR_send__from_multiple_accounts;
   MP_QSTR_send__incl_transaction_fee;
@@ -941,6 +938,7 @@ static void _librust_qstrs(void) {
   MP_QSTR_trezorproto;
   MP_QSTR_trezorthp;
   MP_QSTR_trezorui_api;
+  MP_QSTR_trezorward;
   MP_QSTR_tutorial;
   MP_QSTR_tutorial__continue;
   MP_QSTR_tutorial__did_you_know;
@@ -1025,7 +1023,6 @@ static void _librust_qstrs(void) {
   MP_QSTR_words;
   MP_QSTR_words__about;
   MP_QSTR_words__account;
-  MP_QSTR_words__account_colon;
   MP_QSTR_words__account_deletion;
   MP_QSTR_words__address;
   MP_QSTR_words__amount;
@@ -1514,6 +1511,7 @@ static void _librust_qstrs(void) {
   MP_QSTR_stellar__delete;
   MP_QSTR_stellar__delete_passive_offer;
   MP_QSTR_stellar__delete_trust;
+  MP_QSTR_stellar__deploy_contract;
   MP_QSTR_stellar__destination;
   MP_QSTR_stellar__exchanges_require_memo;
   MP_QSTR_stellar__ext_auth;
@@ -1566,6 +1564,7 @@ static void _librust_qstrs(void) {
   MP_QSTR_stellar__valid_until_ledger;
   MP_QSTR_stellar__value_sha256;
   MP_QSTR_stellar__wanna_clean_value_key_template;
+  MP_QSTR_stellar__wasm_hash;
   MP_QSTR_tezos__baker_address;
   MP_QSTR_tezos__balance;
   MP_QSTR_tezos__ballot;

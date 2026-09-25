@@ -1,6 +1,6 @@
 # This file is part of the Trezor project.
 #
-# Copyright (C) 2012-2019 SatoshiLabs and contributors
+# Copyright (C) SatoshiLabs and contributors
 #
 # This library is free software: you can redistribute it and/or modify
 # it under the terms of the GNU Lesser General Public License version 3
@@ -351,7 +351,8 @@ def click_info_button_delizia_eckhart(debug: "DebugLink"):
     """Click Shamir backup info button, scroll through it and return back."""
     debug.click(debug.screen_buttons.menu())
     layout = debug.read_layout()
-    assert "VerticalMenu" in layout.all_components()
+    components = layout.all_components()
+    assert "VerticalMenu" in components or "ScrolledVerticalMenu" in components
     # Click on the first item in the vertical menu
     debug.button_actions.navigate_to_menu_item(0)
 
@@ -359,10 +360,8 @@ def click_info_button_delizia_eckhart(debug: "DebugLink"):
 
     # Go through the info screen pages
     for _ in range(layout.page_count() - 1):
-        if debug.layout_type is LayoutType.Delizia:
-            debug.swipe_up()
-        elif debug.layout_type is LayoutType.Eckhart:
-            debug.click(debug.screen_buttons.ok())
+        if debug.layout_type in (LayoutType.Delizia, LayoutType.Eckhart):
+            debug.click(debug.screen_buttons.actionbar_right())
 
     # Close info screen
     debug.click(debug.screen_buttons.menu())

@@ -28,6 +28,10 @@
 
 #include "root_packet.h"
 
+// Maximum allowed time difference between the root packet and its
+// higher-level root packet.
+#define ROOT_PACKET_MAX_DRIFT (90 * 86400)  // 90 days
+
 static const mldsa44_public_key_t * const ROOT_PACKET_KEYS[] = {
 #if defined(BOOTLOADER_DEVEL) || defined(TREZOR_EMULATOR)
     (const mldsa44_public_key_t*)
@@ -201,6 +205,7 @@ static const mldsa44_public_key_t * const ROOT_PACKET_KEYS[] = {
 #endif
 };
 
+// Returns the number of set bits in the given value.
 static int popcount(uint8_t value) {
   int count = 0;
   while (value != 0) {
@@ -210,6 +215,16 @@ static int popcount(uint8_t value) {
     value >>= 1;
   }
   return count;
+}
+
+// Returns true if the set bits in mask form a single contiguous run.
+// Assumes mask != 0
+static bool is_contiguous_mask(uint8_t mask) {
+  // mask | (mask - 1) sets all bits below the lowest set bit.
+  // For a contiguous run the result is 2^n - 1, so adding one yields
+  // a single power of two, i.e. x & (x - 1) == 0.
+  uint32_t x = (uint32_t)(mask | (mask - 1)) + 1;
+  return (x & (x - 1)) == 0;
 }
 
 ts_t root_packet_verify(const void* data, size_t size,
@@ -232,7 +247,20 @@ ts_t root_packet_verify(const void* data, size_t size,
   TSH_CHECK(auth->version == ROOT_PACKET_VERSION, TS_EBADMSG);
   TSH_CHECK(auth->ring_mask != 0, TS_EBADMSG);
   TSH_CHECK(auth->ring_mask <= (1 << APP_RING_COUNT) - 1, TS_EBADMSG);
-  TSH_CHECK(auth->timestamp != 0, TS_EBADMSG);
+  TSH_CHECK(is_contiguous_mask(auth->ring_mask), TS_EBADMSG);
+  TSH_CHECK(auth->timestamp > 0, TS_EBADMSG);
+  TSH_CHECK(auth->chain_timestamp >= 0, TS_EBADMSG);
+
+  if (auth->ring_mask & (1 << APP_RING_0)) {
+    // Ring #0 - no chain timestamp
+    TSH_CHECK(auth->chain_timestamp == 0, TS_EBADMSG);
+  } else {
+    // Ring #1 and/or #2
+    // Both operands are non-negative, so the subtraction cannot overflow
+    int64_t diff = auth->timestamp - auth->chain_timestamp;
+    TSH_CHECK(diff >= -ROOT_PACKET_MAX_DRIFT && diff <= ROOT_PACKET_MAX_DRIFT,
+              TS_EBADMSG);
+  }
 
   // Calculate the expected size of the authenticated part of the root packet
   size_t auth_part_size = sizeof(root_packet_auth_t) +
@@ -258,9 +286,10 @@ ts_t root_packet_verify(const void* data, size_t size,
 
   TSH_CHECK(popcount(sigmask) == ARRAY_LENGTH(unauth->signature), TS_EBADMSG);
 
-  for (int sig_idx = 0; sig_idx < ARRAY_LENGTH(unauth->signature); sig_idx++) {
+  for (size_t sig_idx = 0; sig_idx < ARRAY_LENGTH(unauth->signature);
+       sig_idx++) {
     // Get the index of the public key in the signature mask
-    int key_idx = __builtin_ctz(sigmask);
+    size_t key_idx = __builtin_ctz(sigmask);
     TSH_CHECK(key_idx < ARRAY_LENGTH(ROOT_PACKET_KEYS), TS_EBADMSG);
 
     secbool valid = secfalse;

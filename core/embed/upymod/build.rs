@@ -20,10 +20,10 @@ fn main() -> Result<()> {
             // There are two mpconfigport.h files in both ports/unix and projects/unix.
             // The first one has precedence and is used for compilation. We need mphalport.h
             // from the other.
-            lib.add_include("../projects/unix");
+            lib.add_include("../projects/firmware/src/unix");
             lib.add_include(PathBuf::from(mpy_dir).join("ports/unix"));
         } else if cfg!(feature = "mcu_stm32") {
-            lib.add_include("../projects/firmware");
+            lib.add_include("../projects/firmware/src/stm32");
         } else {
             bail_unsupported!();
         }
@@ -78,6 +78,10 @@ fn main() -> Result<()> {
 
         if cfg!(feature = "nfc") {
             lib.add_define("USE_NFC", Some("1"));
+        }
+
+        if cfg!(feature = "ward") {
+            lib.add_define("USE_WARD", Some("1"));
         }
 
         lib.add_define(
@@ -272,7 +276,10 @@ fn main() -> Result<()> {
                 ],
             );
         } else if cfg!(feature = "mcu_stm32") {
-            lib.add_sources_in_dir("../projects/firmware", ["mphalport.c", "nlrthumb.c"]);
+            lib.add_sources_in_dir(
+                "../projects/firmware/src/stm32",
+                ["mphalport.c", "nlrthumb.c"],
+            );
 
             lib.add_sources_in_dir(
                 mpy_dir,
@@ -430,9 +437,9 @@ impl<'a> MpyBuilder<'a> {
         // TODO: remove this hack by moving these sources (or part of them)
         // into upymod.
         let extra_sources = if cfg!(feature = "emulator") {
-            [self.crate_dir.join("../projects/unix/main.c")]
+            [self.crate_dir.join("../projects/firmware/src/unix/main.c")]
         } else if cfg!(feature = "mcu_stm32") {
-            [self.crate_dir.join("../projects/firmware/main.c")]
+            [self.crate_dir.join("../projects/firmware/src/stm32/main.c")]
         } else {
             bail_unsupported!();
         };
@@ -961,6 +968,7 @@ impl<'a> MpyBuilder<'a> {
         let touch = py_bool(cfg!(feature = "touch"));
         let touch_wakeup = py_bool(cfg!(feature = "touch_wakeup"));
         let tropic = py_bool(cfg!(feature = "tropic"));
+        let ward = py_bool(cfg!(feature = "ward"));
         let scm_revision_xor2 = self.scm_revision_xor2;
         let nfc = py_bool(cfg!(feature = "nfc"));
 
@@ -987,6 +995,7 @@ impl<'a> MpyBuilder<'a> {
             format!(r"s/utils\.USE_TOUCH_WAKEUP/{touch_wakeup}/g"), // must be before USE_TOUCH
             format!(r"s/utils\.USE_TOUCH/{touch}/g"),
             format!(r"s/utils\.USE_TROPIC/{tropic}/g"),
+            format!(r"s/utils\.USE_WARD/{ward}/g"),
             format!(r"s/utils\.USE_NFC/{nfc}/g"),
             format!(r"s/utils\.SCM_REVISION_XOR2/{scm_revision_xor2}/g"),
             format!(r#"s/utils\.UI_LAYOUT == "BOLT"/{layout_bolt}/g"#),

@@ -182,7 +182,7 @@ def confirm_multisig_warning() -> Awaitable[None]:
 
 async def confirm_multisig_different_paths_warning() -> None:
     with trezorui_api.show_danger(
-        title=f"{TR.words__important}!",
+        title=TR.words__important,
         description=TR.send__multisig_different_paths,
     ) as layout:
         return await raise_if_not_confirmed(
@@ -329,11 +329,11 @@ async def show_address(
     chunkify: bool = False,
 ) -> None:
     def xpub_title(i: int) -> str:
-        result = f"Multisig XPUB #{i + 1}\n"
+        result = TR.address__title_multisig_xpub_template.format(i + 1)
         result += (
-            f"({TR.address__title_yours.lower()})"
+            TR.address__title_yours
             if i == multisig_index
-            else f"({TR.address__title_cosigner.lower()})"
+            else TR.address__title_cosigner
         )
         return result
 
@@ -2162,7 +2162,7 @@ async def confirm_modify_fee(
     )
     items: list[StrPropertyType] = []
     if fee_rate_amount:
-        items.append((TR.bitcoin__new_fee_rate, fee_rate_amount, None))
+        items.append((TR.bitcoin__new_fee_rate, fee_rate_amount, True))
     info_ctx = trezorui_api.show_info_with_cancel(
         title=TR.confirm_total__title_fee,
         items=items,
@@ -2354,10 +2354,8 @@ async def confirm_reenter_pin(is_wipe_code: bool = False) -> None:
 
 
 async def pin_mismatch_popup(is_wipe_code: bool = False) -> None:
-    title = TR.wipe_code__mismatch if is_wipe_code else TR.pin__mismatch
-    description = (
-        TR.wipe_code__enter_new if is_wipe_code else TR.pin__reenter_new_description
-    )
+    title = TR.wipe_code__enter_new if is_wipe_code else TR.pin__reenter_new
+    description = TR.wipe_code__mismatch if is_wipe_code else TR.pin__mismatch
     br_name = "wipe_code_mismatch" if is_wipe_code else "pin_mismatch"
 
     with error_popup(

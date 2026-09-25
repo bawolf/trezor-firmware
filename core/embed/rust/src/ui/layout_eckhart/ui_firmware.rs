@@ -208,16 +208,14 @@ impl FirmwareUI for UIEckhart {
         Ok(layout)
     }
 
+    #[cfg(feature = "universal_fw")]
     fn confirm_fido(
         title: TString<'static>,
         app_name: TString<'static>,
         icon: Option<TString<'static>>,
         accounts: Gc<List>,
     ) -> Result<impl LayoutMaybeTrace, Error> {
-        #[cfg(feature = "universal_fw")]
-        return flow::confirm_fido::new_confirm_fido(title, app_name, icon, accounts);
-        #[cfg(not(feature = "universal_fw"))]
-        Err::<RootComponent<Empty, ModelUI>, Error>(Error::NotImplementedError)
+        flow::confirm_fido::new_confirm_fido(title, app_name, icon, accounts)
     }
 
     fn confirm_firmware_update(
@@ -957,8 +955,8 @@ impl FirmwareUI for UIEckhart {
         _address: TString<'static>,
         _case_sensitive: bool,
         _details_title: TString<'static>,
-        _account: Option<TString<'static>>,
-        _path: Option<TString<'static>>,
+        _account: Option<(TString<'static>, TString<'static>)>,
+        _path: Option<(TString<'static>, TString<'static>)>,
         _xpubs: Obj,
     ) -> Result<impl LayoutMaybeTrace, Error> {
         Err::<RootComponent<Empty, ModelUI>, Error>(Error::NotImplementedError)

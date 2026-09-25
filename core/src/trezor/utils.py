@@ -21,6 +21,7 @@ from trezorutils import (  # noqa: F401
     NOTIFY_WIPE,
     SCM_REVISION_XOR2,
     UI_LAYOUT,
+    USE_AES_GCM,
     USE_APP_LOADING,
     USE_BACKLIGHT,
     USE_BLE,
@@ -42,6 +43,7 @@ from trezorutils import (  # noqa: F401
     USE_TOUCH,
     USE_TOUCH_WAKEUP,
     USE_TROPIC,
+    USE_WARD,
     VERSION,
     bootloader_locked,
     check_firmware_header,
@@ -418,7 +420,7 @@ def hexlify_if_bytes(data: str | bytes | bytearray | memoryview) -> str:
 if __debug__:
 
     def dump_protobuf_lines(msg: MessageType, line_start: str = "") -> Iterator[str]:
-        msg_dict = msg.__dict__
+        msg_dict = {k: v for k, v in msg.__dict__.items() if v is not None and v != []}
         if not msg_dict:
             yield line_start + msg.MESSAGE_NAME + " {}"
             return

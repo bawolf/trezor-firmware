@@ -48,12 +48,13 @@
       "Eckhart": "Public key confirmed"
     },
     "address__qr_code": "QR code",
-    "address__title_cosigner": "Cosigner",
+    "address__title_cosigner": "(cosigner)",
     "address__title_cosigner_template": "Cosigner {0}",
+    "address__title_multisig_xpub_template": "Multisig XPUB #{0} ",
     "address__title_provider_address": "Provider address",
     "address__title_receive_address": "Receive address",
     "address__title_refund_address": "Refund address",
-    "address__title_yours": "Yours",
+    "address__title_yours": "(yours)",
     "address__warning_not_yours": {
       "Bolt": "",
       "Caesar": "",
@@ -68,7 +69,6 @@
     },
     "address_details__account_info": "Account info",
     "address_details__derivation_path": "Derivation path",
-    "address_details__derivation_path_colon": "Derivation path:",
     "address_details__title_receive_address": "Receive address",
     "authenticate__confirm_template": "Allow connected app to check the authenticity of your {0}?",
     "authenticate__header": "Authenticate device",
@@ -201,7 +201,7 @@
     "bitcoin__locktime_set_to": "Locktime set to",
     "bitcoin__locktime_set_to_blockheight": "Locktime set to blockheight",
     "bitcoin__lot_of_change_outputs": {
-      "Bolt": "A lot of change-outputs",
+      "Bolt": "A lot of change-outputs.",
       "Caesar": "A lot of change-outputs",
       "Delizia": "A lot of change-outputs.",
       "Eckhart": "A lot of change-outputs."
@@ -594,12 +594,7 @@
     "coinjoin__max_mining_fee": "Max mining fee",
     "coinjoin__max_rounds": "Max rounds",
     "coinjoin__title": "Authorize coinjoin",
-    "coinjoin__title_progress": {
-      "Bolt": "Coinjoin in progress",
-      "Caesar": "Coinjoin in progress",
-      "Delizia": "Coinjoin in progress",
-      "Eckhart": "Coinjoin in progress..."
-    },
+    "coinjoin__title_progress": "Coinjoin in progress...",
     "coinjoin__waiting_for_others": "Waiting for others",
     "confirm_total__fee_rate": "Fee rate",
     "confirm_total__title_fee": "Fee info",
@@ -833,7 +828,12 @@
       "Eckhart": ""
     },
     "ethereum__all_evms": "All EVMs",
-    "ethereum__approve": "Approve",
+    "ethereum__approve": {
+      "Bolt": "Approve",
+      "Caesar": "Approve",
+      "Delizia": "Approve",
+      "Eckhart": ""
+    },
     "ethereum__approve_amount_allowance": "Amount allowance",
     "ethereum__approve_chain_id": "Chain ID",
     "ethereum__approve_intro": "Review details to approve token spending.",
@@ -1092,7 +1092,12 @@
     "homescreen__title_backup_needed": "Backup needed",
     "homescreen__title_coinjoin_authorized": "Coinjoin authorized",
     "homescreen__title_experimental_mode": "Experimental mode",
-    "homescreen__title_no_usb_connection": "No USB connection",
+    "homescreen__title_no_usb_connection": {
+      "Bolt": "No USB connection",
+      "Caesar": "No USB connection",
+      "Delizia": "No USB connection",
+      "Eckhart": ""
+    },
     "homescreen__title_pin_not_set": "PIN not set",
     "homescreen__title_seedless": "Seedless",
     "homescreen__title_set": "Change wallpaper",
@@ -1164,7 +1169,7 @@
     },
     "instructions__hold_to_confirm": {
       "Bolt": "",
-      "Caesar": "",
+      "Caesar": "Hold to confirm",
       "Delizia": "Hold to confirm",
       "Eckhart": ""
     },
@@ -1266,17 +1271,12 @@
     },
     "language__change_to_template": "Change language to {0}?",
     "language__changed": {
-      "Bolt": "Language changed successfully",
+      "Bolt": "Language changed successfully.",
       "Caesar": "Language changed successfully",
       "Delizia": "Language changed successfully.",
       "Eckhart": "Language changed successfully."
     },
-    "language__progress": {
-      "Bolt": "Changing language",
-      "Caesar": "Changing language",
-      "Delizia": "Changing language",
-      "Eckhart": "Changing language..."
-    },
+    "language__progress": "Changing language...",
     "language__title": "Language settings",
     "led__disable": {
       "Bolt": "",
@@ -1777,27 +1777,15 @@
       "Eckhart": ""
     },
     "nostr__event_kind_template": "Event kind: {0}",
-    "passphrase__access_hidden_wallet": {
-      "Bolt": "",
-      "Caesar": "",
-      "Delizia": "",
-      "Eckhart": "Access Passphrase wallet"
-    },
     "passphrase__access_wallet": {
       "Bolt": "Access Passphrase wallet?",
       "Caesar": "Access Passphrase wallet?",
       "Delizia": "Access Passphrase wallet?",
-      "Eckhart": ""
+      "Eckhart": "Access Passphrase wallet"
     },
     "passphrase__always_on_device": "Always enter your passphrase on Trezor?",
     "passphrase__continue_with_empty_passphrase": "Continue with empty passphrase?",
     "passphrase__from_host_not_shown": "Passphrase provided by connected app will be used but will not be displayed due to the device settings.",
-    "passphrase__hidden_wallet": {
-      "Bolt": "",
-      "Caesar": "",
-      "Delizia": "",
-      "Eckhart": "Passphrase wallet"
-    },
     "passphrase__hide": {
       "Bolt": "Hide passphrase coming from app?",
       "Caesar": "Hide passphrase coming from app?",
@@ -1807,21 +1795,41 @@
     "passphrase__next_screen_will_show_passphrase": "The next screen shows your passphrase.",
     "passphrase__please_enter": "Please enter your passphrase.",
     "passphrase__revoke_on_device": "Do you want to revoke the passphrase on device setting?",
-    "passphrase__show": "Show passphrase",
+    "passphrase__show": {
+      "Bolt": "",
+      "Caesar": "",
+      "Delizia": "",
+      "Eckhart": "Show passphrase"
+    },
     "passphrase__title_confirm": "Confirm passphrase",
     "passphrase__title_enter": "Enter passphrase",
-    "passphrase__title_hide": "Hide passphrase",
-    "passphrase__title_passphrase": "Passphrase",
-    "passphrase__title_settings": "Passphrase settings",
-    "passphrase__title_source": "Passphrase source",
-    "passphrase__turn_off": "Turn off passphrase protection?",
-    "passphrase__turn_on": "Turn on passphrase protection?",
-    "passphrase__wallet": {
-      "Bolt": "Passphrase wallet",
-      "Caesar": "Passphrase wallet",
-      "Delizia": "Passphrase wallet",
+    "passphrase__title_hide": {
+      "Bolt": "Hide passphrase",
+      "Caesar": "Hide passphrase",
+      "Delizia": "",
       "Eckhart": ""
     },
+    "passphrase__title_passphrase": {
+      "Bolt": "",
+      "Caesar": "",
+      "Delizia": "Passphrase",
+      "Eckhart": ""
+    },
+    "passphrase__title_settings": {
+      "Bolt": "Passphrase settings",
+      "Caesar": "Passphrase settings",
+      "Delizia": "",
+      "Eckhart": "Passphrase settings"
+    },
+    "passphrase__title_source": {
+      "Bolt": "Passphrase source",
+      "Caesar": "Passphrase source",
+      "Delizia": "",
+      "Eckhart": ""
+    },
+    "passphrase__turn_off": "Turn off passphrase protection?",
+    "passphrase__turn_on": "Turn on passphrase protection?",
+    "passphrase__wallet": "Passphrase wallet",
     "pin__cancel_description": {
       "Bolt": "",
       "Caesar": "",
@@ -1840,7 +1848,12 @@
       "Delizia": "Cancel PIN setup",
       "Eckhart": "Cancel PIN setup?"
     },
-    "pin__change": "Change PIN",
+    "pin__change": {
+      "Bolt": "",
+      "Caesar": "",
+      "Delizia": "",
+      "Eckhart": "Change PIN"
+    },
     "pin__change_question": "Change PIN?",
     "pin__changed": "PIN changed.",
     "pin__cursor_will_change": {
@@ -1850,24 +1863,29 @@
       "Eckhart": ""
     },
     "pin__diff_from_wipe_code": "The new PIN must be different from your wipe code.",
-    "pin__disabled": "PIN protection\nturned off.",
+    "pin__disabled": "PIN protection turned off.",
     "pin__enabled": {
-      "Bolt": "PIN protection\nturned on.",
-      "Caesar": "PIN protection\nturned on.",
-      "Delizia": "PIN protection\nturned on.",
+      "Bolt": "PIN protection turned on.",
+      "Caesar": "PIN protection turned on.",
+      "Delizia": "PIN protection turned on.",
       "Eckhart": ""
     },
     "pin__enter": "Enter PIN",
     "pin__enter_new": "Enter new PIN",
     "pin__entered_not_valid": "The PIN you have entered is not valid.",
     "pin__info": {
-      "Bolt": "PIN will be required to access this device.",
-      "Caesar": "PIN will be required to access this device.",
-      "Delizia": "PIN will be required to access this device.",
-      "Eckhart": "The PIN will be required to access this device."
+      "Bolt": "A PIN will be required to access this device.",
+      "Caesar": "A PIN will be required to access this device.",
+      "Delizia": "",
+      "Eckhart": "A PIN will be required to access this device."
     },
     "pin__invalid_pin": "Invalid PIN",
-    "pin__last_attempt": "Last attempt",
+    "pin__last_attempt": {
+      "Bolt": "Last",
+      "Caesar": "Last attempt",
+      "Delizia": "Last attempt",
+      "Eckhart": "Last attempt"
+    },
     "pin__mismatch": "Entered PINs do not match!",
     "pin__pin_mismatch": "PIN mismatch",
     "pin__please_check_again": {
@@ -1878,12 +1896,6 @@
     },
     "pin__reenter": "Re-enter PIN",
     "pin__reenter_new": "Re-enter new PIN",
-    "pin__reenter_new_description": {
-      "Bolt": "",
-      "Caesar": "",
-      "Delizia": "Re-enter new PIN.",
-      "Eckhart": ""
-    },
     "pin__reenter_to_confirm": {
       "Bolt": "",
       "Caesar": "Please re-enter PIN to confirm.",
@@ -1915,7 +1927,12 @@
     "pin__tries_left": "tries left",
     "pin__turn_off": "Are you sure you want to turn off PIN protection?",
     "pin__turn_on": "Turn on PIN protection?",
-    "pin__wipe_code_exists_description": "Wipe code must be turned off before turning off PIN protection.",
+    "pin__wipe_code_exists_description": {
+      "Bolt": "Wipe code must be turned off before turning off PIN.",
+      "Caesar": "Wipe code must be turned off before turning off PIN protection.",
+      "Delizia": "Wipe code must be turned off before turning off PIN protection.",
+      "Eckhart": "Wipe code must be turned off before turning off PIN protection."
+    },
     "pin__wipe_code_exists_title": "Wipe code set",
     "pin__wrong_pin": "Wrong PIN",
     "plurals__contains_x_keys": "key|keys",
@@ -1938,12 +1955,7 @@
       "Eckhart": ""
     },
     "progress__one_second_left": "1 second left",
-    "progress__please_wait": {
-      "Bolt": "Please wait",
-      "Caesar": "Please wait",
-      "Delizia": "Please wait",
-      "Eckhart": "Please wait..."
-    },
+    "progress__please_wait": "Please wait...",
     "progress__refreshing": "Refreshing...",
     "progress__signing_transaction": "Signing transaction...",
     "progress__syncing": "Syncing...",
@@ -2017,7 +2029,12 @@
     "recovery__share_num_template": "Share {0}",
     "recovery__start_entering": "Start entering",
     "recovery__title": "Recover wallet",
-    "recovery__title_cancel_dry_run": "Cancel backup check",
+    "recovery__title_cancel_dry_run": {
+      "Bolt": "Cancel backup check",
+      "Caesar": "Cancel backup check",
+      "Delizia": "Cancel backup check",
+      "Eckhart": ""
+    },
     "recovery__title_cancel_recovery": "Cancel recovery",
     "recovery__title_dry_run": "Backup check",
     "recovery__title_recover": "Recover wallet",
@@ -2722,7 +2739,6 @@
       "Delizia": "Cancel sign",
       "Eckhart": "Cancel sign?"
     },
-    "send__cancel_transaction": "Cancel transaction",
     "send__confirm_sending": "Sending amount",
     "send__from_multiple_accounts": "Sending from multiple accounts.",
     "send__incl_transaction_fee": {
@@ -2873,6 +2889,7 @@
     "stellar__delete": "Delete",
     "stellar__delete_passive_offer": "Delete Passive Offer",
     "stellar__delete_trust": "Delete trust",
+    "stellar__deploy_contract": "Deploy contract",
     "stellar__destination": "Destination",
     "stellar__exchanges_require_memo": "Memo is not set. It's typically needed when sending to exchanges.",
     "stellar__ext_auth": "External Authorizations",
@@ -2914,7 +2931,12 @@
     "stellar__spender": "Spender",
     "stellar__to": "To",
     "stellar__token_contract": "Token contract",
-    "stellar__token_info": "Token info",
+    "stellar__token_info": {
+      "Bolt": "Token info",
+      "Caesar": "",
+      "Delizia": "",
+      "Eckhart": "Token info"
+    },
     "stellar__transaction_source": "Transaction source",
     "stellar__transaction_source_diff_warning": "Transaction source does not belong to this Trezor.",
     "stellar__transfer_token": "Transfer token",
@@ -2925,19 +2947,10 @@
     "stellar__valid_until_ledger": "Valid until ledger",
     "stellar__value_sha256": "Value (SHA-256)",
     "stellar__wanna_clean_value_key_template": "Do you want to clear value key {0}?",
-    "storage_msg__processing": {
-      "Bolt": "Processing",
-      "Caesar": "Processing",
-      "Delizia": "Processing",
-      "Eckhart": "Processing..."
-    },
+    "stellar__wasm_hash": "Wasm hash",
+    "storage_msg__processing": "Processing...",
     "storage_msg__starting": "Starting up",
-    "storage_msg__verifying_pin": {
-      "Bolt": "Verifying PIN",
-      "Caesar": "Verifying PIN",
-      "Delizia": "Verifying PIN",
-      "Eckhart": "Verifying PIN..."
-    },
+    "storage_msg__verifying_pin": "Verifying PIN...",
     "storage_msg__wrong_pin": "Wrong PIN",
     "suite_sync__delegated_identity_key_no_thp": "Allow Trezor Suite to use Suite Sync with this Trezor?",
     "suite_sync__delegated_identity_key_thp": "Allow {0} on {1} to use Suite Sync with this Trezor?",
@@ -3367,7 +3380,6 @@
     "word_count__title": "Number of words",
     "words__about": "About",
     "words__account": "Account",
-    "words__account_colon": "Account:",
     "words__account_deletion": "Account deletion",
     "words__address": "Address",
     "words__amount": "Amount",

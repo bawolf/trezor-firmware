@@ -1,3 +1,19 @@
+# This file is part of the Trezor project.
+#
+# Copyright (C) SatoshiLabs and contributors
+#
+# This library is free software: you can redistribute it and/or modify
+# it under the terms of the GNU Lesser General Public License version 3
+# as published by the Free Software Foundation.
+#
+# This library is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU Lesser General Public License for more details.
+#
+# You should have received a copy of the License along with this library.
+# If not, see <https://www.gnu.org/licenses/lgpl-3.0.html>.
+
 """
 Central place for defining all input flows for the device tests.
 
@@ -472,9 +488,6 @@ class InputFlowSignVerifyMessageLong(InputFlowBase):
 
 
 class InputFlowSignMessageInfo(InputFlowBase):
-    def __init__(self, client: Client):
-        super().__init__(client)
-
     def input_flow_bolt(self) -> BRGeneratorType:
         yield
         # signing address/message info
@@ -512,9 +525,6 @@ class InputFlowSignMessageInfo(InputFlowBase):
 
 
 class InputFlowShowAddressQRCode(InputFlowBase):
-    def __init__(self, client: Client):
-        super().__init__(client)
-
     def input_flow_bolt(self) -> BRGeneratorType:
         yield
         self.debug.click(self.debug.screen_buttons.menu())
@@ -606,9 +616,6 @@ class InputFlowShowAddressQRCode(InputFlowBase):
 
 
 class InputFlowShowAddressQRCodeCancel(InputFlowBase):
-    def __init__(self, client: Client):
-        super().__init__(client)
-
     def input_flow_bolt(self) -> BRGeneratorType:
         yield
         self.debug.click(self.debug.screen_buttons.menu())
@@ -687,7 +694,9 @@ class InputFlowShowMultisigXPUBs(InputFlowBase):
         self.index = index
 
     def _assert_xpub_title(self, title: str, xpub_num: int) -> None:
-        expected_title = f"MULTISIG XPUB #{xpub_num + 1}"
+        expected_title = TR.format(
+            "address__title_multisig_xpub_template", xpub_num + 1
+        )
         assert expected_title in title
         if self.index == xpub_num:
             assert TR.address__title_yours in title
@@ -1025,7 +1034,7 @@ class InputFlowShowXpubQRCode(InputFlowBase):
 
 
 class InputFlowSignTxHighFee(InputFlowBase):
-    def __init__(self, client: Client):
+    def __init__(self, client: Client | DebugSession):
         super().__init__(client)
         self.finished = False
 
@@ -1219,9 +1228,6 @@ def sign_tx_go_to_info_caesar(
 
 
 class InputFlowSignTxBackFromAmount(InputFlowBase):
-    def __init__(self, client: Client | DebugSession):
-        super().__init__(client)
-
     def input_flow_delizia(self) -> BRGeneratorType:
         yield
         layout = self.debug.read_layout()
@@ -1278,9 +1284,6 @@ class InputFlowSignTxBackFromAmount(InputFlowBase):
 
 
 class InputFlowSignTxCancelFromAmount(InputFlowBase):
-    def __init__(self, client: Client):
-        super().__init__(client)
-
     def input_flow_delizia(self) -> BRGeneratorType:
         yield  # confirm address
         layout = self.debug.read_layout()
@@ -1313,9 +1316,6 @@ class InputFlowSignTxCancelFromAmount(InputFlowBase):
 
 
 class InputFlowSignTxInformation(InputFlowBase):
-    def __init__(self, client: Client | DebugSession):
-        super().__init__(client)
-
     def assert_account_details(self, content: str) -> None:
         assert TR.words__account in content
         assert "Legacy #6" in content
@@ -1346,9 +1346,6 @@ class InputFlowSignTxInformation(InputFlowBase):
 
 
 class InputFlowSignTxInformationMixed(InputFlowBase):
-    def __init__(self, client: Client | DebugSession):
-        super().__init__(client)
-
     def assert_content(self, content: str) -> None:
         assert TR.words__account in content
         assert TR.bitcoin__multiple_accounts in content
@@ -1386,9 +1383,6 @@ class InputFlowSignTxInformationMixed(InputFlowBase):
 
 
 class InputFlowSignTxInformationCancel(InputFlowBase):
-    def __init__(self, client: Client | DebugSession):
-        super().__init__(client)
-
     def input_flow_bolt(self) -> BRGeneratorType:
         yield from sign_tx_go_to_info_bolt(self.client)
         self.debug.press_no()
@@ -1413,9 +1407,6 @@ class InputFlowSignTxInformationCancel(InputFlowBase):
 
 
 class InputFlowSignTxInformationReplacement(InputFlowBase):
-    def __init__(self, client: Client | DebugSession):
-        super().__init__(client)
-
     def input_flow_bolt(self) -> BRGeneratorType:
         yield  # confirm txid
         self.debug.press_yes()
@@ -1684,9 +1675,6 @@ class InputFlowEIP712ShowMore(InputFlowBase):
 
 
 class InputFlowEIP712Cancel(InputFlowBase):
-    def __init__(self, client: Client | DebugSession):
-        super().__init__(client)
-
     def input_flow_common(self) -> BRGeneratorType:
         """Clicks cancelling button"""
         yield  # confirm address
@@ -1697,17 +1685,11 @@ class InputFlowEIP712Cancel(InputFlowBase):
 
 
 class InputFlowEthereumSignTxShowFeeInfo(InputFlowBase):
-    def __init__(self, client: Client | DebugSession):
-        super().__init__(client)
-
     def input_flow_common(self) -> BRGeneratorType:
         yield from self.ETH.confirm_tx(info=True)
 
 
 class InputFlowEthereumSignTxGoBackFromSummary(InputFlowBase):
-    def __init__(self, client: Client | DebugSession):
-        super().__init__(client)
-
     def input_flow_common(self) -> BRGeneratorType:
         yield from self.ETH.confirm_tx(go_back_from_summary=True)
 
@@ -1800,9 +1782,6 @@ class InputFlowEthereumSignTxData(InputFlowBase):
 
 
 class InputFlowEthereumSignTxStaking(InputFlowBase):
-    def __init__(self, client: Client | DebugSession):
-        super().__init__(client)
-
     def input_flow_common(self) -> BRGeneratorType:
         yield from self.ETH.confirm_tx_staking(info=True)
 
@@ -1817,7 +1796,7 @@ def get_mnemonic(debug: DebugLink) -> Generator[None, "messages.ButtonRequest", 
 class InputFlowBip39Backup(InputFlowBase):
     def __init__(
         self,
-        client: Client,
+        client: Client | DebugSession,
         method: messages.BackupMethod = messages.BackupMethod.Display,
     ):
         super().__init__(client)
@@ -2152,23 +2131,23 @@ class InputFlowSlip39BasicBackup(InputFlowBase):
             self.debug.press_yes()
 
         assert (yield).name == "backup_intro"
-        self.debug.swipe_up()
+        self.debug.press_yes()
         assert (yield).name == "slip39_checklist"
-        self.debug.swipe_up()
+        self.debug.press_yes()
         assert (yield).name == "slip39_shares"
         if self.click_info:
             click_info_button_delizia_eckhart(self.debug)
-        self.debug.swipe_up()
+        self.debug.press_yes()
         assert (yield).name == "slip39_checklist"
-        self.debug.swipe_up()
+        self.debug.press_yes()
         assert (yield).name == "slip39_threshold"
         if self.click_info:
             click_info_button_delizia_eckhart(self.debug)
-        self.debug.swipe_up()
+        self.debug.press_yes()
         assert (yield).name == "slip39_checklist"
-        self.debug.swipe_up()
+        self.debug.press_yes()
         assert (yield).name == "backup_warning"
-        self.debug.swipe_up()
+        self.debug.press_yes()
 
         # Mnemonic phrases
         self.mnemonics = yield from load_N_shares(self.debug, 5)
@@ -2559,30 +2538,30 @@ class InputFlowSlip39AdvancedBackup(InputFlowBase):
     def input_flow_delizia(self) -> BRGeneratorType:
         assert self.backup_method is messages.BackupMethod.Display
         assert (yield).name == "backup_intro"
-        self.debug.swipe_up()
+        self.debug.press_yes()
         assert (yield).name == "slip39_checklist"
-        self.debug.swipe_up()
+        self.debug.press_yes()
         assert (yield).name == "slip39_groups"
         if self.click_info:
             click_info_button_delizia_eckhart(self.debug)
-        self.debug.swipe_up()
+        self.debug.press_yes()
         assert (yield).name == "slip39_checklist"
-        self.debug.swipe_up()
+        self.debug.press_yes()
         assert (yield).name == "slip39_group_threshold"
         if self.click_info:
             click_info_button_delizia_eckhart(self.debug)
-        self.debug.swipe_up()
+        self.debug.press_yes()
         assert (yield).name == "slip39_checklist"
-        self.debug.swipe_up()
+        self.debug.press_yes()
         for _i in range(5):  # for each of 5 groups
             assert (yield).name == "slip39_shares"
             if self.click_info:
                 click_info_button_delizia_eckhart(self.debug)
-            self.debug.swipe_up()
+            self.debug.press_yes()
             assert (yield).name == "slip39_threshold"
             if self.click_info:
                 click_info_button_delizia_eckhart(self.debug)
-            self.debug.swipe_up()
+            self.debug.press_yes()
         assert (yield).name == "backup_warning"
         self.debug.press_yes()
 
@@ -2859,9 +2838,6 @@ class InputFlowSlip39AdvancedRecovery(InputFlowBase):
 
 
 class InputFlowSlip39AdvancedRecoveryAbort(InputFlowBase):
-    def __init__(self, client: Client | DebugSession):
-        super().__init__(client)
-
     def input_flow_common(self) -> BRGeneratorType:
         yield from self.REC.confirm_recovery()
         if self.layout_type in (
@@ -3009,9 +2985,6 @@ class InputFlowSlip39BasicRecovery(InputFlowBase):
 
 
 class InputFlowSlip39BasicRecoveryAbortOnNumberOfWords(InputFlowBase):
-    def __init__(self, client: Client | DebugSession):
-        super().__init__(client)
-
     def input_flow_common(self) -> BRGeneratorType:
         yield from self.REC.confirm_recovery()
         if self.layout_type in (
@@ -3023,9 +2996,6 @@ class InputFlowSlip39BasicRecoveryAbortOnNumberOfWords(InputFlowBase):
 
 
 class InputFlowSlip39BasicRecoveryAbort(InputFlowBase):
-    def __init__(self, client: Client | DebugSession):
-        super().__init__(client)
-
     def input_flow_common(self) -> BRGeneratorType:
         yield from self.REC.confirm_recovery()
         if self.layout_type in (
@@ -3222,9 +3192,6 @@ class InputFlowSlip39BasicRecoverySameShare(InputFlowBase):
 
 
 class InputFlowResetSkipBackup(InputFlowBase):
-    def __init__(self, client: Client | DebugSession):
-        super().__init__(client)
-
     def input_flow_bolt(self) -> BRGeneratorType:
         yield from self.BAK.confirm_new_wallet()
         yield  # Skip Backup
@@ -3305,7 +3272,6 @@ class InputFlowConfirmAllWarnings(InputFlowBase):
             hi_prio = (
                 TR.buttons__cancel_and_exit,
                 TR.buttons__cancel_sign,
-                TR.send__cancel_transaction,
             )
             if any(needle.lower() in text for needle in hi_prio):
                 self.debug.click(self.debug.screen_buttons.menu())
@@ -3340,7 +3306,6 @@ class InputFlowConfirmAllWarnings(InputFlowBase):
             hi_prio = (
                 TR.buttons__cancel_and_exit,
                 TR.buttons__cancel_sign,
-                TR.send__cancel_transaction,
             )
             if any(needle.lower() in text for needle in hi_prio):
                 self.debug.click(self.debug.screen_buttons.menu())
