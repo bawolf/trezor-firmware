@@ -1,0 +1,12 @@
+syntax = "proto2";
+package hw.trezor.messages;
+
+/**
+ * Mapping between the Zcash app's wire identifiers and its protobuf messages
+ */
+enum MessageType {
+    MessageType_ZcashGetAddress = 0;
+    MessageType_ZcashAddress = 1;
+    MessageType_ZcashGetViewingKey = 2;
+    MessageType_ZcashViewingKey = 3;
+}

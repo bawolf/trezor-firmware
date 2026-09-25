@@ -1,0 +1,14 @@
+{
+  "header": {
+    "language": "en-US",
+    "version": "2.11.2"
+  },
+  "translations": {
+    "words__continue_anyway": "Continue anyway",
+    "words__important": "Important",
+    "zcash__export_viewing_key": "Export Zcash viewing key?",
+    "zcash__seed_fingerprint_warning": "This also reveals a fingerprint of your recovery seed, which links all of your Zcash accounts.",
+    "zcash__viewing_key_warning": "The connected app will be able to see and link all activity for this account, but cannot spend.",
+    "zcash__weak_backup_warning": "This wallet uses a weaker backup. Move funds to a new wallet with a stronger backup."
+  }
+}

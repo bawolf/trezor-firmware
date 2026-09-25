@@ -1,15 +1,90 @@
 cargo-features = ["panic-immediate-abort"]
 
+[package]
+name = "zcash"
+version = "0.1.0"
+edition = "2024"
+
+[package.metadata.trezor]
+id = "zcash.trezor.com"
+name = "Zcash"
+vendor = "Bryant Wolf"
+# Heap: 38,010 B peak measured on the host (64-bit), almost all of it the
+# Pallas square-root table built on first use, plus margin. Stack: not measured
+# on hardware yet, twice the samples' 16 KiB.
+stack-size = 32768
+heap-size = 49152
+app-ring = 0
+# For the ZIP-32 Orchard account keys, a coreapp operation that is not
+# available yet; the app makes no Crypto calls today.
+curves = ["zip32-orchard"]
+paths = [
+    "m/32'/133'/account'",
+    "m/32'/1'/account'",
+]
+
+[dependencies]
+trezor-app-sdk = { path = "../../crates/trezor-app-sdk" }
+blake2b_simd.workspace = true
+ironwood.workspace = true
+prost = { version = "0.14.1", default-features = false, features = ["derive"] }
+# The SDK's log macros expand to ufmt calls.
+ufmt = { version = "0.2.0", default-features = false }
+zcash_address.workspace = true
+zcash_protocol.workspace = true
+zeroize.workspace = true
+
+[build-dependencies]
+prost-build = "0.14.1"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+[features]
+# --------------------------------------------------------------------------
+# Model features
+# --------------------------------------------------------------------------
+model_t3t1 = []
+model_t3w1 = []
+
+# --------------------------------------------------------------------------
+# Language features
+# --------------------------------------------------------------------------
+lang_en = []
+
+# --------------------------------------------------------------------------
+# Log level features
+# --------------------------------------------------------------------------
+log_level_error = ['trezor-app-sdk/log_level_error']
+log_level_warn = ['trezor-app-sdk/log_level_warn']
+log_level_info = ['trezor-app-sdk/log_level_info']
+log_level_debug = ['trezor-app-sdk/log_level_debug']
+
+# --------------------------------------------------------------------------
+# Selectable features
+# --------------------------------------------------------------------------
+# No `test` feature: the SDK's mock needs `sha3` 0.11, whose `digest` cannot
+# coexist with the pre-release `digest` the Zcash crates pin.
+emulator = []
+debug = ['trezor-app-sdk/debug']
+# TEST ONLY, never default: derives the account keys from the public test
+# mnemonic "abandon ... about" inside the app (see `src/dev_test_seed.rs`).
+dev-test-seed = []
+
+# --------------------------------------------------------------------------
+# Automatically derived features (do not enable from outside)
+# --------------------------------------------------------------------------
+dev_keys = []
+
 # The Zcash app is its own workspace: its Zcash dependencies need the
 # pre-release `digest` 0.11 that the `sdk/apps` workspace cannot share with the
 # SDK's mock `sha3` 0.11.
 [workspace]
-members = ["ironwood"]
+members = [".", "ironwood"]
 
 resolver = "2"
 
-# The `ironwood` crate's dependencies, pinned as in the firmware series it
-# comes from (`core/embed/Cargo.toml` on `zcash/ironwood-upstream-v2`).
+# Dependency pins as in the source of the `ironwood` crate,
+# bawolf/trezor-firmware@7864a22444 `core/embed/Cargo.toml`.
 [workspace.dependencies]
 aes = { version = "=0.8.4", default-features = false, features = ["zeroize"] }
 blake2b_simd = { version = "=1.0.2", default-features = false, features = ["uninline_portable"] }
@@ -23,6 +98,7 @@ sapling = { package = "sapling-crypto", version = "=0.7.0", default-features = f
 transparent = { package = "zcash_transparent", version = "=0.10.0", default-features = false }
 zcash_note_encryption = { version = "=0.4.1", default-features = false }
 zcash_primitives = { version = "=0.30.1", default-features = false }
+zcash_address = { version = "=0.13.0", default-features = false }
 zcash_protocol = { version = "=0.10.5", default-features = false }
 zeroize = { version = "1.8.2", default-features = false, features = ["zeroize_derive"] }
 # Host-only (ironwood dev-dependencies).
@@ -30,8 +106,8 @@ rand_chacha = { version = "=0.3.1", default-features = false }
 serde_json = "1.0.145"
 zip32 = { version = "=0.2.1", default-features = false }
 
-# Ironwood (Orchard v2) is not released upstream yet; these are the forks the
-# firmware series pins, by full commit.
+# Ironwood (Orchard v2) is not released upstream yet; these are the forks that
+# source pins, by full commit.
 [patch.crates-io]
 sinsemilla = { git = "https://github.com/bawolf/sinsemilla", rev = "6ca88ff52835899c87ff83489b95c5cda887e8a4" }
 orchard = { git = "https://github.com/bawolf/orchard", rev = "d4792911986deda16cc3d689a97f316655f08e84" }
