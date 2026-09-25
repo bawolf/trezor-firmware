@@ -52,7 +52,7 @@ The exact amount of heap the app receives depends on the target:
 - On real hardware, the kernel reserves exactly `heap-size` bytes (rounded up for alignment) for the app in the RAM arena — no more, no less.
 - On the Unix emulator, the app instead receives *all* remaining arena memory, regardless of `heap-size`.
 
-> ⚠️ Today the SDK's Rust global allocator does not actually consume that kernel-reserved region — `applet_main` hardcodes a fixed 16 KiB heap in the app's own static memory, independent of `heap-size`. Until this is wired up, treat `heap-size` as reserving kernel-side RAM for the app rather than sizing the allocator you actually get.
+`applet_main` hands that region (`app_get_heap`) to the SDK's Rust global allocator, so `heap-size` is the allocator you get on hardware. The emulator does not catch an app that outgrows it: measure the app's peak heap use and declare it with a margin.
 
 ### Application privilege
 
@@ -371,7 +371,7 @@ The IPC buffer used for communication with Trezor Core is set up. Its size is co
 
 #### 3. Heap Initialization
 
-The heap allocator is initialized with the memory region defined by `heap-size` in `Cargo.toml`. The default heap is 16 KiB.
+The heap allocator is initialized with the region the loader reserved for the app (`app_get_heap`), sized by `heap-size` in `Cargo.toml` (see [Heap Size](#heap-size)).
 
 > ⚠️ No allocated types (`Box`, `Vec`, `String`, etc.) can be used before this point.
 
