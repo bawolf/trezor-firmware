@@ -36,9 +36,8 @@ env:
   UPSTREAM_SLUG: trezor/trezor-firmware
   UPSTREAM_URL: https://github.com/trezor/trezor-firmware.git
   # Branches to report on, space separated. A branch that does not exist on
-  # origin is reported as absent and skipped, not treated as a failure --
-  # `zcash/ironwood-upstream` only exists in some local worktrees today.
-  WATCHED_BRANCHES: "ironwood/zcash-streaming-signing zcash/ironwood-upstream"
+  # origin is reported as absent and skipped, not treated as a failure.
+  WATCHED_BRANCHES: "zcash/ironwood-upstream-v2"
 
 jobs:
   drift-alert:
