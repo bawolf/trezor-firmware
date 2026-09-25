@@ -22,8 +22,6 @@ mod translations;
 mod strutil;
 
 mod account;
-#[cfg(feature = "dev-test-seed")]
-mod dev_test_seed;
 mod get_address;
 mod get_viewing_key;
 mod layout;

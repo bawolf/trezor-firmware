@@ -15,8 +15,7 @@ vendor = "Bryant Wolf"
 stack-size = 32768
 heap-size = 49152
 app-ring = 0
-# For the ZIP-32 Orchard account keys, a coreapp operation that is not
-# available yet; the app makes no Crypto calls today.
+# The ZIP-32 Orchard account keys from Core's key service.
 curves = ["zip32-orchard"]
 paths = [
     "m/32'/133'/account'",
@@ -25,8 +24,8 @@ paths = [
 
 [dependencies]
 trezor-app-sdk = { path = "../../crates/trezor-app-sdk" }
-blake2b_simd.workspace = true
 ironwood.workspace = true
+orchard.workspace = true
 prost = { version = "0.14.1", default-features = false, features = ["derive"] }
 # The SDK's log macros expand to ufmt calls.
 ufmt = { version = "0.2.0", default-features = false }
@@ -66,9 +65,6 @@ log_level_debug = ['trezor-app-sdk/log_level_debug']
 # coexist with the pre-release `digest` the Zcash crates pin.
 emulator = []
 debug = ['trezor-app-sdk/debug']
-# TEST ONLY, never default: derives the account keys from the public test
-# mnemonic "abandon ... about" inside the app (see `src/dev_test_seed.rs`).
-dev-test-seed = []
 
 # --------------------------------------------------------------------------
 # Automatically derived features (do not enable from outside)

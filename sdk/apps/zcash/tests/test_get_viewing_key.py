@@ -22,7 +22,13 @@ from trezorlib import messages
 from trezorlib.debuglink import DebugSession as Session
 
 from . import zcash_ext
-from .common import MAINNET_FVK, MNEMONIC, SEED_FINGERPRINT, TESTNET_FVK
+from .common import (
+    MAINNET_FVK,
+    MNEMONIC,
+    SEED_FINGERPRINT,
+    TESTNET_FVK,
+    accept_account_request,
+)
 from .generated.messages import ZcashNetwork
 
 B = messages.ButtonRequestType
@@ -31,16 +37,17 @@ pytestmark = [pytest.mark.setup_client(mnemonic=MNEMONIC)]
 
 
 @pytest.mark.parametrize(
-    "network, prefix, fvk, path",
+    "network, label, prefix, fvk, path",
     [
-        (ZcashNetwork.Mainnet, "uview1", MAINNET_FVK, "m/32'/133'/0'"),
-        (ZcashNetwork.Testnet, "uviewtest1", TESTNET_FVK, "m/32'/1'/0'"),
+        (ZcashNetwork.Mainnet, "Mainnet", "uview1", MAINNET_FVK, "m/32'/133'/0'"),
+        (ZcashNetwork.Testnet, "Testnet", "uviewtest1", TESTNET_FVK, "m/32'/1'/0'"),
     ],
 )
 def test_device_fvk_matches_fixture(
     session: Session,
     instance_id: int,
     network: ZcashNetwork,
+    label: str,
     prefix: str,
     fvk: str,
     path: str,
@@ -55,8 +62,10 @@ def test_device_fvk_matches_fixture(
         assert br.name == "zcash_export_viewing_key"
         shown.append(session.debug.read_layout().text_content())
         session.debug.press_yes()
-        # The weak-backup warning; there is no seed-fingerprint screen
-        # because the host did not ask for the fingerprint.
+        # There is no seed-fingerprint screen because the host did not ask
+        # for the fingerprint. Core's account request, then the weak-backup
+        # warning.
+        yield from accept_account_request(session, 0, label)
         br = yield
         assert br.code == B.Warning
         assert br.name == "zcash_weak_backup"
@@ -86,6 +95,7 @@ def test_seed_fingerprint_export_is_opt_in(session: Session, instance_id: int) -
         assert br.name == "zcash_seed_fingerprint"
         shown.append(session.debug.read_layout().text_content())
         session.debug.press_yes()
+        yield from accept_account_request(session)
         br = yield
         assert br.code == B.Warning
         assert br.name == "zcash_weak_backup"

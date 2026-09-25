@@ -30,7 +30,16 @@ from trezorlib import exceptions, messages
 from trezorlib.debuglink import DebugSession as Session
 
 from . import zcash_ext
-from .common import ADDRESSES, MNEMONIC, address_pieces, no_screens, screen_text
+from .common import (
+    ADDRESSES,
+    ALL_MAINNET_ADDRESS,
+    ALL_MNEMONIC,
+    MNEMONIC,
+    accept_account_request,
+    address_pieces,
+    no_screens,
+    screen_text,
+)
 from .generated.messages import MessageType, ZcashGetAddress, ZcashNetwork
 
 B = messages.ButtonRequestType
@@ -53,21 +62,22 @@ def _get_address_reading_the_screen(
     index: int = 0,
     chunkify: bool = False,
 ) -> AddressFlow:
-    """Drive ZcashGetAddress, recording the ButtonRequests, the screen and its
-    subtitle."""
+    """Drive ZcashGetAddress, confirming every screen and recording the
+    ButtonRequests, the address screen and its subtitle."""
     shown = []
     subtitles = []
     requests = []
 
     def accept(session: Session):
-        br = yield
-        requests.append((br.code, br.name))
-        session.debug.press_yes()
-        br = yield
-        requests.append((br.code, br.name))
-        subtitles.append(session.debug.read_layout().subtitle())
-        shown.append(screen_text(session))
-        session.debug.press_yes()
+        while True:
+            br = yield
+            requests.append((br.code, br.name))
+            if br.code == B.Address:
+                subtitles.append(session.debug.read_layout().subtitle())
+                shown.append(screen_text(session))
+                session.debug.press_yes()
+                return
+            session.debug.press_yes()
 
     with session.test_ctx as client:
         client.set_input_flow(accept(session))
@@ -90,9 +100,11 @@ def test_receive_address(
         session, instance_id, network, account, index
     )
     assert flow.address == ADDRESSES[network, account, index]
-    # The 12-word test wallet gets the ZIP-315 weak-backup warning first. The
-    # SDK's address screen has a fixed ButtonRequest name.
+    # Core asks once whether the app may use the account; the 12-word test
+    # wallet then gets the ZIP-315 weak-backup warning. The SDK's address
+    # screen has a fixed ButtonRequest name.
     assert flow.requests == [
+        (B.Other, "zip32_orchard_account"),
         (B.Warning, "zcash_weak_backup"),
         (B.Address, "show_address"),
     ]
@@ -113,7 +125,9 @@ def test_receive_address_chunkify(session: Session, instance_id: int) -> None:
 
     assert plain.address == chunked.address == ADDRESSES[ZcashNetwork.Mainnet, 0, 0]
     assert len(plain.address) == 106
-    assert plain.requests == chunked.requests
+    # The account request is asked only the first time.
+    assert plain.requests[0] == (B.Other, "zip32_orchard_account")
+    assert plain.requests[1:] == chunked.requests
 
     # The debug layout reports lines, not the spaces inside them, so what
     # chunking shows up as is width: a full chunked line is a whole number of
@@ -126,6 +140,68 @@ def test_receive_address_chunkify(session: Session, instance_id: int) -> None:
     widest_chunked = max(len(piece) for piece in chunked_pieces)
     assert widest_chunked % 4 == 0
     assert widest_chunked < max(len(piece) for piece in plain_pieces)
+
+
+def test_account_request_names_the_account_and_is_asked_once(
+    session: Session, instance_id: int
+) -> None:
+    """Core's request names the account and network; each (network, account)
+    of this app instance is asked about once."""
+    requests = []
+
+    def flow(session: Session, account: int, network: str, first_use: bool):
+        if first_use:
+            yield from accept_account_request(session, account, network)
+        while True:
+            br = yield
+            requests.append((br.code, br.name))
+            session.debug.press_yes()
+
+    for network, account, first_use in [
+        (ZcashNetwork.Mainnet, 0, True),
+        (ZcashNetwork.Mainnet, 0, False),
+        (ZcashNetwork.Mainnet, 1, True),
+        (ZcashNetwork.Testnet, 0, True),
+        (ZcashNetwork.Mainnet, 1, False),
+    ]:
+        label = "Mainnet" if network == ZcashNetwork.Mainnet else "Testnet"
+        with session.test_ctx as client:
+            client.set_input_flow(flow(session, account, label, first_use))
+            address = zcash_ext.get_address(
+                session, instance_id, network, account, bytes(11)
+            )
+        assert address == ADDRESSES[network, account, 0]
+    assert (B.Other, "zip32_orchard_account") not in requests
+
+
+def test_declining_the_account_request_cancels(
+    session: Session, instance_id: int
+) -> None:
+    """Declining returns Cancelled before any key is used; the next request
+    asks again."""
+
+    def decline(session: Session):
+        br = yield
+        assert br.name == "zip32_orchard_account"
+        session.debug.press_no()
+
+    with session.test_ctx as client:
+        client.set_input_flow(decline(session))
+        with pytest.raises(exceptions.Cancelled):
+            zcash_ext.get_address(
+                session, instance_id, ZcashNetwork.Mainnet, 0, bytes(11)
+            )
+
+    flow = _get_address_reading_the_screen(session, instance_id)
+    assert flow.requests[0] == (B.Other, "zip32_orchard_account")
+    assert flow.address == ADDRESSES[ZcashNetwork.Mainnet, 0, 0]
+
+
+@pytest.mark.setup_client(mnemonic=ALL_MNEMONIC)
+def test_address_follows_the_device_seed(session: Session, instance_id: int) -> None:
+    """Another mnemonic, another address: the keys come from the device seed."""
+    flow = _get_address_reading_the_screen(session, instance_id)
+    assert flow.address == ALL_MAINNET_ADDRESS
 
 
 @pytest.mark.parametrize(

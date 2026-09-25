@@ -3,9 +3,9 @@
 use alloc::string::String;
 
 use ironwood::receive::Network;
-use trezor_app_sdk::{Error, Result};
+use orchard::keys::SpendingKey;
+use trezor_app_sdk::{Error, Result, crypto};
 use zcash_protocol::consensus::NetworkType;
-use zeroize::Zeroize;
 
 use crate::proto::zcash::ZcashNetwork;
 
@@ -59,10 +59,10 @@ pub(crate) fn account_path(network: Network, account: u32) -> String {
     uformat!("m/32'/{}'/{}'", network.coin_type(), account)
 }
 
-/// A ZIP-32 Orchard account's key material. The spending key is zeroized on
-/// drop.
+/// A ZIP-32 Orchard account's key material, from Core's key service. The
+/// spending key is overwritten with zeros on drop.
 pub(crate) struct AccountKeys {
-    pub(crate) spending_key: [u8; 32],
+    pub(crate) spending_key: SpendingKey,
     pub(crate) seed_fingerprint: [u8; 32],
     /// ZIP 315: the backup is a 12- or 18-word mnemonic or a 128-bit SLIP-39
     /// secret, which wallets should warn about.
@@ -71,21 +71,34 @@ pub(crate) struct AccountKeys {
 
 impl Drop for AccountKeys {
     fn drop(&mut self) {
-        self.spending_key.zeroize();
+        wipe(&mut self.spending_key);
     }
 }
 
 /// The only place the app obtains key material: account `account` of
-/// `m/32'/coin_type'/account'`. That needs a coreapp operation that is not
-/// available yet, so only a `dev-test-seed` build has keys.
+/// `m/32'/coin_type'/account'`, from Core's key service. The first request
+/// for an account of this app instance asks the user to allow it.
 pub(crate) fn account_keys(network: Network, account: u32) -> Result<AccountKeys> {
-    #[cfg(feature = "dev-test-seed")]
-    {
-        Ok(crate::dev_test_seed::account_keys(network, account))
+    let keys = crypto::get_zip32_orchard_account(network.coin_type(), account)?;
+    // Core derives with BLAKE2b alone and cannot tell whether the key is a
+    // valid Orchard spending key; `orchard` refuses the rare one that is not.
+    let spending_key = Option::from(SpendingKey::from_bytes(keys.spending_key))
+        .ok_or(Error::DataError("Zcash key derivation failed"))?;
+    Ok(AccountKeys {
+        spending_key,
+        seed_fingerprint: keys.seed_fingerprint,
+        weak_backup: keys.weak_backup,
+    })
+}
+
+/// Overwrites a plain-data value with zeros in place, surviving optimisation.
+/// Only for types without heap ownership or a `Drop` that reads them, such as
+/// the `orchard` key types, which implement no `Zeroize`.
+pub(crate) fn wipe<T>(value: &mut T) {
+    let bytes = (value as *mut T).cast::<u8>();
+    for offset in 0..core::mem::size_of::<T>() {
+        // SAFETY: `offset` is within the object `value` points to.
+        unsafe { core::ptr::write_volatile(bytes.add(offset), 0) };
     }
-    #[cfg(not(feature = "dev-test-seed"))]
-    {
-        let _ = (network, account);
-        Err(Error::DataError("Zcash account keys are not available"))
-    }
+    core::sync::atomic::compiler_fence(core::sync::atomic::Ordering::SeqCst);
 }

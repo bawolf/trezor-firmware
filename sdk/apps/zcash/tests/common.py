@@ -16,15 +16,15 @@
 
 """Shared pieces of the Zcash app's device tests."""
 
+from trezorlib import messages
 from trezorlib.debuglink import DebugSession as Session
 from trezorlib.debuglink import LayoutType
 
 from .generated.messages import ZcashNetwork
 
-# Must equal the seed hard-coded in the app's `dev-test-seed` build. Until the
-# app can get account keys from Core, it does not read the device seed at all:
-# it derives from its own copy of this test seed, so these tests cover the
-# app's half only.
+# The app gets its keys from Core's key service, which derives them from the
+# seed of the mnemonic the harness loads, so every vector below is a statement
+# about the whole chain: device seed, Core's ZIP-32 derivation, the app.
 MNEMONIC = "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about"
 
 # Computed with upstream `orchard` 0.15.5, `zcash_address` 0.13 and `zip32`
@@ -40,6 +40,10 @@ TESTNET_FVK = (
     "6d18e6916558f56738f5df2abcf6a177adabe16b5dbf1782423dd65f2d6b9b34"
     "d5335adea30337d22d0d3e9480f96f950d433bbed20ff68e023bbf287a07c53f"
 )
+# A second wallet, the harness's default "all all ... all", computed the same
+# way: mainnet account 0, diversifier index 0.
+ALL_MNEMONIC = " ".join(["all"] * 12)
+ALL_MAINNET_ADDRESS = "u1uzslnccvrw4r2y2kgjz7fm477xcnzge9z45scm4e6l6c63ren0ru29teedxw5vxu7c8xchp3ec2pu3wkgldc5zphwtm4w3fchcwrl26c"
 # The external Orchard address at (network, account, diversifier index).
 ADDRESSES = {
     (
@@ -97,3 +101,20 @@ def no_screens(session: Session):
     """An input flow that fails the test on any ButtonRequest."""
     br = yield
     raise AssertionError(f"unexpected screen {br.name}")
+
+
+def accept_account_request(
+    session: Session, account: int = 0, network: str = "Mainnet"
+):
+    """Core's one-time request to let the app use a Zcash account: the first
+    time an app instance asks for an account's keys on a network."""
+    br = yield
+    assert (br.code, br.name) == (
+        messages.ButtonRequestType.Other,
+        "zip32_orchard_account",
+    )
+    text = " ".join(session.debug.read_layout().text_content().split())
+    assert "Zcash account" in text
+    assert f"#{account + 1}" in text
+    assert network in text
+    session.debug.press_yes()
