@@ -102,6 +102,18 @@ handler, tests, design doc).
   ([CLARITY-REVIEW-RECIPIENT-8d7d37ff97.md](reviews/CLARITY-REVIEW-RECIPIENT-8d7d37ff97.md)):
   applied.
 
+**Hardware, Safe 5, 2026-09-25, image `dcc602fd48`** (SHA-256 `d5276ace…febe7b2b9`):
+- Flashed from the bootloader. `get-features` shows revision `dcc602fd48…` and capability
+  30; the test wallet and settings are unchanged.
+- Two testnet sends to a 145-character two-receiver unified address (a transparent
+  receiver plus the Orchard receiver of the wallet's own address #3), both signed, proven,
+  verified and relayed: 12 actions `9f5b41e2…587c0f90` (mined at 4393742) and 1 action
+  `3fa6eec7…010b825c`.
+- On the second send the user watched the recipient screen and confirmed it shows the
+  **wallet's address** (`utes t1ln z9zk yj7z u43v…`), not the Orchard-only form
+  (`utest1qkmcs…`). The emulator tests check that the full string is reachable.
+- Logs: the author's `session-logs/2026-09-25-dcc602fd48-*`.
+
 **Upstream note.** The same NUL-prefix and short-payload behaviour exists in upstream's own
 `unified_addresses.decode` on the transparent `SignTx` path. It is worth reporting upstream,
 subject to the user's decision on contact.
