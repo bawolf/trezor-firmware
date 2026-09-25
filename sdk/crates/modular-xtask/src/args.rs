@@ -219,13 +219,17 @@ pub struct BuildArgs {
     /// Enable verbose output
     #[arg(long)]
     pub verbose: bool,
+
+    /// Extra cargo features of the app to enable (comma-separated)
+    #[arg(long, value_delimiter = ',')]
+    pub features: Vec<String>,
 }
 
 impl BuildArgs {
     /// Resolves the list of cargo features to enable based on the provided
     /// cli arguments: always the model, language, and log-level features,
     /// plus `emulator`/`debug` when those flags are set, plus `dev_keys`
-    /// unless this is a `--production` build.
+    /// unless this is a `--production` build, plus any `--features`.
     ///
     /// ```
     /// use modular_xtask::args::{BuildArgs, Language, LogLevel, Model};
@@ -239,6 +243,7 @@ impl BuildArgs {
     ///     debug: false,
     ///     production: false,
     ///     verbose: false,
+    ///     features: vec![],
     /// };
     ///
     /// let features = args.resolve_features().unwrap();
@@ -247,7 +252,7 @@ impl BuildArgs {
     ///     vec!["model_t3w1", "lang_en", "log_level_info", "emulator", "dev_keys"]
     /// );
     /// ```
-    pub fn resolve_features(&self) -> Result<Vec<&'static str>> {
+    pub fn resolve_features(&self) -> Result<Vec<&str>> {
         let mut features = vec![
             self.model.feature_name(),
             self.lang.feature_name(),
@@ -265,6 +270,8 @@ impl BuildArgs {
         if !self.production {
             features.push("dev_keys");
         }
+
+        features.extend(self.features.iter().map(String::as_str));
 
         Ok(features)
     }
@@ -452,12 +459,14 @@ mod tests {
             debug,
             production,
             verbose: false,
+            features: vec![],
         }
     }
 
     #[test]
     fn resolve_features_always_includes_model_lang_and_log_level() {
-        let features = build_args(false, false, false).resolve_features().unwrap();
+        let args = build_args(false, false, false);
+        let features = args.resolve_features().unwrap();
         assert!(features.contains(&"model_t3w1"));
         assert!(features.contains(&"lang_en"));
         assert!(features.contains(&"log_level_info"));
@@ -465,7 +474,8 @@ mod tests {
 
     #[test]
     fn resolve_features_dev_build_adds_dev_keys_not_production() {
-        let features = build_args(false, false, false).resolve_features().unwrap();
+        let args = build_args(false, false, false);
+        let features = args.resolve_features().unwrap();
         assert!(features.contains(&"dev_keys"));
         assert!(!features.contains(&"emulator"));
         assert!(!features.contains(&"debug"));
@@ -473,13 +483,23 @@ mod tests {
 
     #[test]
     fn resolve_features_production_build_omits_dev_keys() {
-        let features = build_args(false, false, true).resolve_features().unwrap();
+        let args = build_args(false, false, true);
+        let features = args.resolve_features().unwrap();
         assert!(!features.contains(&"dev_keys"));
     }
 
     #[test]
+    fn resolve_features_appends_requested_features() {
+        let mut args = build_args(false, false, false);
+        args.features = vec!["extra".into()];
+        let features = args.resolve_features().unwrap();
+        assert_eq!(features.last(), Some(&"extra"));
+    }
+
+    #[test]
     fn resolve_features_emulator_and_debug_add_their_own_features() {
-        let features = build_args(true, true, false).resolve_features().unwrap();
+        let args = build_args(true, true, false);
+        let features = args.resolve_features().unwrap();
         assert!(features.contains(&"emulator"));
         assert!(features.contains(&"debug"));
     }
