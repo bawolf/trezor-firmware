@@ -1,0 +1,81 @@
+syntax = "proto2";
+package hw.trezor.messages.zcash;
+
+// Every request field that selects what the device derives must be present
+// (marked "required:" below), so that an omitted scalar cannot silently select
+// network or account zero. They are `optional` because prost does not enforce
+// proto2 `required` and would decode an absent field as zero; the app rejects
+// an absent field itself. The other optional fields are opt-ins: an extra
+// export (include_seed_fingerprint) or a screen-formatting preference
+// (chunkify). Absent means off.
+
+/**
+ * Network selecting the coin type and the encodings. MAINNET maps to coin
+ * type 133, TESTNET to coin type 1. There is deliberately no Regtest value.
+ */
+enum ZcashNetwork {
+    ZcashNetwork_Mainnet = 0;
+    ZcashNetwork_Testnet = 1;
+}
+
+/**
+ * Request: Ask device for a Zcash Unified Address.
+ * Retrieval always performs trusted on-device confirmation of the complete
+ * canonical address; there is no show_display=false path.
+ * @start
+ * @next ZcashAddress
+ * @next Failure
+ */
+message ZcashGetAddress {
+    optional ZcashNetwork network = 1;     // required: selects coin type and address encoding
+    optional uint32 account = 2;           // required: ZIP-32 account index in 0..2^31-1; the device
+                                           // derives m/32'/coin_type'/account' itself
+    optional bytes diversifier_index = 3;  // required: exactly 11 bytes, little-endian
+    optional bool chunkify = 4;            // display the address in chunks of 4 characters
+}
+
+/**
+ * Response: Canonical network-encoded Unified Address containing the receiver
+ * shared by Orchard and Ironwood. Released only after on-device confirmation.
+ * @end
+ */
+message ZcashAddress {
+    required string address = 1;
+}
+
+/**
+ * Request: Ask device for an Orchard-only Unified Full Viewing Key.
+ * A dedicated on-device privacy confirmation is mandatory for every export,
+ * and a second one when the seed fingerprint is requested as well.
+ * @start
+ * @next ZcashViewingKey
+ * @next Failure
+ */
+message ZcashGetViewingKey {
+    optional ZcashNetwork network = 1;  // required
+    optional uint32 account = 2;        // required: ZIP-32 account index in 0..2^31-1
+    // Also export the ZIP-32 seed fingerprint. Off by default: the
+    // fingerprint identifies the seed, not the account, so requesting it
+    // adds a second on-device warning saying so.
+    optional bool include_seed_fingerprint = 3 [default = false];
+}
+
+/**
+ * Response: One network-encoded, Orchard-only UFVK for the selected account.
+ * It contains no transparent or Sapling component, no seed, no spending key,
+ * and no spend-authorizing scalar. Possession can reveal and link wallet
+ * activity and can derive the account's viewing material and addresses, but
+ * cannot confer spend authority.
+ * seed_fingerprint is the ZIP-32 seed fingerprint of the wallet seed
+ * (BLAKE2b-256 of the seed under the ZIP-32 personalization): a public
+ * identifier, not key material. It is present only when the request set
+ * include_seed_fingerprint, and is then released behind an additional
+ * on-device warning, because unlike the account viewing key it identifies the
+ * seed: it is the same value for every account index and for both networks,
+ * so a host that holds it can link all of this wallet's Zcash accounts.
+ * @end
+ */
+message ZcashViewingKey {
+    required string key = 1;
+    optional bytes seed_fingerprint = 2;  // exactly 32 bytes when present
+}

@@ -303,22 +303,22 @@ pub fn system_exit_fatal(message: &str, file: &str, line: i32) -> ! {
     abort();
 }
 
-pub(crate) fn app_get_heap() -> Result<&'static [u8], ApiError> {
-    unsafe {
-        let mut heap_ptr: *mut c_void = core::ptr::null_mut();
-        let mut heap_size: usize = 0;
-        let status = unwrap!(get_or_die().app_get_heap)(
+/// Returns the heap the loader reserved for the running app: on hardware the
+/// manifest's `heap-size` (rounded up for alignment) in the app's RAM arena, on
+/// the emulator the rest of the arena.
+pub(crate) fn app_get_heap() -> Result<(*mut u8, usize), ApiError> {
+    let mut heap_ptr: *mut c_void = core::ptr::null_mut();
+    let mut heap_size: usize = 0;
+    let status = unsafe {
+        unwrap!(get_or_die().app_get_heap)(
             &mut heap_ptr as *mut *mut c_void,
             &mut heap_size as *mut usize,
-        );
-        if status.code != 0 {
-            return Err(ApiError::Failed);
-        }
-        Ok(core::slice::from_raw_parts(
-            heap_ptr as *const u8,
-            heap_size,
-        ))
+        )
+    };
+    if status.code != 0 {
+        return Err(ApiError::Failed);
     }
+    Ok((heap_ptr as *mut u8, heap_size))
 }
 
 pub(crate) fn ed25519_sign_open(

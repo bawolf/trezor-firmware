@@ -243,11 +243,13 @@ pub unsafe extern "C" fn applet_main(
     CORE_SERVICE.start();
     core_services::init(&CORE_SERVICE);
 
-    {
-        use core::mem::MaybeUninit;
-        const HEAP_SIZE: usize = 16 * 1024; // 16 KiB
-        static mut HEAP_MEM: [MaybeUninit<u8>; HEAP_SIZE] = [MaybeUninit::uninit(); HEAP_SIZE];
-        unsafe { HEAP.init(&raw mut HEAP_MEM as usize, HEAP_SIZE) }
+    // The global allocator manages the heap the loader reserved for the app
+    // from its `heap-size` manifest entry.
+    match low_level_api::app_get_heap() {
+        // No heap declared: every allocation fails.
+        Ok((_, 0)) => {}
+        Ok((start, size)) => unsafe { HEAP.init(start as usize, size) },
+        Err(_) => low_level_api::system_exit_error("Error", "Failed to get the app heap", ""),
     }
 
     let result = unsafe { app() };

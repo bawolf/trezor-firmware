@@ -302,8 +302,12 @@ async def run(request: ExtAppMessage) -> ExtAppResponse:
                         await paths.validate_path(keychain, address_n)
                         from apps.common.address_mac import get_address_mac
 
+                        # The coin type of the validated path.
                         result = get_address_mac(
-                            address_str, paths.unharden(slip44_id), address_n, keychain
+                            address_str,
+                            paths.unharden(address_n[1]),
+                            address_n,
+                            keychain,
                         )
                     except Exception:
                         log.error(__name__, "Failed to get address MAC")
@@ -327,7 +331,7 @@ async def run(request: ExtAppMessage) -> ExtAppResponse:
                         check_address_mac(
                             address_str,
                             mac,
-                            paths.unharden(slip44_id),
+                            paths.unharden(address_n[1]),
                             address_n,
                             keychain,
                         )

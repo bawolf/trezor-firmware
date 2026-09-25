@@ -23,8 +23,16 @@ pub trait WireEncode<T> {
     fn encode(val: &T) -> Vec<u8>;
 }
 
+/// Ends a progress screen the app left open, so that a request's response
+/// never leaves one behind and the next request starts without one on either
+/// side.
+fn end_request_progress() -> Result<()> {
+    crate::ui::end_progress()
+}
+
 /// Sends a successful response over the wire.
 pub fn wire_respond_raw(response_msg: i32, response_bytes: &[u8]) -> Result<()> {
+    end_request_progress().c()?;
     let message = IpcMessage::new(
         response_msg
             .try_into()
@@ -41,6 +49,8 @@ pub fn wire_respond_raw(response_msg: i32, response_bytes: &[u8]) -> Result<()> 
 
 /// Sends an error response over the wire.
 pub fn wire_error_raw(e: &Error) -> Result<()> {
+    // Report `e` even if ending the progress screen fails.
+    let _ = end_request_progress();
     let message = IpcMessage::new(e.code(), e.message().as_bytes());
     crate::error!("{}", e);
     crate::core_services::services_or_die()
