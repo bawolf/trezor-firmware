@@ -18,14 +18,15 @@ enum FileStatus {
 /// Formats (or, with `check_only`, just checks the formatting of) every
 /// `*.json` file directly under the app's `translations/` directory.
 pub fn run(args: &ProjectArgs, check_only: bool) -> Result<()> {
-    let mut project_dir = helpers::root_dir()?;
-    if helpers::is_workspace()? {
+    let project_dir = if helpers::is_workspace()? {
         ensure!(
             !args.project.is_empty(),
             "Project name must be specified when running translation-style in a workspace"
         );
-        project_dir = project_dir.join(&args.project);
-    }
+        helpers::package_dir(&args.project)?
+    } else {
+        helpers::root_dir()?
+    };
     let translation_dir = project_dir.join("translations");
 
     let mut errors: Vec<std::path::PathBuf> = Vec::new();

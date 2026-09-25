@@ -13,19 +13,16 @@ use std::process;
 /// additionally enable UI screenshot testing (`--ui=test --ui-check-missing
 /// --do-master-diff`).
 pub fn device_tests(args: &DeviceTestsArgs) -> Result<()> {
-    let mut project_dir = helpers::root_dir()?;
-    if helpers::is_workspace()? {
+    let app = if helpers::is_workspace()? {
         ensure!(
             !args.project.is_empty(),
             "Project name must be specified when running device tests in a workspace"
         );
-        project_dir = project_dir.join(&args.project);
-    }
-    let app = if helpers::is_workspace()? {
         args.project.clone()
     } else {
         helpers::standalone_project_name()?
     };
+    let project_dir = helpers::package_dir(&app)?;
 
     let binary = helpers::artifacts_dir(args.model, args.emulator)?.join(format!("{}.elf", &app));
 
