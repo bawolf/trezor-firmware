@@ -1,0 +1,18 @@
+**Verdict at `6b4c5f090c`: signing safety — ACCEPT-WITH-MUST-FIX; upstream readiness — REJECT.**  
+**Model ID:** not exposed to this session; I won’t invent an exact identifier.
+
+### Findings
+
+1. **Must-fix — recipient confirmation is not comparable to the address the user supplied.** `core/src/apps/zcash/sign_pczt.py:118–130`; `core/embed/ironwood/src/stream.rs:371–384`. The device shows an Orchard-only UA derived from the signed receiver and ignores the host’s `user_address`. If the user supplied a multi-receiver UA, its string differs even for an honest payment. A malicious host can substitute an Orchard receiver, and the user lacks a like-for-like address check on the confirmation screen. Decode the supplied UA, require its Orchard receiver to equal the cryptographically verified receiver, and then display that full UA; otherwise clearly fall back to the Orchard-only address. **I disagree with the earlier reviews’ “should-fix” severity:** this impairs the principal human recipient check, though it is not a digest or signature-binding bypass.
+
+2. **Should-fix — a fixed five-second deadline can cancel a legitimate transfer.** `core/src/apps/zcash/sign_pczt.py:38,82–95`. A slow host, transport, or user-device exchange that takes over five seconds for any chunk aborts the request. This is fail-closed, not a way to obtain an unapproved signature. Use a transport-appropriate timeout or documented retry policy. This is the earlier S2, independently confirmed still open.
+
+3. **Must-fix for upstream — cryptographic forks remain project-wide patches.** `core/embed/Cargo.toml:146–148`. Every firmware build using these crates resolves the two `bawolf` Git revisions rather than audited upstream releases. A maintainer cannot treat the signing dependency boundary as settled merely because the application tests pass. Upstream or vendor the necessary changes with an explicit audit and dependency decision. This is the earlier M1, still present.
+
+4. **Must-fix for upstream — the dependency-vetting gate has not been resolved.** `.github/workflows/core.yml:1062–1072`, alongside `core/embed/Cargo.toml:146–148`. The mandatory workflow runs `vet_rust`; the prior review measured 116 unvetted dependencies, and I found no current-tree evidence that the supply-chain policy was updated. The concrete failure scenario is a red dependency-check job on submission. Complete the audits or obtain approved exemptions, then rerun the gate. **I did not rerun `cargo vet`**, so the exact current count is unverified.
+
+### What I verified
+
+Read-only source tracing found no route from host chunks to a spend-authorization signature before the final totals confirmation: the scanner enforces the declared length and grammar, value sums use checked bounded addition, real-spend signing is gated by the reviewed token and device-derived key, and cancellation/error clears the active request. Zero-value outputs cannot carry value through the bounded totals; positive transparent outputs are separately displayed. I also checked the apparent `-- corpus_ sampled_` CI concern and did **not** report it: Rust’s harness [accepts multiple positional filters](https://doc.rust-lang.org/rustc/tests/).
+
+I did **not** build, run tests or vetting, inspect hardware behavior, or re-audit the two fork diffs. The worktree was not edited. I therefore agree with the prior reviews on the absence of a demonstrated cryptographic consent-binding bypass, but not with treating the recipient screen as merely a polish issue or endorsing hardware safety from emulator evidence alone.

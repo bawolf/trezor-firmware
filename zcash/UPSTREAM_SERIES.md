@@ -6,9 +6,9 @@ The Zcash shielded (Orchard/Ironwood) work cut into twelve commits and four PRs 
 | | |
 |---|---|
 | Branch | `zcash/ironwood-upstream-v2` in `bawolf/trezor-firmware`. Never pushed to `trezor/trezor-firmware`; no PR is open. |
-| **Head** | **`6b4c5f090c`** |
-| Base | `148e530180` (`upstream/main`) |
-| Previous heads | `3e737c17ca`, the first nine-commit cut (tag `archive/ironwood-upstream-3e737c17ca`); its record is kept below from "Record of the first cut". |
+| **Head** | **`3223765a80`** |
+| Base | `6c38a6ab1e` (`upstream/main`, 2026-09-25) |
+| Previous heads | `6b4c5f090c`, the same twelve commits on `148e530180`, tested on hardware (tag `archive/ironwood-upstream-v2-6b4c5f090c-hw`). `3e737c17ca`, the first nine-commit cut (tag `archive/ironwood-upstream-3e737c17ca`); its record is kept below from "Record of the first cut". |
 | Date | 2026-09-24 |
 
 ## The twelve commits
@@ -19,18 +19,18 @@ Every message passes `docs/git/hooks/commit-msg` (12/12). Author and committer a
 
 | # | SHA | Subject | Files | + | − |
 |---|---|---|---|---|---|
-| 1 | `bf9a964033` | `feat(common): add Zcash shielded message definitions` | 6 | +179 | −2 |
-| 2 | `ced45b0c0c` | `feat(common): regenerate protobuf bindings for Zcash` | 15 | +2585 | −150 |
-| 3 | `bbb6cc3dca` | `feat(python): add trezorlib.zcash host bindings` | 2 | +595 | − |
-| 4 | `67d0f2fbf7` | `test(python): cover the Zcash host transfer protocol` | 2 | +1513 | − |
-| 5 | `c80ee48d12` | `fix(core): count wrapped section names in the xtask memory report` | 1 | +82 | −10 |
-| 6 | `7ef1c93bc3` | `feat(core): add --require-free to xtask build` | 3 | +84 | −13 |
-| 7 | `3888f2b0a7` | `feat(core): add the ironwood crate with Orchard receiver derivation` | 12 | +1096 | −2 |
-| 8 | `0acff1700f` | `feat(core): expose the Zcash receiver to MicroPython` | 30 | +2526 | −19 |
-| 9 | `93a531d0ce` | `feat(core): add a sessionless cache slot for the Zcash weak-backup check` | 1 | +8 | − |
-| 10 | `8ba0f6bee9` | `feat(core): add Zcash shielded address display and viewing-key export` | 26 | +1782 | −8 |
-| 11 | `c2ec5592de` | `feat(core): add the Ironwood streaming approval core` | 30 | +12525 | −25 |
-| 12 | `6b4c5f090c` | `feat(core): sign a streamed Zcash PCZT` | 29 | +3961 | −22 |
+| 1 | `d12225e919` | `feat(common): add Zcash shielded message definitions` | 6 | +179 | −2 |
+| 2 | `45cdb1c472` | `feat(common): regenerate protobuf bindings for Zcash` | 15 | +2585 | −150 |
+| 3 | `6b4f3368e7` | `feat(python): add trezorlib.zcash host bindings` | 2 | +595 | − |
+| 4 | `29a63c183d` | `test(python): cover the Zcash host transfer protocol` | 2 | +1513 | − |
+| 5 | `3884bad6e3` | `fix(core): count wrapped section names in the xtask memory report` | 1 | +82 | −10 |
+| 6 | `5ae4e66f4b` | `feat(core): add --require-free to xtask build` | 3 | +84 | −13 |
+| 7 | `0ef7619833` | `feat(core): add the ironwood crate with Orchard receiver derivation` | 12 | +1096 | −2 |
+| 8 | `9d09c80543` | `feat(core): expose the Zcash receiver to MicroPython` | 30 | +2526 | −19 |
+| 9 | `886558c088` | `feat(core): add a sessionless cache slot for the Zcash weak-backup check` | 1 | +8 | − |
+| 10 | `0716ef6887` | `feat(core): add Zcash shielded address display and viewing-key export` | 26 | +1782 | −8 |
+| 11 | `1ee9d68431` | `feat(core): add the Ironwood streaming approval core` | 30 | +12525 | −25 |
+| 12 | `3223765a80` | `feat(core): sign a streamed Zcash PCZT` | 29 | +3961 | −22 |
 
 **PRs.**
 - **A** = 1–2: protocol messages and generated bindings.
@@ -60,8 +60,24 @@ have turned Trezor CI red, plus the should-fixes applied and those left open.
 Run on this machine: macOS arm64, `CARGO_BUILD_JOBS=4`, build env `/tmp/ironwood-build-env.sh`,
 nightly `rustfmt`. Logs are in the author's `.context/product-scaffold/v2-gates/<head>/`.
 
-**Which head each gate ran at.** Everything in the tables below ran at `ecde24e43c`. The
-current head `6b4c5f090c` differs from it only by nightly-`rustfmt` rewrapping of two doc
+**Rebase onto `6c38a6ab1e` (2026-09-25).** The rebase applied without conflicts. Upstream's
+8 new commits include delizia ActionBar/MoreInfoScreen changes. In files the series touches,
+it changed only upstream's own hashes in `tests/ui_tests/fixtures.json`; the Zcash lines are
+the same. The full gate set below was re-run at `3223765a80`, and every gate is green:
+- Production builds: T3T1 **98.56%** (+0.5 KB from upstream), T3B1 88.37%, T3W1 71.03%;
+  zero warnings.
+- Tests: crate 167, xtask 53, `trezor_lib` 88 (1 ignored), Python 406;
+  `translations_check`; the generation and style checks; `ruff`/flake8/pylint.
+- Emulators: 26 passed and 1 skipped on each of the three models, with UI hashes matching.
+  The stock emulator gives the single capability-absent failure, as intended.
+- Core unit tests 140/140, both Zcash and stock; the boardloader and bootloader-emu builds pass.
+- Slices: A 92.25%; B 405 passed, 1 skipped; C T3T1 98.47%, T3B1 88.28%, T3W1 70.98%;
+  C crate 16 passed.
+
+The hardware section below is for `6b4c5f090c`, before the rebase.
+
+**Which head each gate ran at, before the rebase.** Everything in the tables below ran at `ecde24e43c`. The
+hardware-tested head `6b4c5f090c` differs from it only by nightly-`rustfmt` rewrapping of two doc
 comments (`ironwood/src/lib.rs`, `ironwood/src/prewarm.rs`). At `6b4c5f090c` itself, these
 were re-run: the three production builds, `ruststyle_check`, `cargo fmt --check` and the
 commit hook.
@@ -106,11 +122,32 @@ for the hardware check.
 | A + B (commit 4) | `python/tests` | **405 passed, 1 skipped**. The skip waits for D's transparent fixture (adversarial-review nit). |
 | A + B + xtask + C (commit 10) | T3T1/T3B1/T3W1 `--zcash-shielded` production builds; `cargo test -p ironwood --features test` | **T3T1 98.47%**, T3B1 88.28%, T3W1 70.98%; crate 16 passed. The C slice fits on every model, which answers the adversarial review's open question. |
 
+### Hardware (Safe 5, T3T1), 2026-09-25, image `6b4c5f090c`
+
+- **Image:** `firmware-T3T1-2.12.6-6b4c5f090c.bin`, SHA-256 `39838bd7…4fed718a`, flashed from
+  the bootloader. Tag `archive/ironwood-upstream-v2-6b4c5f090c-hw` keeps this commit.
+- **Features:** `revision 6b4c5f090c81…`, `Capability.Zcash_Shielded` (30). The public
+  test wallet is intact, with no PIN or passphrase and auto-lock at its 600 s default. No
+  settings were changed.
+- **Receive:** `ZcashGetAddress` index 3 from a cold boot took 20 s. The address is the
+  same as on earlier images, and the wallet's stored viewing key derives the same receiver.
+- **Send:** a testnet send of 0.001 TAZ to our own address, which the wallet built as
+  **14 Ironwood actions**. The device reviewed it, and the user confirmed. It returned 14
+  spend-authorization records. The host proved and verified the transaction and relayed it
+  (txid `90993c2c1ec07ef5acb5a88f017d5b4a7204390266116a6a30c376267e07bf74`); 2 min 21 s
+  end to end.
+- **Bitcoin, same boot:** a synthetic Bitcoin sign succeeded.
+- **Viewing key:** a `ZcashGetViewingKey` export (testnet, account 0) returned a canonical
+  199-character UFVK. The wallet does not store the key as a string, so it was not compared
+  byte for byte. The 14-spend sign above required the device's own derived FVK to equal the
+  wallet's for every real spend.
+- **Not run:** the arena counters. They need a debuglink image; this was the production one.
+
+Logs: the author's `.context/product-scaffold/session-logs/2026-09-25-6b4c5f090c-*.log`.
+
 ## What remains before a PR could open
 
-- **Hardware confirmation of `6b4c5f090c` on the test Safe 5:** flash from the bootloader,
-  then a cold `ZcashGetAddress`, a viewing-key export, a 2-action sign, and the arena counters
-  (the two-signs test). The emulator cannot show the allocator failures that the series fixes.
+- **Arena counters on hardware** from a debuglink image of the head.
 - **A Fable adversarial review of this head.** The v2 review was an Opus substitution because
   Fable usage was exhausted.
 - **Maintainer decisions:**
