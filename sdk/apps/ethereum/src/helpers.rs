@@ -360,7 +360,8 @@ pub fn get_progress_indicator<'a>(
     total_len: usize,
     mut progress_len: usize,
 ) -> Result<Box<dyn FnMut(&[u8]) -> Result<()> + 'a>> {
-    let _value = progress_value(total_len, progress_len)?;
+    ui::init_progress(None, Some(tr!("progress__loading_transaction")), false, false)?;
+    ui::update_progress(None, progress_value(total_len, progress_len)?)?;
 
     Ok(Box::new(move |chunk: &[u8]| {
         progress_len += chunk.len();
