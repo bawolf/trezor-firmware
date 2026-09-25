@@ -1,0 +1,60 @@
+cargo-features = ["panic-immediate-abort"]
+
+# The Zcash app is its own workspace: its Zcash dependencies need the
+# pre-release `digest` 0.11 that the `sdk/apps` workspace cannot share with the
+# SDK's mock `sha3` 0.11.
+[workspace]
+members = ["ironwood"]
+
+resolver = "2"
+
+# The `ironwood` crate's dependencies, pinned as in the firmware series it
+# comes from (`core/embed/Cargo.toml` on `zcash/ironwood-upstream-v2`).
+[workspace.dependencies]
+aes = { version = "=0.8.4", default-features = false, features = ["zeroize"] }
+blake2b_simd = { version = "=1.0.2", default-features = false, features = ["uninline_portable"] }
+ironwood = { path = "ironwood", default-features = false }
+ironwood-pasta-curves = { package = "pasta_curves", version = "=0.5.1", default-features = false, features = ["alloc", "uninline-portable"] }
+ironwood-sinsemilla = { package = "sinsemilla", version = "=0.1.0", default-features = false }
+orchard = { version = "=0.15.3", default-features = false }
+pczt = { version = "=0.9.3", default-features = false, features = ["orchard"] }
+rand_core = { version = "=0.6.4", default-features = false }
+sapling = { package = "sapling-crypto", version = "=0.7.0", default-features = false }
+transparent = { package = "zcash_transparent", version = "=0.10.0", default-features = false }
+zcash_note_encryption = { version = "=0.4.1", default-features = false }
+zcash_primitives = { version = "=0.30.1", default-features = false }
+zcash_protocol = { version = "=0.10.5", default-features = false }
+zeroize = { version = "1.8.2", default-features = false, features = ["zeroize_derive"] }
+# Host-only (ironwood dev-dependencies).
+rand_chacha = { version = "=0.3.1", default-features = false }
+serde_json = "1.0.145"
+zip32 = { version = "=0.2.1", default-features = false }
+
+# Ironwood (Orchard v2) is not released upstream yet; these are the forks the
+# firmware series pins, by full commit.
+[patch.crates-io]
+sinsemilla = { git = "https://github.com/bawolf/sinsemilla", rev = "6ca88ff52835899c87ff83489b95c5cda887e8a4" }
+orchard = { git = "https://github.com/bawolf/orchard", rev = "d4792911986deda16cc3d689a97f316655f08e84" }
+
+[profile.debug-fw]
+inherits = "dev"
+split-debuginfo = "off"
+debug = 2
+strip = "none"
+panic = "abort"
+
+[profile.release-fw]
+inherits = "release"
+opt-level = "z"
+lto = "fat"
+codegen-units = 1
+split-debuginfo = "off"
+debug = 0
+debug-assertions = false
+overflow-checks = false
+incremental = false
+panic = "immediate-abort"
+
+[profile.test]
+split-debuginfo = "off"
+debug = 2

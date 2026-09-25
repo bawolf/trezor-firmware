@@ -1,0 +1,40 @@
+[package]
+name = "ironwood"
+version = "0.0.0"
+edition = "2024"
+
+[features]
+default = []
+# Host-only test access. The crate rejects this feature on bare-metal targets.
+test = []
+# Links the small computed-generators Sinsemilla instead of the fast
+# precomputed table. Host regression builds (`cargo test -p ironwood`) leave it
+# off so the equivalence corpus runs in minutes, not tens of minutes. The
+# Session == Engine equivalence is representation-independent, so it holds
+# either way.
+computed-generators = ["ironwood-sinsemilla/computed-generators"]
+
+[dependencies]
+# Exact versions live in the workspace manifest (`../Cargo.toml`). Every production
+# dependency is default-off; the crate enables only the portable features it uses.
+aes.workspace = true
+blake2b_simd.workspace = true
+ironwood-pasta-curves.workspace = true
+ironwood-sinsemilla.workspace = true
+orchard.workspace = true
+pczt.workspace = true
+rand_core.workspace = true
+sapling.workspace = true
+transparent.workspace = true
+zcash_note_encryption.workspace = true
+zcash_primitives.workspace = true
+zcash_protocol.workspace = true
+zeroize = { workspace = true }
+
+[dev-dependencies]
+pczt = { workspace = true, features = ["signer", "io-finalizer", "zcp-builder"] }
+rand_chacha.workspace = true
+rand_core = { workspace = true, features = ["getrandom"] }
+serde_json.workspace = true
+zcash_protocol = { workspace = true, features = ["local-consensus"] }
+zip32.workspace = true
