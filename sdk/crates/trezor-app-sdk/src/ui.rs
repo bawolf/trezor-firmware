@@ -11,6 +11,8 @@
 //! # Ok::<(), trezor_app_sdk::Error>(())
 //! ```
 
+use core::sync::atomic::{AtomicBool, Ordering};
+
 use rkyv::api::low::deserialize;
 use rkyv::rancor::Failure;
 use rkyv::{Archived, to_bytes};
@@ -25,7 +27,7 @@ pub use crate::structs::{
     ShowWarning, StrExt, TrezorProgressEnum, TrezorUiEnum, TrezorUiResult,
 };
 use crate::util::Timeout;
-use crate::{Error, unwrap};
+use crate::{Error, low_level_api, unwrap};
 
 // pub type ArchivedTrezorUiResult = Archived<TrezorUiResult>;
 // pub type ArchivedTrezorUiEnum<'a> = Archived<TrezorUiEnum<'a>>;
@@ -75,16 +77,21 @@ fn ipc_progress_call(value: &TrezorProgressEnum) -> Result<()> {
     Ok(())
 }
 
-/// Initializes a progress screen.
+/// Whether Core shows a progress screen for the current request. Core stops an
+/// app that updates or ends progress it never initialized, so `update_progress`
+/// and `end_progress` check this first. (Atomic only to avoid `static mut`.)
+static PROGRESS_SHOWN: AtomicBool = AtomicBool::new(false);
+
+/// Initializes a progress screen, replacing one already shown.
 ///
-/// Must be called before [`update_progress`] and [`end_progress`].
+/// Prefer [`Progress`], which also ends the screen on every return path.
 ///
 /// ## Example
 ///
 /// ```no_run
 /// use trezor_app_sdk::ui;
 /// ui::init_progress(Some("Signing..."), Some("Please wait"), false, false)?;
-/// ui::update_progress(None, 50)?;
+/// ui::update_progress(None, 500)?;
 /// ui::end_progress()?;
 /// # Ok::<(), trezor_app_sdk::Error>(())
 /// ```
@@ -100,24 +107,31 @@ pub fn init_progress(
         indeterminate,
         danger,
     };
-    ipc_progress_call(&value)
+    ipc_progress_call(&value)?;
+    PROGRESS_SHOWN.store(true, Ordering::Relaxed);
+    Ok(())
 }
 
-/// Updates the progress bar value and optionally the description text.
+/// Sets the progress bar to `value` (0..=1000) and optionally replaces the
+/// description text.
 ///
-/// Must be called after [`init_progress`].
+/// Fails with [`Error::DataError`], without contacting Core, if no progress
+/// screen is shown ([`init_progress`] was not called, or the screen ended).
 ///
 /// ## Example
 ///
 /// ```no_run
 /// use trezor_app_sdk::ui;
 /// ui::init_progress(Some("Working..."), None, false, false)?;
-/// ui::update_progress(Some("50% done"), 50)?;
-/// ui::update_progress(Some("Almost done"), 90)?;
+/// ui::update_progress(Some("50% done"), 500)?;
+/// ui::update_progress(Some("Almost done"), 900)?;
 /// ui::end_progress()?;
 /// # Ok::<(), trezor_app_sdk::Error>(())
 /// ```
 pub fn update_progress(description: Option<&str>, value: u32) -> Result<()> {
+    if !PROGRESS_SHOWN.load(Ordering::Relaxed) {
+        return Err(Error::DataError("Progress not initialized"));
+    }
     let value = TrezorProgressEnum::Update {
         description: description.map(|d| d.into()),
         value,
@@ -125,22 +139,97 @@ pub fn update_progress(description: Option<&str>, value: u32) -> Result<()> {
     ipc_progress_call(&value)
 }
 
-/// Ends and dismisses the progress screen.
-///
-/// Must be called after [`init_progress`] to clean up the progress display.
+/// Ends and dismisses the progress screen. Does nothing if none is shown.
 ///
 /// ## Example
 ///
 /// ```no_run
 /// use trezor_app_sdk::ui;
 /// ui::init_progress(None, None, false, false)?;
-/// ui::update_progress(None, 100)?;
+/// ui::update_progress(None, 1000)?;
 /// ui::end_progress()?;
 /// # Ok::<(), trezor_app_sdk::Error>(())
 /// ```
 pub fn end_progress() -> Result<()> {
-    let value = TrezorProgressEnum::End;
-    ipc_progress_call(&value)
+    if !PROGRESS_SHOWN.swap(false, Ordering::Relaxed) {
+        return Ok(());
+    }
+    ipc_progress_call(&TrezorProgressEnum::End)
+}
+
+/// A progress screen for the duration of a long computation, ended when
+/// dropped.
+///
+/// Core stops an app that sends it no IPC message for 1 s while it handles a
+/// request (`core/src/apps/extapp/run.py`). A computation that can take longer
+/// must call [`Progress::keep_alive`] (or [`Progress::report`]) often enough,
+/// e.g. from its inner loop: `keep_alive` reports at most every
+/// [`Progress::KEEP_ALIVE_MS`] and costs one clock read otherwise.
+///
+/// ## Example
+///
+/// ```no_run
+/// use trezor_app_sdk::ui::Progress;
+/// # fn step(_: u32) {}
+/// let mut progress = Progress::show(None, None, true)?;
+/// for i in 0..1000 {
+///     step(i);
+///     progress.keep_alive()?;
+/// }
+/// drop(progress); // or let it go out of scope
+/// # Ok::<(), trezor_app_sdk::Error>(())
+/// ```
+#[must_use = "the progress screen ends when this is dropped"]
+pub struct Progress {
+    value: u32,
+    reported_at_ms: u32,
+}
+
+impl Progress {
+    /// Longest interval between two reports sent by [`Progress::keep_alive`],
+    /// well within Core's 1 s limit.
+    pub const KEEP_ALIVE_MS: u32 = 250;
+
+    /// Shows a progress screen at value 0; the arguments are those of
+    /// [`init_progress`].
+    pub fn show(
+        description: Option<&str>,
+        title: Option<&str>,
+        indeterminate: bool,
+    ) -> Result<Self> {
+        init_progress(description, title, indeterminate, false)?;
+        Ok(Self {
+            value: 0,
+            reported_at_ms: low_level_api::systick_ms(),
+        })
+    }
+
+    /// Sets the progress bar to `value` (0..=1000).
+    pub fn report(&mut self, value: u32) -> Result<()> {
+        update_progress(None, value)?;
+        self.value = value;
+        self.reported_at_ms = low_level_api::systick_ms();
+        Ok(())
+    }
+
+    /// Repeats the last reported value if [`Progress::KEEP_ALIVE_MS`] has
+    /// passed since it, so an indeterminate screen can use it without ever
+    /// calling [`Progress::report`].
+    pub fn keep_alive(&mut self) -> Result<()> {
+        let elapsed = low_level_api::systick_ms().wrapping_sub(self.reported_at_ms);
+        if elapsed >= Self::KEEP_ALIVE_MS {
+            self.report(self.value)?;
+        }
+        Ok(())
+    }
+}
+
+impl Drop for Progress {
+    fn drop(&mut self) {
+        // `end_progress` has already cleared the local state; a failed End
+        // leaves only Core's screen, which the next screen replaces.
+        let _ = end_progress();
+    }
 }
 
 /// Runs a sequence of confirmation screens in order, supporting back navigation.

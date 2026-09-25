@@ -347,6 +347,26 @@ While handling a wire message, the app can call into other Core services via IPC
 
 These calls are synchronous — the app blocks until Core responds.
 
+### Long computations
+
+While Core handles a request for the app, it waits at most **1 s** for the app's next IPC message (`core/src/apps/extapp/run.py`); if none arrives, it stops the app and the request fails with `Timeout waiting for message`. Time the app spends waiting for Core (a screen the user is reading, a host round trip) does not count — only time between the app's own messages. Code that can compute for longer than a few hundred milliseconds on the slowest target, for example elliptic-curve work on a Cortex-M33, must show a progress screen and keep reporting it:
+
+```rust
+use trezor_app_sdk::ui::Progress;
+
+let mut progress = Progress::show(None, None, true)?;
+for chunk in work {
+    process(chunk);
+    progress.keep_alive()?; // reports at most every 250 ms; otherwise one clock read
+}
+// dropping `progress` ends the screen, on error paths too
+```
+
+- Report from inside the long-running loop, not only around it: a single step that exceeds 1 s cannot be rescued by the reports before and after it.
+- `keep_alive` repeats the last reported value, so an indeterminate screen can use it without ever calling `report`.
+- The emulator runs much faster than hardware, so it will not reveal a missing report.
+- The lower-level `init_progress`/`update_progress`/`end_progress` functions track whether a screen is shown: `update_progress` without `init_progress` fails locally instead of Core stopping the app, and `end_progress` without one does nothing. A response or error ends a screen the app left open.
+
 Which services an app may use is a function of its [`app-ring`](#application-privilege). Ring `2` — the only ring available today — gets `UI` and the seed-based `Crypto` service, matching the `[package.metadata.trezor]` table above. Privileged rings are meant to unlock additional services beyond this table, but since ring 0/1 support isn't implemented yet, every app that can currently load runs at ring `2` and sees the full service set listed here.
 
 ---
