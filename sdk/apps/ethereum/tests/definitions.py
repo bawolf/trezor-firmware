@@ -58,7 +58,10 @@ def make_payload(
         message_bytes = writer.getvalue()
 
     payload = definitions.DefinitionPayload(
-        magic=b"trzd1",
+        # The app parses the "trzd1" (format 1) encoding; trezorlib now
+        # splits it into magic + version.
+        magic=b"trzd",
+        version=b"1",
         data_type=data_type,
         timestamp=timestamp,
         data=message_bytes,
