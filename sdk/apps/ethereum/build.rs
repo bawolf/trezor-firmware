@@ -148,6 +148,8 @@ fn link() {
             // On macOS, link to System framework to get memcpy, memset, etc.
             println!("cargo:rustc-link-lib=System");
             println!("cargo:rustc-link-arg=-Wl,-export_dynamic");
+            // The emulator dlopen()s the app, so link a dylib, not an executable.
+            println!("cargo:rustc-link-arg=-dynamiclib");
         } else if is_linux() {
             // On Linux, link to C library to get __libc_start_main, memcpy, etc.
             println!("cargo:rustc-link-lib=c");
