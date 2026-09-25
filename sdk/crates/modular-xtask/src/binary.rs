@@ -106,13 +106,18 @@ pub fn convert_elf_to_bin(elf_path: &Path, package: &Package) -> Result<PathBuf>
     let elf = object::File::parse(&*raw_elf)
         .with_context(|| format!("Failed to parse the elf file {:?}", elf_path))?;
 
+    // A macOS emulator build is a Mach-O dylib; the unix emulator dlopen()s
+    // any host shared object tagged with the X86_64 (emulator) target arch.
+    let macos_emulator = elf.format() == object::BinaryFormat::MachO
+        && elf.architecture() == object::Architecture::Aarch64;
     ensure!(
-        elf.format() == object::BinaryFormat::Elf,
+        elf.format() == object::BinaryFormat::Elf || macos_emulator,
         "Unsupported binary format: {:?}",
         elf.format()
     );
 
     let (target_arch, code, data_size) = match elf.architecture() {
+        object::Architecture::Aarch64 if macos_emulator => (AppBinaryType::X86_64, raw_elf, 0),
         object::Architecture::Arm => {
             let arm_binary = armv8m::Armv8mBinary::from_object_file(&elf, package)?;
             arm_binary.print_info();
