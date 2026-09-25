@@ -20,6 +20,7 @@
 #pragma once
 
 #include <sys/logging.h>
+#include <sys/rng.h>
 #include <sys/sysevent.h>
 #include <sys/system.h>
 #include <sys/systick.h>
@@ -128,5 +129,9 @@ typedef struct {
   ts_t (*app_get_heap)(void** heap_ptr, size_t* heap_size);
 
   const trezor_crypto_v1_t* trezor_crypto_v1;
+
+  // Appended after `trezor_crypto_v1` so that the offsets of the fields above
+  // do not move.
+  void (*rng_fill_buffer)(void* buffer, size_t buffer_size);
 
 } trezor_api_v1_t;
