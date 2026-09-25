@@ -11,6 +11,8 @@ use rkyv::{
 };
 #[cfg(feature = "app_loading")]
 use trezor_app_sdk::crypto::{Slice, TrezorCryptoEnum, TrezorCryptoResultRef};
+#[cfg(feature = "app_loading")]
+use zeroize::Zeroize;
 
 #[cfg(feature = "app_loading")]
 use crate::micropython::gc::Gc;
@@ -126,6 +128,11 @@ extern "C" fn new_deserialize_crypto_message(
                 Obj::try_from(address.as_ref())?,
             )
                 .try_into()?,
+            Archived::<TrezorCryptoEnum>::GetZip32OrchardAccount { coin_type, account } => (
+                Obj::try_from(coin_type.to_native())?,
+                Obj::try_from(account.to_native())?,
+            )
+                .try_into()?,
         };
 
         Ok(result)
@@ -140,6 +147,34 @@ extern "C" fn new_deserialize_crypto_message(
     _kwargs: *mut Map,
 ) -> Obj {
     unimplemented!()
+}
+
+/// A crypto result whose spending key, if any, is zeroed when dropped.
+#[cfg(feature = "app_loading")]
+struct WipedResult<'a>(TrezorCryptoResultRef<'a>);
+
+#[cfg(feature = "app_loading")]
+impl Drop for WipedResult<'_> {
+    fn drop(&mut self) {
+        if let TrezorCryptoResultRef::Zip32OrchardAccount { spending_key, .. } = &mut self.0 {
+            spending_key.zeroize();
+        }
+    }
+}
+
+/// Serialization buffers, zeroed when dropped: they may hold a spending key.
+#[cfg(feature = "app_loading")]
+struct WipedBuffers {
+    arena: [MaybeUninit<u8>; 200],
+    out: Align<[MaybeUninit<u8>; 200]>,
+}
+
+#[cfg(feature = "app_loading")]
+impl Drop for WipedBuffers {
+    fn drop(&mut self) {
+        self.arena.zeroize();
+        self.out.0.zeroize();
+    }
 }
 
 #[cfg(feature = "app_loading")]
@@ -159,7 +194,7 @@ extern "C" fn new_send_crypto_result(n_args: usize, args: *const Obj, kwargs: *m
         }));
 
         // Map MicroPython CryptoResult object to Rust enum for serialization
-        let msg = if obj.is_str() {
+        let msg = WipedResult(if obj.is_str() {
             let data = unwrap!(unsafe { crate::micropython::buffer::get_buffer(obj) });
             match data.len() {
                 111 => TrezorCryptoResultRef::Xpub(unwrap!(data.try_into())),
@@ -179,37 +214,53 @@ extern "C" fn new_send_crypto_result(n_args: usize, args: *const Obj, kwargs: *m
         } else if obj.is_immediate() {
             TrezorCryptoResultRef::Boolean(unwrap!(bool::try_from(obj)))
         } else {
-            // Expect a (type_tag: int, bytes) tuple for ambiguous lengths (e.g. 65 bytes)
+            // Expect a `[type_tag: int, ...]` list for results that a byte
+            // length cannot identify (e.g. 32 or 65 bytes)
             let list: Gc<List> = obj.try_into()?;
-            assert!(
-                list.len() == 2,
-                "Expected a tuple of (type_tag: int, bytes)"
-            );
-            let tag_obj = list.get(0)?;
-            let tag: u8 = unwrap!(tag_obj.try_into());
-            let bytes_obj = list.get(1)?;
-            let data = unwrap!(unsafe { crate::micropython::buffer::get_buffer(bytes_obj) });
-            match tag {
-                0 => {
+            let tag: u8 = unwrap!(list.get(0)?.try_into());
+            let bytes_at = |index: usize| -> Result<&[u8], Error> {
+                let item = list.get(index)?;
+                unsafe { crate::micropython::buffer::get_buffer(item) }
+            };
+            match (tag, list.len()) {
+                // [0, public_key]
+                (0, 2) => {
+                    let data = bytes_at(1)?;
                     assert!(
                         data.len() == 32 || data.len() == 33 || data.len() == 65,
                         "Expected public key to be 32, 33 or 65 bytes"
                     );
                     TrezorCryptoResultRef::PublicKey(unwrap!(data.try_into()))
                 }
+                // [1, spending_key, seed_fingerprint, weak_backup]
+                (1, 4) => {
+                    let seed_fingerprint = bytes_at(2)?.try_into().map_err(|_| Error::TypeError)?;
+                    let weak_backup = bool::try_from(list.get(3)?)?;
+                    // Copied last, so no error path leaves an unwiped copy.
+                    let spending_key = bytes_at(1)?.try_into().map_err(|_| Error::TypeError)?;
+                    TrezorCryptoResultRef::Zip32OrchardAccount {
+                        spending_key,
+                        seed_fingerprint,
+                        weak_backup,
+                    }
+                }
+                // [2]
+                (2, 1) => TrezorCryptoResultRef::Cancelled,
                 _ => {
                     return Err(Error::TypeError);
                 }
             }
+        });
+
+        let mut buffers = WipedBuffers {
+            arena: [MaybeUninit::<u8>::uninit(); 200],
+            out: Align([MaybeUninit::<u8>::uninit(); 200]),
         };
 
-        let mut arena = [MaybeUninit::<u8>::uninit(); 200];
-        let mut out = Align([MaybeUninit::<u8>::uninit(); 200]);
-
         let bytes = unwrap!(to_bytes_in_with_alloc::<_, _, Failure>(
-            &msg,
-            Buffer::from(&mut *out),
-            SubAllocator::new(&mut arena),
+            &msg.0,
+            Buffer::from(&mut *buffers.out),
+            SubAllocator::new(&mut buffers.arena),
         ));
         //Send the response back via the ipc_cb callback
         ipc_cb(bytes.as_ref());
