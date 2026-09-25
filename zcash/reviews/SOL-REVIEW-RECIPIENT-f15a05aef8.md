@@ -1,0 +1,16 @@
+**Verdict: ACCEPT-WITH-MUST-FIX**  
+**Model ID:** not exposed to this session.
+
+### Findings
+
+1. **Must-fix — the decoder can validate only a prefix of the string shown.** `core/src/apps/zcash/sign_pczt.py:116–118`; underlying decoder `crypto/segwit_addr.c:95`. The Rust scanner admits UTF-8 NUL bytes. Given `valid_matching_UA + "\0" + arbitrary_suffix`, the C Bech32 decoder uses `strlen` and validates only the prefix, while `_payment_address` returns the entire host string for display. This violates the rule that the *shown string* is the decoded address. Reject NUL (and preferably all non-Bech32 ASCII) before decoding, or make the decoder length-aware; test this input through the device UI. **I did not establish that this can redirect funds:** the validated prefix must still contain the verified Orchard receiver, and I did not verify how each physical display renders the suffix.
+
+2. **Should-fix — a malformed checksummed address can raise `AssertionError`, not `DataError`.** `core/src/apps/zcash/unified_addresses.py:143–144` (reached from `sign_pczt.py:116`). A host can supply a Bech32m-checksummed `u1…` payload that decodes to fewer than 48 bytes. `f4unjumble()` calls `ensure(48 <= len(message))`, which raises `AssertionError`; `sign_pczt()` catches `ValueError` and `RuntimeError`, not that exception. The `finally` still cancels the session, but the documented malformed-address refusal is not met. Validate decoded length and convert decoding failures to `DataError`; add a short, valid-checksum test.
+
+3. **Should-fix — the long-address display boundary remains untested.** `tests/zcash_tests/test_sign_pczt.py:127–150`; `core/embed/ironwood/tests/scratch_tier.rs:224–230`. The new device vector uses two **141-character** addresses, while the scratch test’s 512-byte strings are just repeated `u` and never reach address decoding or UI. Add device tests for a valid ~213-character UA and a near-budget UA with an unknown-typecode receiver, asserting every character is reachable on every model before confirmation. This is a coverage finding, **not a demonstrated truncation**: source inspection shows pagination in the relevant text components, and the updated `screen_text` follows their pages.
+
+### Verified scope and limits
+
+I traced the scanner → verified payment event → MicroPython tuple → `_payment_address`. `user_address` is copied only after `Body::action` verifies and classifies the output; it is not used to establish the receiver. The fallback encodes that verified Orchard receiver. Transparent outputs ignore their `user_address` and display the address derived from `scriptPubKey`, consistent with §7. Network HRP, Bech32m, receiver lengths, order, and duplicates are checked; non-ASCII confusables and mixed case are rejected by the C decoder. Uppercase-only addresses remain valid and are shown as supplied. A mismatch occurs before the output screen and before approval; the handler’s `finally` cancels the native session.
+
+I found **no demonstrated way to show the exact address a careful user entered while paying a different Orchard receiver**. Other receivers in a matching UA are not paid or ownership-checked, as §7 explicitly states. I did not build, execute tests, inspect hardware rendering, or edit the repository.

@@ -6,9 +6,9 @@ The Zcash shielded (Orchard/Ironwood) work cut into twelve commits and four PRs 
 | | |
 |---|---|
 | Branch | `zcash/ironwood-upstream-v2` in `bawolf/trezor-firmware`. Never pushed to `trezor/trezor-firmware`; no PR is open. |
-| **Head** | **`3223765a80`** |
+| **Head** | **`dcc602fd48`** |
 | Base | `6c38a6ab1e` (`upstream/main`, 2026-09-25) |
-| Previous heads | `6b4c5f090c`, the same twelve commits on `148e530180`, tested on hardware (tag `archive/ironwood-upstream-v2-6b4c5f090c-hw`). `3e737c17ca`, the first nine-commit cut (tag `archive/ironwood-upstream-3e737c17ca`); its record is kept below from "Record of the first cut". |
+| Previous heads | `3223765a80`, the same series before the recipient-address change. `6b4c5f090c`, the same twelve commits on `148e530180`, tested on hardware (tag `archive/ironwood-upstream-v2-6b4c5f090c-hw`). `3e737c17ca`, the first nine-commit cut (tag `archive/ironwood-upstream-3e737c17ca`); its record is kept below from "Record of the first cut". |
 | Date | 2026-09-24 |
 
 ## The twelve commits
@@ -54,6 +54,66 @@ The first was the fix pass for the whole-series review:
 The second pass fixed what the reviews of that first pass found. See
 [reviews/V2-FIX-PASS.md](reviews/V2-FIX-PASS.md): four must-fixes, all of which would
 have turned Trezor CI red, plus the should-fixes applied and those left open.
+
+## Recipient address (2026-09-25, `3223765a80` → `dcc602fd48`)
+
+**The change.** A shielded payment is now shown under the wallet's `user_address` from
+the PCZT. The handler accepts it only if:
+- it is plain letters and digits;
+- it is no shorter than the Orchard-only encoding;
+- it decodes, for the session's network, to a unified address whose Orchard receiver is
+  exactly the verified one.
+
+Otherwise the PCZT is refused with `DataError`. With no `user_address`, the Orchard-only
+address is shown, as before.
+
+This follows upstream's `apps/zcash/signer.py` `output_derive_script`, which pays the
+transparent receiver of a unified address entered for a transparent payment and shows the
+whole address. It resolves S1, which GPT-6 Sol rated must-fix. The rule is in design
+§7 "Recipient address". The string is copied out of the scanner only on the payment event;
+the scratch peak is unchanged at 25,008 B even with a 512-byte address on all 32 payments.
+
+**Commits.** The change was squashed into D1 (scanner and session event) and D2 (glue,
+handler, tests, design doc).
+
+**Tests.**
+- Crate: `a_payment_confirmation_carries_its_user_address`, and a scratch-tier case with
+  the longest addresses.
+- Unit: `TestZcashPaymentAddress`, 8 cases, including a NUL suffix and a short string with a
+  valid checksum.
+- Device, all three models:
+  - `test_payment_shows_its_user_address`
+  - `test_long_user_address_is_shown_whole` (213 and 512 characters)
+  - `test_user_address_for_another_receiver_is_refused`
+- The `stock_sdk_view_sdk` vector now carries real multi-receiver unified addresses, not
+  placeholders.
+- `screen_text` now follows long values across pages on delizia and eckhart as well as
+  caesar. That is why some hashes of existing screens changed: the tests now visit, and
+  check, every page.
+
+**Reviews.** None of these runs was Fable.
+- GPT-6 Sol ([SOL-REVIEW-RECIPIENT-f15a05aef8.md](reviews/SOL-REVIEW-RECIPIENT-f15a05aef8.md)):
+  one must-fix and two should-fixes, all applied. The must-fix was that the C bech32 decoder
+  stops at a NUL, so a suffix could be shown unchecked. The should-fixes were a short payload
+  raising `AssertionError` in F4Jumble, and missing long-address device coverage.
+- Sol re-check ([SOL-RECHECK-dcc602fd48.md](reviews/SOL-RECHECK-dcc602fd48.md)): all three
+  resolved, nothing new.
+- Opus 5.5 clarity review
+  ([CLARITY-REVIEW-RECIPIENT-8d7d37ff97.md](reviews/CLARITY-REVIEW-RECIPIENT-8d7d37ff97.md)):
+  applied.
+
+**Upstream note.** The same NUL-prefix and short-payload behaviour exists in upstream's own
+`unified_addresses.decode` on the transparent `SignTx` path. It is worth reporting upstream,
+subject to the user's decision on contact.
+
+**Gates at `dcc602fd48`, all green.**
+- FLASH: T3T1 **98.62%** (+1 KB), T3B1 88.43%, T3W1 71.06%; zero warnings.
+- Tests: crate 168, xtask 53, `trezor_lib` 88, Python 406; unit tests 140/140 on both the
+  Zcash and stock builds.
+- Emulators: 30 passed and 1 skipped on each of the three models, UI hashes matching; the
+  stock emulator gives the single capability-absent failure.
+- Style, generation and translations: pass.
+- Slices: A 92.25%; B 405 passed, 1 skipped; C T3T1 98.47%.
 
 ## Gates
 
