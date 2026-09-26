@@ -23,7 +23,7 @@ for the branch owner, not a PR.
 | [run-log-pyopt](run-log-pyopt.md) | `extapp/run-log-pyopt` @ `cf7d5bc6a3` | sdk-wip | note: bug fix | bieleluk; matejcik | — | standalone (PYOPT=1 emulator: Core fatal before, xpub after); no test |
 | [killed-not-timeout](killed-not-timeout.md) | `extapp/killed-not-timeout` @ `fc136e637c` | sdk-wip | note: bug fix | bieleluk | — | standalone (scratch Tron panic: "Timeout" before, "Task stopped" after); no test |
 | [run-coin-types](run-coin-types.md) | `extapp/run-coin-types` @ `4640bbee69` | sdk-wip | note: 2 bug fixes | bieleluk | — | commit 1 standalone (extracted function); commit 2 test fails (Core fatal) before, passes after |
-| [typed-hash-entitlement](typed-hash-entitlement.md) | `extapp/typed-hash-entitlement-v2` @ `cdafac07e0` (local; replaces the pushed `extapp/typed-hash-entitlement` @ `3e668c7caf`) | sdk-wip | note: security bug fix | bieleluk; matejcik | run-coin-types (built on it; same test file) | standalone end to end (scratch Tron app gets an Ethereum signature before, refused after); 4 unit tests after, full Core unit suite passes |
+| [typed-hash-entitlement](typed-hash-entitlement.md) | `extapp/typed-hash-entitlement` @ `cdafac07e0` | sdk-wip | note: security bug fix | bieleluk; matejcik | run-coin-types (built on it; same test file) | standalone end to end (scratch Tron app gets an Ethereum signature before, refused after); 4 unit tests after, full Core unit suite passes |
 | [sdk-allocator-heap](sdk-allocator-heap.md) | `extapp/sdk-allocator-heap` @ `5f235435ed` | sdk-wip | note: bug fix | bieleluk | — (trivial manifest conflict with ipc-buffer-size) | standalone, deterministic (xtask size report) |
 | [emulator-declared-heap](emulator-declared-heap.md) | `extapp/emulator-declared-heap` @ `d502e1ed4d` | sdk-wip | note: feature (+ sample fix) | cepetr (loader); bieleluk | sdk-allocator-heap | standalone (Ethereum suite at declared heaps) |
 | [sdk-progress-api](sdk-progress-api.md) | `extapp/sdk-progress-api` @ `65166b3176` | sdk-wip | note: 2 bug fixes + feature | bieleluk; vojczejk (overlaps his modui progress) | — | standalone (Ethereum subset 0 → 8 of 15); SDK test after |
@@ -46,17 +46,14 @@ The integrated series is
 https://github.com/bawolf/trezor-firmware/tree/zcash/extapp-series @ `cbce6b97e2`.
 Its commits carry the same changed lines and messages as the branches, except
 `emulator-declared-heap` (the series also covers the local macOS loader).
-`extapp/typed-hash-entitlement-v2` is the series commit `b77222b9ae`
+`extapp/typed-hash-entitlement` is the series commit `b77222b9ae`
 cherry-picked onto `extapp/run-coin-types`.
 
 ## Fix before sending
 
-- **Push `extapp/typed-hash-entitlement-v2` before linking the draft.** The
-  pushed `extapp/typed-hash-entitlement` @ `3e668c7caf` also switches the
-  `SignDigest`, `GetAddressMac` and `CheckAddressMac` arms to `"secp256k1"`,
-  which its message does not mention. The rebuilt local branch has only the
-  series commit's change and passed its checks (see the draft). Pushing it
-  over the old name or under the new one is the user's call.
+- `extapp/typed-hash-entitlement` was rebuilt from the series commit on 2026-09-26 and
+  force-pushed (`3e668c7caf` → `cdafac07e0`). The earlier push also changed the
+  `SignDigest`, `GetAddressMac` and `CheckAddressMac` arms, which its message did not say.
 - The older local `fix/*` branches are superseded by these `extapp/*` ones;
   `fix/extapp-progress-variant-id` by `extapp/bridge-validate-untrusted-input`.
 

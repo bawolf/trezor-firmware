@@ -7,17 +7,11 @@ consider sending it to the owner directly rather than in public.
 Reproduction status: standalone end-to-end repro on the emulator (scratch
 Tron change), before and after; Core unit tests after.
 
-Branch: `extapp/typed-hash-entitlement-v2` @ `cdafac07e0`, local, not pushed.
-It is the series commit `b77222b9ae` cherry-picked onto
-`extapp/run-coin-types` @ `4640bbee69`, so it **depends on run-coin-types**
-(2 commits on `bieleluk/sdk-wip` @ `4cd93ff4d8`) and adds its test class to
-that branch's `test_apps.extapp.run.py`. `git diff 4640bbee69 cdafac07e0`
-touches only `core/src/apps/extapp/run.py` and that test file, and equals
-`b77222b9ae`'s diff except for blob hashes and hunk offsets. It does not touch
-`SignDigest`, `GetAddressMac` or `CheckAddressMac`. It replaces the pushed
-`extapp/typed-hash-entitlement` @ `3e668c7caf`, which also switched those three
-arms to `"secp256k1"`. Whether to push v2 over the old name or under the new
-one is the user's call.
+Branch: https://github.com/bawolf/trezor-firmware/tree/extapp/typed-hash-entitlement
+@ `cdafac07e0`. It is on `extapp/run-coin-types` @ `4640bbee69`, so it **depends on
+run-coin-types** (2 commits on `bieleluk/sdk-wip` @ `4cd93ff4d8`), and adds its test class
+to that branch's `test_apps.extapp.run.py`. It touches only `core/src/apps/extapp/run.py`
+and that test file.
 
 Checks on `cdafac07e0` (2026-09-26): a non-frozen T3W1 `--apps` emulator
 (`uv run xtask build firmware --emulator --model T3W1 --apps --pyopt false --disable-animation --debug-link`),
@@ -26,7 +20,7 @@ of run-coin-types plus the 4 below), the full `run_tests.sh` 136/136 files OK.
 The repro below was rerun on the same binary with `run.py` from `4640bbee69`
 (before) and `cdafac07e0` (after), with the same results. Receipts:
 `upstream-bugs/logs/typed-hash-v2-*` in the scratch area. The Ethereum sample
-suite was not rerun on v2; it was run on the series with the same `run.py`
+suite was not rerun on this branch; it was run on the series with the same `run.py`
 change.
 
 ---
