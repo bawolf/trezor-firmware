@@ -425,11 +425,16 @@ async def run(request: ExtAppMessage) -> ExtAppResponse:
             ack = await context.call(response, ExtAppMessage)
             if ack.message_id > 0xFFFF:
                 die(DataError("Invalid message ID."))
-            io.ipc_send(
-                task_id,
-                fn_id(_SERVICE_WIRE_CONTINUE, ack.message_id),
-                ack.data,
-            )
+            try:
+                io.ipc_send(
+                    task_id,
+                    fn_id(_SERVICE_WIRE_CONTINUE, ack.message_id),
+                    ack.data,
+                )
+            except Exception:
+                # E.g. a message larger than the app's inbox: the app would
+                # otherwise wait for it forever.
+                die(DataError("Failed to send IPC message"))
 
         elif service == _SERVICE_WIRE_END:
             if __debug__:
@@ -506,11 +511,14 @@ async def run(request: ExtAppMessage) -> ExtAppResponse:
             ack = await context.call(response, ExtAppMessage)
             if ack.message_id > 0xFFFF:
                 die(DataError("Invalid message ID."))
-            io.ipc_send(
-                task_id,
-                fn_id(_SERVICE_WIRE_START, ack.message_id),
-                ack.data,
-            )
+            try:
+                io.ipc_send(
+                    task_id,
+                    fn_id(_SERVICE_WIRE_START, ack.message_id),
+                    ack.data,
+                )
+            except Exception:
+                die(DataError("Failed to send IPC message"))
 
         else:
             if __debug__:
