@@ -88,3 +88,8 @@ works.
 - **Installing on the test devices:** covered by the user's standing authorization. The Safe 7
   bootloader unlock is a separate, irreversible decision the user makes when it arrives.
 - **No contact, PR or message to Trezor** without the user's explicit approval.
+
+## App identity (user, 2026-09-25)
+
+The manifest's vendor is "Bryant Wolf" and its app id is `zcash.trezor.com`. The user confirmed
+both. Trezor may assign its own id at admission.
