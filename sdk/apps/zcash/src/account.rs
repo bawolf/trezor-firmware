@@ -3,7 +3,6 @@
 use alloc::string::String;
 
 use ironwood::receive::Network;
-use orchard::keys::SpendingKey;
 use trezor_app_sdk::{Error, Result, crypto};
 use zcash_protocol::consensus::NetworkType;
 
@@ -62,7 +61,10 @@ pub(crate) fn account_path(network: Network, account: u32) -> String {
 /// A ZIP-32 Orchard account's key material, from Core's key service. The
 /// spending key is overwritten with zeros on drop.
 pub(crate) struct AccountKeys {
-    pub(crate) spending_key: SpendingKey,
+    /// Raw bytes: Core derives them with BLAKE2b alone and cannot tell whether
+    /// they are a valid Orchard spending key, so each request checks them
+    /// behind its progress screen (~0.7 s on a Safe 5).
+    pub(crate) spending_key: [u8; 32],
     pub(crate) seed_fingerprint: [u8; 32],
     /// ZIP 315: the backup is a 12- or 18-word mnemonic or a 128-bit SLIP-39
     /// secret, which wallets should warn about.
@@ -80,12 +82,8 @@ impl Drop for AccountKeys {
 /// for an account of this app instance asks the user to allow it.
 pub(crate) fn account_keys(network: Network, account: u32) -> Result<AccountKeys> {
     let keys = crypto::get_zip32_orchard_account(network.coin_type(), account)?;
-    // Core derives with BLAKE2b alone and cannot tell whether the key is a
-    // valid Orchard spending key; `orchard` refuses the rare one that is not.
-    let spending_key = Option::from(SpendingKey::from_bytes(keys.spending_key))
-        .ok_or(Error::DataError("Zcash key derivation failed"))?;
     Ok(AccountKeys {
-        spending_key,
+        spending_key: keys.spending_key,
         seed_fingerprint: keys.seed_fingerprint,
         weak_backup: keys.weak_backup,
     })

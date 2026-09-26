@@ -58,7 +58,7 @@ pub(crate) fn get_viewing_key(msg: ZcashGetViewingKey) -> Result<ZcashViewingKey
     with_progress(
         |progress| {
             derive_full_viewing_key_from_spending_key(
-                keys.spending_key.to_bytes(),
+                &keys.spending_key,
                 &mut full_viewing_key,
                 progress,
             )

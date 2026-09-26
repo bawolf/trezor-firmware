@@ -29,7 +29,7 @@ pub(crate) fn get_address(msg: ZcashGetAddress) -> Result<ZcashAddress> {
     let receiver = with_progress(
         |progress| {
             derive_external_receiver_from_spending_key(
-                keys.spending_key.to_bytes(),
+                &keys.spending_key,
                 diversifier_index,
                 progress,
             )

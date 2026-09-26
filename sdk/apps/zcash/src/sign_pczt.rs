@@ -16,7 +16,7 @@ use ironwood::{
     Account, ErrorCode, Event, Hedged, Limits, Memo, OutputKind, Policy, Projection,
     RequestContext, Review, ReviewedOutput, Session, TransparentOutput,
 };
-use orchard::keys::{FullViewingKey, SpendAuthorizingKey};
+use orchard::keys::{FullViewingKey, SpendAuthorizingKey, SpendingKey};
 use prost::Message;
 use rand_core::{CryptoRng, Error as RngError, RngCore};
 use trezor_app_sdk::ui::{Progress, Property};
@@ -91,8 +91,10 @@ pub(crate) fn sign_pczt(msg: ZcashSignPczt) -> Result<ZcashSpendAuthSignatures> 
 
     // Up before the session starts: the bar tracks PCZT bytes verified.
     let mut progress = Progress::show(Some(tr!("progress__loading_transaction")), None, false)?;
-    let fvk = prepare(&keys, &mut progress)?;
+    let (spending_key, fvk) = prepare(&keys, &mut progress)?;
     let mut session = begin(&request, &keys, &fvk).map_err(rejected)?;
+    // Wipes the raw key bytes once the session has its hedge seed.
+    drop(keys);
 
     let mut transfer_id = [0; TRANSFER_ID_BYTES];
     crypto::random_bytes(&mut transfer_id);
@@ -158,7 +160,7 @@ pub(crate) fn sign_pczt(msg: ZcashSignPczt) -> Result<ZcashSpendAuthSignatures> 
 
     Ok(ZcashSpendAuthSignatures {
         transfer_id: transfer_id.to_vec(),
-        records: sign(&mut session, &review, keys)?,
+        records: sign(&mut session, &review, spending_key)?,
     })
 }
 
@@ -168,14 +170,23 @@ pub(crate) fn sign_pczt(msg: ZcashSignPczt) -> Result<ZcashSpendAuthSignatures> 
 // 32 KiB stack there on the device.
 
 /// Builds the persistent Pasta and orchard caches before the session's first
-/// allocation, so they sit low in the heap, then derives the account's full
-/// viewing key.
+/// allocation, so they sit low in the heap, then checks the account's spending
+/// key and derives its full viewing key.
 #[inline(never)]
-fn prepare(keys: &AccountKeys, progress: &mut Progress) -> Result<Wiped<FullViewingKey>> {
+fn prepare(
+    keys: &AccountKeys,
+    progress: &mut Progress,
+) -> Result<(Wiped<SpendingKey>, Wiped<FullViewingKey>)> {
     keeping_alive(progress, ironwood::prewarm_with_progress)?;
-    let fvk = Wiped(FullViewingKey::from(&keys.spending_key));
+    // `orchard` refuses the rare key bytes that are not a valid spending key.
+    let spending_key = keeping_alive(progress, |tick| {
+        SpendingKey::from_bytes_with_progress(keys.spending_key, tick)
+    })?;
+    let spending_key =
+        Wiped(Option::from(spending_key).ok_or(Error::DataError("Zcash key derivation failed"))?);
+    let fvk = Wiped(FullViewingKey::from(&*spending_key));
     progress.keep_alive()?;
-    Ok(fvk)
+    Ok((spending_key, fvk))
 }
 
 /// One RedPallas signature per real spend, as `pool ‖ action_index ‖
@@ -184,11 +195,11 @@ fn prepare(keys: &AccountKeys, progress: &mut Progress) -> Result<Wiped<FullView
 fn sign(
     session: &mut Session<Hedged<DeviceRng>>,
     review: &Review,
-    keys: AccountKeys,
+    spending_key: Wiped<SpendingKey>,
 ) -> Result<Vec<u8>> {
     let mut progress = Progress::show(Some(tr!("progress__signing_transaction")), None, false)?;
-    let ask = Wiped(SpendAuthorizingKey::from(&keys.spending_key));
-    drop(keys);
+    let ask = Wiped(SpendAuthorizingKey::from(&*spending_key));
+    drop(spending_key);
     let signatures = keeping_alive(&mut progress, |tick| {
         session.sign_with_progress(review.token(), &ask, tick)
     })?
@@ -227,10 +238,7 @@ fn begin(
         ),
         Limits::new(MAXIMUM_FEE, EXPIRY_WINDOW)?,
     )?;
-    let mut session = Session::with_rng(
-        policy,
-        Hedged::from_seed(DeviceRng, keys.spending_key.to_bytes()),
-    )?;
+    let mut session = Session::with_rng(policy, Hedged::from_seed(DeviceRng, &keys.spending_key))?;
     session.begin(request.pczt_length as usize, fvk, &keys.seed_fingerprint)?;
     Ok(session)
 }
