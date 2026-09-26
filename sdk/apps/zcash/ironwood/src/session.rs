@@ -992,8 +992,15 @@ impl Body {
         parsed.verify_cv_net().map_err(|_| Error::malformed())?;
         progress();
         // DEDUP LEVER 3: build the ivk cache once (first action), reuse for the
-        // rest of the bundle. Narrow borrows so the `&mut self.scope_classifier`
-        // never spans the later `self` mutations.
+        // rest of the bundle. Its two `Commit^ivk` are a step of their own, so
+        // a caller reporting progress is not silent for them and the nullifier
+        // check together.
+        if self.scope_classifier.is_none() {
+            self.scope_classifier = Some(IvkCache(fvk.scope_classifier()));
+            progress();
+        }
+        // Narrow borrows so the `&mut self.scope_classifier` never spans the
+        // later `self` mutations.
         parsed
             .spend()
             .verify_nullifier_with_classifier(
