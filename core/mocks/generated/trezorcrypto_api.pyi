@@ -15,5 +15,8 @@ def send_crypto_result(
 def deserialize_crypto_message(
     *,
     data: bytes,
+    message_id: int,
 ) -> Obj:
-    """Deserialize a crypto message from bytes and return it as a MicroPython object."""
+    """Validate a crypto request for operation `message_id` and return its
+    fields as a MicroPython object. Raises ValueError if it is malformed or
+    another operation."""

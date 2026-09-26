@@ -4,7 +4,6 @@ use core::mem::MaybeUninit;
 use heapless::Vec;
 #[cfg(feature = "app_loading")]
 use rkyv::{
-    access_unchecked,
     api::low::to_bytes_in_with_alloc,
     option::ArchivedOption,
     rancor::Failure,
@@ -15,7 +14,8 @@ use rkyv::{
 };
 #[cfg(feature = "app_loading")]
 use trezor_app_sdk::ui::{
-    Property, Slice, StrExt, StrSlice, TrezorProgressEnum, TrezorUiEnum, TrezorUiResult,
+    access_progress_request, access_ui_request, Property, Slice, StrExt, StrSlice,
+    TrezorProgressEnum, TrezorUiEnum, TrezorUiResult,
 };
 
 use crate::io::BinaryData;
@@ -1263,8 +1263,8 @@ extern "C" fn new_process_ipc_message(n_args: usize, args: *const Obj, kwargs: *
     let block = |_args: &[Obj], kwargs: &Map| {
         let obj: Obj = kwargs.get(Qstr::MP_QSTR_data)?;
 
-        let archived =
-            unsafe { access_unchecked::<Archived<TrezorUiEnum>>(unwrap!(get_buffer(obj))) };
+        let data = unwrap!(unsafe { get_buffer(obj) });
+        let archived = access_ui_request(data).ok_or(Error::ValueError(c"Invalid UI request"))?;
 
         // Helper to wrap a layout with br_code and optional br_name into the expected
         // tuple
@@ -1649,6 +1649,7 @@ extern "C" fn new_deserialize_progress_message(
 ) -> Obj {
     let block = |_args: &[Obj], kwargs: &Map| {
         let obj: Obj = kwargs.get(Qstr::MP_QSTR_data)?;
+        let message_id: u16 = kwargs.get(Qstr::MP_QSTR_message_id)?.try_into()?;
 
         let data = unwrap!(unsafe { crate::micropython::buffer::get_buffer(obj) });
 
@@ -1661,8 +1662,8 @@ extern "C" fn new_deserialize_progress_message(
             }
         }
 
-        // Deserialize the rkyv archived data directly from the static buffer
-        let archived = unsafe { rkyv::access_unchecked::<Archived<TrezorProgressEnum>>(data) };
+        let archived = access_progress_request(data, message_id)
+            .ok_or(Error::ValueError(c"Invalid progress request"))?;
 
         // Access the archived data zero-copy using safe Deref access
         let result: Obj = match archived {
@@ -2625,8 +2626,11 @@ pub static mp_module_trezorui_api: Module = obj_module! {
     /// def deserialize_progress_message(
     ///     *,
     ///     data: bytes,
+    ///     message_id: int,
     /// ) -> Obj:
-    ///     """Deserialize a progress message from bytes and return it as a MicroPython object."""
+    ///     """Validate a progress request for operation `message_id` and return its
+    ///     fields as a MicroPython object. Raises ValueError if it is malformed or
+    ///     another operation."""
     Qstr::MP_QSTR_deserialize_progress_message => obj_fn_kw!(0, new_deserialize_progress_message).as_obj(),
 
     /// class BacklightLevels:
