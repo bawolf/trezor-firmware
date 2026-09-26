@@ -7,19 +7,27 @@ consider sending it to the owner directly rather than in public.
 Reproduction status: standalone end-to-end repro on the emulator (scratch
 Tron change), before and after; Core unit tests after.
 
-**Blocker: rebuild the branch before sending.** `3e668c7caf` has three hunks
-that its series commit `b77222b9ae` does not have and its message does not
-mention: the `SignDigest`, `GetAddressMac` and `CheckAddressMac` arms build
-their keychain with `"secp256k1"` instead of the app's `curve`. For a nist256p1
-or ed25519 app, `SignDigest` would then sign with a key derived on the wrong
-curve. `b77222b9ae` cherry-picks cleanly onto `extapp/run-coin-types` (it
-adds its test class to that branch's test file), so recreate the branch that
-way and rerun the checks below; the current branch also conflicts with
-`extapp/run-coin-types` in both files.
+Branch: `extapp/typed-hash-entitlement-v2` @ `cdafac07e0`, local, not pushed.
+It is the series commit `b77222b9ae` cherry-picked onto
+`extapp/run-coin-types` @ `4640bbee69`, so it **depends on run-coin-types**
+(2 commits on `bieleluk/sdk-wip` @ `4cd93ff4d8`) and adds its test class to
+that branch's `test_apps.extapp.run.py`. `git diff 4640bbee69 cdafac07e0`
+touches only `core/src/apps/extapp/run.py` and that test file, and equals
+`b77222b9ae`'s diff except for blob hashes and hunk offsets. It does not touch
+`SignDigest`, `GetAddressMac` or `CheckAddressMac`. It replaces the pushed
+`extapp/typed-hash-entitlement` @ `3e668c7caf`, which also switched those three
+arms to `"secp256k1"`. Whether to push v2 over the old name or under the new
+one is the user's call.
 
-Branch: https://github.com/bawolf/trezor-firmware/tree/extapp/typed-hash-entitlement @ `3e668c7caf`
-(one commit on `bieleluk/sdk-wip` @ `4cd93ff4d8`; to be rebuilt on
-`extapp/run-coin-types`, see above)
+Checks on `cdafac07e0` (2026-09-26): a non-frozen T3W1 `--apps` emulator
+(`uv run xtask build firmware --emulator --model T3W1 --apps --pyopt false --disable-animation --debug-link`),
+`core/tests/run_tests.sh test_apps.extapp.run.py` 9/9 (the 5 path-schema tests
+of run-coin-types plus the 4 below), the full `run_tests.sh` 136/136 files OK.
+The repro below was rerun on the same binary with `run.py` from `4640bbee69`
+(before) and `cdafac07e0` (after), with the same results. Receipts:
+`upstream-bugs/logs/typed-hash-v2-*` in the scratch area. The Ethereum sample
+suite was not rerun on v2; it was run on the series with the same `run.py`
+change.
 
 ---
 
@@ -59,8 +67,9 @@ definitions; with them it used `_schemas_from_network(PATTERNS_ADDRESS, …)`.
 **Tests.** `TestExtappSignTypedHash` in `core/tests/test_apps.extapp.run.py`:
 `test_ethereum_app` (with and without a chain id),
 `test_ethereum_app_on_the_network_of_the_definitions` (Ethereum Classic),
-`test_app_without_ethereum_paths`, `test_app_with_another_curve`. 4/4. The
-Ethereum sample suite passes the same 81 tests with and without the fix.
+`test_app_without_ethereum_paths`, `test_app_with_another_curve`. 4/4, and
+the full Core unit suite passes. The Ethereum sample suite passes the same 81
+tests with and without the fix.
 
 ### Notes for QA
 The Ethereum sample signs as before. An app that asks for a typed-hash
