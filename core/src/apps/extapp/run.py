@@ -155,6 +155,9 @@ async def run(request: ExtAppMessage) -> ExtAppResponse:
                 io.IPC2_EVENT | io.POLL_READ, timeout_ms=1000
             )
         except loop.Timeout:
+            # A task the kernel stopped (e.g. on a fault) is silent too.
+            if not image.is_running():
+                raise DataError(f"Task stopped: {request.instance_id}")
             die(DataError("Timeout waiting for message"))
 
         service, message_id = msg.service, msg.message_id
