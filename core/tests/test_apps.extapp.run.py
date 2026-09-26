@@ -33,6 +33,19 @@ class TestExtappPathSchemas(unittest.TestCase):
         with self.assertRaises(DataError):
             _path_schemas(["m/44'/coin_type'/account'"])
 
+    def test_malformed_pattern(self):
+        for pattern in (
+            "m",
+            "m/44'",
+            "m/44'//0'",
+            "m/44'/60'/",
+            "m/44'/60'/'",
+            "m/44'/60'/x",
+            "44'/60'/0'",
+        ):
+            with self.assertRaises(DataError):
+                _path_schemas([pattern])
+
 
 if __name__ == "__main__":
     unittest.main()
