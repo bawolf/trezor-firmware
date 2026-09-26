@@ -45,14 +45,11 @@ At load time, Core checks that the app's RAM arena is large enough to hold the r
 
 ### Heap Size
 
-`heap-size` is the minimum heap space, in bytes, reserved for the app's allocator, also capped at 256 KiB. Like `stack-size`, it's counted against the app's RAM arena at load time, and loading fails if the arena can't fit `rw-size + stack-size + heap-size`.
+`heap-size` is the heap space, in bytes, reserved for the app's allocator, also capped at 256 KiB. Like `stack-size`, it's counted against the app's RAM arena at load time, and loading fails if the arena can't fit `rw-size + stack-size + heap-size`.
 
-The exact amount of heap the app receives depends on the target:
+The app receives exactly `heap-size` bytes. On real hardware the kernel reserves them (rounded up for alignment) in the RAM arena; the Unix emulator grants the same amount, while the app's stack and statics live in the host process.
 
-- On real hardware, the kernel reserves exactly `heap-size` bytes (rounded up for alignment) for the app in the RAM arena — no more, no less.
-- On the Unix emulator, the app instead receives *all* remaining arena memory, regardless of `heap-size`.
-
-`applet_main` hands that region (`app_get_heap`) to the SDK's Rust global allocator, so `heap-size` is the allocator you get on hardware. The emulator does not catch an app that outgrows it: measure the app's peak heap use and declare it with a margin.
+`applet_main` hands that region (`app_get_heap`) to the SDK's Rust global allocator. An app that outgrows it fails on both targets. Measure the app's peak heap on the emulator and declare it with a margin.
 
 ### Application privilege
 

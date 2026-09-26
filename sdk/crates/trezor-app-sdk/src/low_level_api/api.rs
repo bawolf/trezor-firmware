@@ -303,9 +303,8 @@ pub fn system_exit_fatal(message: &str, file: &str, line: i32) -> ! {
     abort();
 }
 
-/// Returns the heap the loader reserved for the running app: on hardware the
-/// manifest's `heap-size` (rounded up for alignment) in the app's RAM arena, on
-/// the emulator the rest of the arena.
+/// Returns the heap the loader reserved for the running app: the manifest's
+/// `heap-size` (on hardware rounded up for alignment) in the app's RAM arena.
 pub(crate) fn app_get_heap() -> Result<(*mut u8, usize), ApiError> {
     let mut heap_ptr: *mut c_void = core::ptr::null_mut();
     let mut heap_size: usize = 0;
