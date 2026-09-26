@@ -374,6 +374,8 @@ async def run(request: ExtAppMessage) -> ExtAppResponse:
                 message_id=message_id, data=msg.data, finished=False
             )
             ack = await context.call(response, ExtAppMessage)
+            if ack.instance_id != request.instance_id:
+                die(DataError(f"Invalid instance ID: {ack.instance_id}"))
             if ack.message_id > 0xFFFF:
                 die(DataError("Invalid message ID."))
             try:
@@ -463,6 +465,8 @@ async def run(request: ExtAppMessage) -> ExtAppResponse:
                 message=err_message,
             )
             ack = await context.call(response, ExtAppMessage)
+            if ack.instance_id != request.instance_id:
+                die(DataError(f"Invalid instance ID: {ack.instance_id}"))
             if ack.message_id > 0xFFFF:
                 die(DataError("Invalid message ID."))
             try:
