@@ -85,7 +85,10 @@ ts_t app_loader_prepare_applet(const app_header_t* header, void* code,
 
   applet_init(applet, &privileges, app_loader_applet_unload);
 
-  applet_set_heap(applet, data, data_size);
+  // An emulator app's stack and statics live in the host process; grant only
+  // the declared heap, as the device does.
+  TSH_CHECK(header->data_size <= data_size, TS_ENOMEM);
+  applet_set_heap(applet, data, header->data_size);
 
   // Isolate the applet file from other users before loading it.
   rc = asprintf(&directory, "%s/trezor_ext_app.XXXXXX", profile_dir());
