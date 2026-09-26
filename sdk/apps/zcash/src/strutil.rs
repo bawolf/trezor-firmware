@@ -40,9 +40,29 @@ macro_rules! uformat {
     };
 }
 
+pub fn hex_encode(bytes: &[u8]) -> Result<String, ()> {
+    let mut s = StringWriter::new();
+    for byte in bytes {
+        ufmt::uwrite!(&mut s, "{:02x}", *byte).map_err(|_| ())?;
+    }
+    Ok(s.finalize())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_hex_encode_empty() {
+        let result = hex_encode(&[]).unwrap();
+        assert_eq!(result, "");
+    }
+
+    #[test]
+    fn test_hex_encode_multiple_bytes() {
+        let result = hex_encode(&[0x00, 0xFF, 0xAB, 0xCD]).unwrap();
+        assert_eq!(result, "00ffabcd");
+    }
 
     #[test]
     fn test_uformat() {

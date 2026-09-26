@@ -4,6 +4,8 @@ pub mod common {
     include!(concat!(env!("OUT_DIR"), "/hw.trezor.common.rs"));
 }
 
+// `Cancel` is only matched by its message id.
+#[allow(dead_code)]
 pub mod zcash {
     include!(concat!(env!("OUT_DIR"), "/hw.trezor.zcash.rs"));
 }

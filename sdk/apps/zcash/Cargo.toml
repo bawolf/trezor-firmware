@@ -9,8 +9,12 @@ edition = "2024"
 id = "zcash.trezor.com"
 name = "Zcash"
 vendor = "Bryant Wolf"
-stack-size = 16384
-heap-size = 49152
+# Signing keeps ~30 KiB of Pallas and Orchard caches and needs a deep stack to
+# verify an action.
+stack-size = 32768
+heap-size = 69632
+# The largest message the app receives is a PcztAck with a 1 KiB chunk.
+ipc-buffer-size = 2048
 app-ring = 0
 curves = ["zip32-orchard"]
 paths = [
@@ -22,6 +26,7 @@ paths = [
 trezor-app-sdk = { path = "../../crates/trezor-app-sdk" }
 orchard = { version = "=0.15.3", default-features = false }
 prost = { version = "0.14.1", default-features = false, features = ["derive"] }
+rand_core = { version = "0.6.4", default-features = false }
 ufmt = { version = "0.2.0", default-features = false }
 zcash-signer = { path = "signer" }
 zcash_address = { version = "0.13.0", default-features = false }

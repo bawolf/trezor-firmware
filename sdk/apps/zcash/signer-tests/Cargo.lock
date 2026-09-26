@@ -1315,6 +1315,7 @@ dependencies = [
  "pczt",
  "rand_chacha",
  "rand_core",
+ "sapling-crypto",
  "serde",
  "serde_json",
  "zcash-signer",
@@ -1322,6 +1323,7 @@ dependencies = [
  "zcash_note_encryption",
  "zcash_primitives",
  "zcash_protocol",
+ "zcash_transparent",
  "zip32",
 ]
 

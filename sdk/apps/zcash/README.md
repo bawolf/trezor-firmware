@@ -1,7 +1,8 @@
 # Zcash
 
-Shielded Zcash: unified addresses and viewing keys. The keys come from
-Core's ZIP-32 Orchard key service.
+Shielded Zcash: unified addresses, viewing keys and signing of PCZTs that
+spend from the Ironwood pool. The keys come from Core's ZIP-32 Orchard key
+service.
 
 ```sh
 xtask modular build -p zcash -m t3w1 --lang en -e
