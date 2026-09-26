@@ -12,7 +12,7 @@ from trezor.ui import ProgressLayout
 from trezor.ui.layouts.common import interact
 from trezor.ui.layouts.progress import progress
 from trezor.wire import context
-from trezor.wire.errors import DataError
+from trezor.wire.errors import ActionCancelled, DataError
 
 from apps.common import paths
 from apps.common.keychain import Keychain, get_keychain
@@ -44,6 +44,12 @@ _SERVICE_CRYPTO_SIGN_TYPED_HASH = const(3)
 _SERVICE_CRYPTO_GET_ADDRESS_MAC = const(4)
 _SERVICE_CRYPTO_CHECK_ADDRESS_MAC = const(5)
 _SERVICE_CRYPTO_VERIFY_NONCE_CACHE = const(6)
+_SERVICE_CRYPTO_GET_ZIP32_ORCHARD_ACCOUNT = const(7)
+
+# Tags of `[tag, ...]` crypto results, read by `send_crypto_result`.
+_RESULT_PUBLIC_KEY = const(0)
+_RESULT_ZIP32_ORCHARD_ACCOUNT = const(1)
+_RESULT_CANCELLED = const(2)
 
 
 def fn_id(service: int, message_id: int) -> int:
@@ -229,7 +235,7 @@ async def run(request: ExtAppMessage) -> ExtAppResponse:
                                 f"Getting public key bytes for path: {address_n} compressed={compressed}",
                             )
                         result = [
-                            0,
+                            _RESULT_PUBLIC_KEY,
                             await _get_public_key(
                                 address_n, compressed, keychain, curve
                             ),
@@ -355,6 +361,38 @@ async def run(request: ExtAppMessage) -> ExtAppResponse:
                     except Exception:
                         if __debug__:
                             log.error(__name__, "Failed to verify nonce cache")
+                        result = False
+
+                elif message_id == _SERVICE_CRYPTO_GET_ZIP32_ORCHARD_ACCOUNT:
+                    assert len(obj) == 2
+                    coin_type: int = obj[0]
+                    account: int = obj[1]
+                    try:
+                        from . import zip32_orchard
+
+                        sk, fingerprint, weak_backup = await zip32_orchard.get_account(
+                            curve,
+                            schemas,
+                            coin_type,
+                            account,
+                            image.name(),
+                            zip32_orchard.app_instance(
+                                request.instance_id, image.fingerprint()
+                            ),
+                        )
+                        result = [
+                            _RESULT_ZIP32_ORCHARD_ACCOUNT,
+                            sk,
+                            fingerprint,
+                            weak_backup,
+                        ]
+                    except ActionCancelled:
+                        result = [_RESULT_CANCELLED]
+                    except Exception as e:
+                        if __debug__:
+                            log.error(
+                                __name__, f"Failed to get ZIP-32 Orchard account: {e}"
+                            )
                         result = False
 
                 else:
