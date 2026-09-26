@@ -430,6 +430,11 @@ pub fn end_progress() -> Result<()> {
     get_ui_or_die().end_progress().into_app_result()
 }
 
+/// Forgets a progress screen that Core has already ended.
+pub(crate) fn forget_progress() {
+    PROGRESS_SHOWN.store(false, Ordering::Relaxed);
+}
+
 /// A progress screen for the duration of a long computation, ended when
 /// dropped.
 ///
