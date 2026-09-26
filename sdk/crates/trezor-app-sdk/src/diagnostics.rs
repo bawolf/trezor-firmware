@@ -34,15 +34,27 @@ pub struct Diagnostics {
 /// Returns the counters and starts new ones: the heap peak from the current
 /// use, the silence and the message count from zero.
 pub fn take() -> Diagnostics {
+    let counters = snapshot();
     let heap = &crate::app_runtime::HEAP;
-    let heap_used = heap.heap.used();
+    heap.peak.store(counters.heap_used as usize, Relaxed);
+    MAX_SILENCE_MS.store(0, Relaxed);
+    MAX_SILENCE_SERVICE.store(0, Relaxed);
+    IPC_SENT.store(0, Relaxed);
+    counters
+}
+
+/// Returns the counters without starting new ones. An app can send this
+/// with each message of a long request, so its host keeps the latest values
+/// even if Core stops the app before the request ends.
+pub fn snapshot() -> Diagnostics {
+    let heap = &crate::app_runtime::HEAP;
     Diagnostics {
         heap_size: heap.size.load(Relaxed) as u32,
-        heap_used: heap_used as u32,
-        heap_peak: heap.peak.swap(heap_used, Relaxed) as u32,
-        max_ipc_silence_ms: MAX_SILENCE_MS.swap(0, Relaxed),
-        max_ipc_silence_service: MAX_SILENCE_SERVICE.swap(0, Relaxed),
-        ipc_sent: IPC_SENT.swap(0, Relaxed),
+        heap_used: heap.heap.used() as u32,
+        heap_peak: heap.peak.load(Relaxed) as u32,
+        max_ipc_silence_ms: MAX_SILENCE_MS.load(Relaxed),
+        max_ipc_silence_service: MAX_SILENCE_SERVICE.load(Relaxed),
+        ipc_sent: IPC_SENT.load(Relaxed),
     }
 }
 

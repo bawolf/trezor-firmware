@@ -260,6 +260,7 @@ fn request_chunk(
         transfer_id: transfer_id.to_vec(),
         offset,
         length,
+        diagnostics: diagnostics(),
     };
     // Not `wire_request`, which decodes whatever the host answers as the
     // expected response: the id tells a cancel from a chunk.
@@ -282,6 +283,21 @@ fn request_chunk(
         return Err(invalid());
     }
     Ok(data)
+}
+
+/// The app's counters so far, sent with every chunk request by a debug build:
+/// if Core stops the app mid-request (a silence over 1 s, or a fault), the
+/// host still has the latest values.
+#[cfg(feature = "debug")]
+fn diagnostics() -> Option<crate::proto::zcash::ZcashDiagnostics> {
+    Some(crate::diagnostics_message(
+        trezor_app_sdk::diagnostics::snapshot(),
+    ))
+}
+
+#[cfg(not(feature = "debug"))]
+fn diagnostics() -> Option<crate::proto::zcash::ZcashDiagnostics> {
+    None
 }
 
 /// The wire failure of a session error: a malformed, oversized or out-of-range

@@ -158,6 +158,7 @@ def sign_pczt(
     network: zcash_messages.ZcashNetwork,
     account: int,
     host_reference_height: int,
+    on_diagnostics: t.Callable[[zcash_messages.ZcashDiagnostics], None] | None = None,
 ) -> list[SpendAuthSignature]:
     """Upload and review a PCZT; return the device's spend authorization signatures.
 
@@ -168,6 +169,9 @@ def sign_pczt(
     `SpendAuthSignature` per real Ironwood spend in ascending action order; the
     caller applies them to its own copy of `pczt` (see `SpendAuthSignature`),
     which is also where each signature is verified against the transaction.
+
+    A debug build of the app sends its resource counters with every chunk
+    request; `on_diagnostics` receives them.
     """
     if network not in (
         zcash_messages.ZcashNetwork.Mainnet,
@@ -196,7 +200,9 @@ def sign_pczt(
         ),
         zcash_messages.ZcashPcztRequest,
     )
-    transfer_id, signatures = _upload(session, instance_id, request, pczt)
+    transfer_id, signatures = _upload(
+        session, instance_id, request, pczt, on_diagnostics
+    )
     return _parse_records(transfer_id, signatures)
 
 
@@ -276,6 +282,7 @@ def _upload(
     instance_id: int,
     request: zcash_messages.ZcashPcztRequest,
     pczt: bytes,
+    on_diagnostics: t.Callable[[zcash_messages.ZcashDiagnostics], None] | None,
 ) -> tuple[bytes, zcash_messages.ZcashSpendAuthSignatures]:
     """Serve device-pulled chunks until the entire PCZT has been uploaded.
 
@@ -291,6 +298,8 @@ def _upload(
     # same message; they earn their keep from the second chunk onwards.
     offset = 0
     while True:
+        if on_diagnostics is not None and request.diagnostics is not None:
+            on_diagnostics(request.diagnostics)
         if request.transfer_id != transfer_id:
             _cancel_and_fail(session, instance_id, "Changed transfer ID")
         if request.offset != offset:

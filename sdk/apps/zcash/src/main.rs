@@ -85,15 +85,21 @@ wire_handler!(
 /// builds only.
 #[cfg(feature = "debug")]
 fn get_diagnostics(_: proto::zcash::ZcashGetDiagnostics) -> Result<proto::zcash::ZcashDiagnostics> {
-    let counters = trezor_app_sdk::diagnostics::take();
-    Ok(proto::zcash::ZcashDiagnostics {
+    Ok(diagnostics_message(trezor_app_sdk::diagnostics::take()))
+}
+
+#[cfg(feature = "debug")]
+fn diagnostics_message(
+    counters: trezor_app_sdk::diagnostics::Diagnostics,
+) -> proto::zcash::ZcashDiagnostics {
+    proto::zcash::ZcashDiagnostics {
         heap_size: counters.heap_size,
         heap_used: counters.heap_used,
         heap_peak: counters.heap_peak,
         max_ipc_silence_ms: counters.max_ipc_silence_ms,
         max_ipc_silence_service: counters.max_ipc_silence_service.into(),
         ipc_sent: counters.ipc_sent,
-    })
+    }
 }
 
 #[unsafe(no_mangle)]

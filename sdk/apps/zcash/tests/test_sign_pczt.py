@@ -114,7 +114,9 @@ def with_user_address(pczt: bytes, old: str, new: str) -> bytes:
     return pczt.replace(field(old), field(new))
 
 
-def _sign(session: Session, instance_id: int, parameters: dict, flow) -> list:
+def _sign(
+    session: Session, instance_id: int, parameters: dict, flow, on_diagnostics=None
+) -> list:
     with session.test_ctx as client:
         client.set_input_flow(flow)
         return zcash_ext.sign_pczt(
@@ -124,6 +126,7 @@ def _sign(session: Session, instance_id: int, parameters: dict, flow) -> list:
             NETWORKS[parameters["network"]],
             parameters["account"],
             parameters["height"],
+            on_diagnostics,
         )
 
 
@@ -552,6 +555,32 @@ def test_diagnostics_measure_a_sign(session: Session, instance_id: int) -> None:
     # Since the previous request the app sent only its response.
     assert again.ipc_sent == 1
     assert again.heap_peak < counters.heap_peak
+
+
+def test_chunk_requests_carry_diagnostics(session: Session, instance_id: int) -> None:
+    """A debug build sends its counters so far with every chunk request, so a
+    host keeps them even if Core stops the app mid-request; they do not start
+    new counters."""
+    parameters, result = vector("2_actions")
+    pczt_length = len(bytes.fromhex(parameters["pczt"]))
+    seen = []
+    _sign(
+        session,
+        instance_id,
+        parameters,
+        _accept_flow(session, len(result["payments"])),
+        seen.append,
+    )
+
+    assert len(seen) == -(-pczt_length // zcash_ext.CHUNK_BYTES)
+    for earlier, later in zip(seen, seen[1:]):
+        assert earlier.ipc_sent < later.ipc_sent
+        assert earlier.heap_peak <= later.heap_peak
+        assert earlier.max_ipc_silence_ms <= later.max_ipc_silence_ms < 1000
+    assert 0 < seen[-1].heap_used <= seen[-1].heap_peak <= seen[-1].heap_size
+    counters = zcash_ext.get_diagnostics(session, instance_id)
+    assert counters.ipc_sent > seen[-1].ipc_sent
+    assert counters.heap_peak >= seen[-1].heap_peak
 
 
 # The app's own transport checks, which the series had in Core.
