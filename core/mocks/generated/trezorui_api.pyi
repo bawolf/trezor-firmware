@@ -889,7 +889,7 @@ def process_ipc_message(
 def send_ui_result(
     *,
     result: UiResult | int | str | None,
-    ipc_cb: Callable[[bytes], None] | None = None,
+    ipc_cb: Callable[[bytes], None],
 ) -> None:
     """Serialize a UI result into bytes and send it via the ipc_cb callback.."""
 

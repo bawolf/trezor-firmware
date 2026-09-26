@@ -166,17 +166,20 @@ async def run(request: ExtAppMessage) -> ExtAppResponse:
                 main_layout_obj, br_code, br_name = trezorui_api.process_ipc_message(
                     data=bytes(msg.data)
                 )
-            except ValueError as e:
+            except Exception as e:
                 if __debug__:
-                    log.error(__name__, f"Invalid UI request: {e}")
-                die(DataError("Invalid UI request"))
+                    log.error(__name__, f"Failed to process UI request: {e}")
+                die(DataError("Failed to process UI request"))
 
             result = await interact(
                 main_layout_obj, br_name, br_code, raise_on_cancel=None
             )
             log.debug(__name__, f"UI interaction result: {result}")
             # Serialize and send the result back
-            trezorui_api.send_ui_result(result=result, ipc_cb=ui_resp_cb)
+            try:
+                trezorui_api.send_ui_result(result=result, ipc_cb=ui_resp_cb)
+            except Exception:
+                die(DataError("Failed to send UI result"))
 
         elif service == _SERVICE_CRYPTO:
             try:
@@ -401,7 +404,7 @@ async def run(request: ExtAppMessage) -> ExtAppResponse:
                 obj = trezorui_api.deserialize_progress_message(
                     data=bytes(msg.data), message_id=message_id
                 )
-            except ValueError as e:
+            except Exception as e:
                 if __debug__:
                     log.error(__name__, f"Invalid progress request: {e}")
                 die(DataError("Invalid progress request"))
@@ -427,7 +430,8 @@ async def run(request: ExtAppMessage) -> ExtAppResponse:
                 assert len(obj) == 2
                 description: str | None = obj[0]
                 value: int = obj[1]
-                progress_obj.report(value, description=description)
+                # The value comes from the app; the bar ends at 1000.
+                progress_obj.report(min(value, 1000), description=description)
             elif message_id == _SERVICE_PROGRESS_STOP:
                 if progress_obj is None:
                     die(DataError("Progress not initialized"))
