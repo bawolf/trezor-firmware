@@ -34,16 +34,16 @@ extern "C" fn new_deserialize_crypto_message(
         let obj: Obj = kwargs.get(Qstr::MP_QSTR_data)?;
         let message_id: u16 = kwargs.get(Qstr::MP_QSTR_message_id)?.try_into()?;
 
-        let data = unwrap!(unsafe { crate::micropython::buffer::get_buffer(obj) });
+        let data = unsafe { crate::micropython::buffer::get_buffer(obj) }?;
 
-        fn obj_from_dp_slice(slice: &Archived<Slice<u32>>) -> Obj {
+        fn obj_from_dp_slice(slice: &Archived<Slice<u32>>) -> Result<Obj, Error> {
             let slice = slice.as_ref();
-            let mut list = unwrap!(List::with_capacity(slice.len()));
+            let mut list = List::with_capacity(slice.len())?;
 
             for &item in slice {
-                unwrap!(list.append(unwrap!(Obj::try_from(item.to_native()))));
+                list.append(Obj::try_from(item.to_native())?)?;
             }
-            unwrap!(List::alloc(unsafe { list.as_slice() })).into()
+            Ok(List::alloc(unsafe { list.as_slice() })?.into())
         }
 
         // The request comes from an untrusted app: validate it before reading.
@@ -56,16 +56,16 @@ extern "C" fn new_deserialize_crypto_message(
                 address_n,
                 xpub_magic,
             } => {
-                let dp_obj = obj_from_dp_slice(address_n);
-                let magic_obj = unwrap!(Obj::try_from(xpub_magic.to_native()));
+                let dp_obj = obj_from_dp_slice(address_n)?;
+                let magic_obj = Obj::try_from(xpub_magic.to_native())?;
                 (dp_obj, magic_obj).try_into()?
             }
             Archived::<TrezorCryptoEnum>::GetPublicKey {
                 address_n,
                 compressed,
             } => {
-                let dp_obj = obj_from_dp_slice(address_n);
-                let compressed_obj = unwrap!(Obj::try_from(*compressed));
+                let dp_obj = obj_from_dp_slice(address_n)?;
+                let compressed_obj = Obj::try_from(*compressed)?;
                 (dp_obj, compressed_obj).try_into()?
             }
             Archived::<TrezorCryptoEnum>::SignDigest {
@@ -75,7 +75,7 @@ extern "C" fn new_deserialize_crypto_message(
             } => {
                 let digest_obj = Obj::try_from(digest.as_slice())?;
                 (
-                    obj_from_dp_slice(address_n),
+                    obj_from_dp_slice(address_n)?,
                     digest_obj,
                     Obj::try_from(*compressed)?,
                 )
@@ -103,7 +103,7 @@ extern "C" fn new_deserialize_crypto_message(
                     None => Obj::const_none(),
                 };
                 (
-                    obj_from_dp_slice(address_n),
+                    obj_from_dp_slice(address_n)?,
                     hash_obj,
                     network_obj,
                     token_obj,
@@ -113,7 +113,7 @@ extern "C" fn new_deserialize_crypto_message(
                     .try_into()?
             }
             Archived::<TrezorCryptoEnum>::GetAddressMac { address_n, address } => (
-                obj_from_dp_slice(address_n),
+                obj_from_dp_slice(address_n)?,
                 Obj::try_from(address.as_ref())?,
             )
                 .try_into()?,
@@ -125,7 +125,7 @@ extern "C" fn new_deserialize_crypto_message(
                 mac,
                 address,
             } => (
-                obj_from_dp_slice(address_n),
+                obj_from_dp_slice(address_n)?,
                 Obj::try_from(mac.as_ref())?,
                 Obj::try_from(address.as_ref())?,
             )
@@ -151,16 +151,7 @@ extern "C" fn new_send_crypto_result(n_args: usize, args: *const Obj, kwargs: *m
     let block = |_args: &[Obj], kwargs: &Map| {
         let obj: Obj = kwargs.get(Qstr::MP_QSTR_result)?;
 
-        let ipc_callback: Option<Obj> = kwargs
-            .get(Qstr::MP_QSTR_ipc_cb)
-            .unwrap_or_else(|_| Obj::const_none())
-            .try_into_option()?;
-
-        let ipc_cb = unwrap!(ipc_callback.map(|cb| {
-            move |bytes: &[u8]| {
-                unwrap!(cb.call_with_n_args(&[unwrap!(bytes.try_into())]));
-            }
-        }));
+        let ipc_cb: Obj = kwargs.get(Qstr::MP_QSTR_ipc_cb)?;
 
         // Map MicroPython CryptoResult object to Rust enum for serialization
         let msg = if obj.is_str() {
@@ -215,8 +206,9 @@ extern "C" fn new_send_crypto_result(n_args: usize, args: *const Obj, kwargs: *m
             Buffer::from(&mut *out),
             SubAllocator::new(&mut arena),
         ));
-        //Send the response back via the ipc_cb callback
-        ipc_cb(bytes.as_ref());
+        // Send the response back via the ipc_cb callback. Raises if the app is
+        // gone.
+        ipc_cb.call_with_n_args(&[Obj::try_from(bytes.as_ref())?])?;
 
         Ok(Obj::const_none())
     };
