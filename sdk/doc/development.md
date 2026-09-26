@@ -57,7 +57,7 @@ The exact amount of heap the app receives depends on the target:
 
 ### IPC buffer size
 
-`ipc-buffer-size` is the size, in bytes, of the inbox in which the app receives Core's messages: host requests forwarded by Core and the replies of Core's services. It must hold the largest message the app receives plus a 12-byte kernel header (16 B on the 64-bit emulator). It is a power of two from 256 B to 64 KiB (the SDK allocates it as a `usize` array), and 1 KiB if omitted or 0, which holds only the replies of Core's services. The SDK allocates it statically, so it counts against the app's RAM arena as part of the read-write segment.
+`ipc-buffer-size` is the size, in bytes, of the inbox in which the app receives Core's messages: host requests forwarded by Core and the replies of Core's services. It must hold the largest message the app receives plus a 12-byte kernel header (16 B on the 64-bit emulator). It is a power of two from 256 B to 64 KiB (the SDK allocates it as a `usize` array), and 1 KiB if omitted or 0, which holds only the replies of Core's services. A message that does not fit fails the host's request, and Core stops the app. The SDK allocates it statically, so it counts against the app's RAM arena as part of the read-write segment.
 
 ### Application privilege
 
