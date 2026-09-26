@@ -93,3 +93,18 @@ works.
 
 The manifest's vendor is "Bryant Wolf" and its app id is `zcash.trezor.com`. The user confirmed
 both. Trezor may assign its own id at admission.
+
+## Hardware log
+
+- **2026-09-25, Safe 7, firmware `d485d458c5`.** The app loaded in 6.9 s, with the kernel
+  ML-DSA root-packet check. After the user allowed the account, Core stopped with "unwrap
+  failed". The cause was upstream `run.py` calling a debug-only logger in an optimised build.
+  Fixed in `0245f15fd0` (see `EXTAPP_P4_PANIC.md`).
+- **2026-09-26, Safe 7, firmware `0245f15fd0`, diagnostic app.**
+  - **Load:** OK (6.9 s cold, 0.3 s resident).
+  - **Receive:** testnet account 0 address #3 **MATCH**. Heap peak 40,076 of 73,744 B;
+    longest IPC silence 285 ms.
+  - **Viewing key:** **MATCH**. Heap peak 38,228 B; longest silence 259 ms.
+  - **Signing:** both the 2- and 32-action signs failed with "Timeout waiting for message"
+    about 3 s after the weak-backup warning. Signing start runs over Core's 1 s IPC watchdog.
+    The fix is in progress (`EXTAPP_P4_WATCHDOG.md`).
