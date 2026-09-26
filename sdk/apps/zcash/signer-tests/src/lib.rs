@@ -42,7 +42,8 @@ pub type Outcome = Result<()>;
 
 /// The host's reference height; NU6.3 is active on both networks.
 pub const HEIGHT: u32 = 10_000_000;
-/// The fee and expiry limits of [`Wallet::policy`].
+/// The fee and expiry limits of [`Wallet::policy`]: the app's, in
+/// `src/sign_pczt.rs`, so that the fixtures are checked under them.
 pub const MAX_FEE: u64 = 1_000_000;
 pub const EXPIRY_WINDOW: u32 = 100;
 

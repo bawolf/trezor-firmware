@@ -1467,6 +1467,7 @@ dependencies = [
  "orchard",
  "prost",
  "prost-build",
+ "rand_core",
  "serde",
  "serde_json",
  "trezor-app-sdk",

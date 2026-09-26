@@ -12,15 +12,23 @@ input flow details.
 from __future__ import annotations
 
 from collections.abc import Callable
+from decimal import Decimal
 
 from trezorlib import messages as trezor_messages
 from trezorlib.debuglink import TrezorTestContext as Client
 from trezorlib.testing import translations as TR
 from trezorlib.testing.common import BRGeneratorType, get_text_possible_pagination
 
+from .common import parse_network
 from .zcash_ext import Network
 
 B = trezor_messages.ButtonRequestType
+
+
+def format_amount(zatoshis: int, network: Network) -> str:
+    """An amount as the device shows it: "1,234.5 ZEC", or TAZ on testnet."""
+    unit = "ZEC" if network == Network.Mainnet else "TAZ"
+    return f"{Decimal(zatoshis).scaleb(-8).normalize():,f} {unit}"
 
 
 def address_pieces(screen: str, address: str) -> list[str]:
@@ -138,3 +146,98 @@ class InputFlowExportViewingKey(InputFlowBase):
             self.fingerprint_screen = self.text_content()
             self.debug.press_yes()
         yield from self.confirm_keys(self.network, self.account, first_use=True)
+
+
+class InputFlowSignPczt(InputFlowBase):
+    """Confirms a PCZT signing, checking every screen against the vector's
+    `result`: the transparent outputs first, in order, behind one warning;
+    then the payments, in the order of their shuffled actions, each followed
+    by its memo; then the totals.
+
+    A vector with an `error` lists no payments, so any payment screen fails
+    the flow. `cancel` rejects the second output ("output") or the totals
+    ("total").
+    """
+
+    def __init__(
+        self,
+        client: Client,
+        parameters: dict,
+        result: dict,
+        first_use: bool = True,
+        cancel: str | None = None,
+    ):
+        super().__init__(client)
+        self.network = parse_network(parameters["network"])
+        self.account = parameters["account"]
+        self.result = result
+        self.first_use = first_use
+        self.cancel = cancel
+        self.payments = result.get("payments", [])
+        self.unshown = list(self.payments)
+        # The payment addresses, in the order the device showed them.
+        self.addresses: list[str] = []
+
+    def input_flow(self) -> BRGeneratorType:
+        yield from self.confirm_keys(self.network, self.account, self.first_use)
+
+        transparent = self.result.get("transparent_outputs", [])
+        if transparent:
+            br = yield
+            assert (br.code, br.name) == (B.Warning, "zcash_transparent_payment")
+            self.debug.press_yes()
+
+        outputs = transparent + self.payments
+        for number in range(len(outputs)):
+            br = yield
+            assert (br.code, br.name) == (B.ConfirmOutput, "confirm_output")
+            if self.cancel == "output" and number == 1:
+                self.debug.press_no()
+                return
+            screen = get_text_possible_pagination(self.debug, br)
+            if number < len(transparent):
+                output = transparent[number]
+            else:
+                output = self._shown_payment(screen)
+                self.addresses.append(output["address"])
+            assert is_shown_whole(screen, output["address"]), screen
+            assert is_chunked(screen, output["address"]), screen
+            self.debug.press_yes()
+
+            br = yield
+            assert (br.code, br.name) == (B.ConfirmOutput, "confirm_output")
+            amount = format_amount(output["value"], self.network)
+            assert amount in self.text_content()
+            self.debug.press_yes()
+
+            if number >= len(transparent) and "memo" in self.result:
+                yield from self.confirm_memo()
+
+        br = yield
+        assert (br.code, br.name) == (B.SignTx, "confirm_total")
+        text = self.text_content()
+        total = sum(output["value"] for output in outputs) + self.result["fee"]
+        assert format_amount(total, self.network) in text
+        assert format_amount(self.result["fee"], self.network) in text
+        if self.cancel == "total":
+            self.debug.press_no()
+        else:
+            self.debug.press_yes()
+
+    def _shown_payment(self, screen: str) -> dict:
+        """The payment, not shown before, whose address the screen shows."""
+        for payment in self.unshown:
+            if is_shown_whole(screen, payment["address"]):
+                self.unshown.remove(payment)
+                return payment
+        raise AssertionError(f"Not a payment of the vector: {screen}")
+
+    def confirm_memo(self) -> BRGeneratorType:
+        """The memo shown as text, or as the hex of its hash."""
+        br = yield
+        assert (br.code, br.name) == (B.ConfirmOutput, "confirm_memo")
+        memo = self.result["memo"]
+        expected = memo["text"] if "text" in memo else memo["digest"]
+        screen = get_text_possible_pagination(self.debug, br)
+        assert "".join(expected.split()) in "".join(screen.split()), screen
+        self.debug.press_yes()

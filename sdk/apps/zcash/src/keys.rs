@@ -1,4 +1,4 @@
-use orchard::keys::{FullViewingKey, SpendingKey};
+use orchard::keys::{FullViewingKey, SpendAuthorizingKey, SpendingKey};
 use trezor_app_sdk::crypto::{self, Zip32OrchardAccount};
 use trezor_app_sdk::{Error, Result};
 use zcash_signer::Network;
@@ -42,6 +42,8 @@ unsafe impl FlatKey for SpendingKey {}
 // SAFETY: two Pallas field elements and a RedPallas verification key (a point
 // and its encoding).
 unsafe impl FlatKey for FullViewingKey {}
+// SAFETY: a RedPallas signing key: a scalar and its verification key.
+unsafe impl FlatKey for SpendAuthorizingKey {}
 
 /// An orchard key, zeroed when dropped. Orchard's keys do not implement
 /// `Zeroize`.

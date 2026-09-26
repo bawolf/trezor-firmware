@@ -24,6 +24,8 @@ zip32 = { version = "=0.2.1", default-features = false }
 
 [dev-dependencies]
 jubjub = { version = "0.10.0", default-features = false }
+sapling = { package = "sapling-crypto", version = "=0.7.0", default-features = false }
+transparent = { package = "zcash_transparent", version = "=0.10.0", default-features = false }
 zcash_address = { version = "=0.13.0", default-features = false }
 
 # The tests are their own workspace: the Zcash crates need a pre-release

@@ -124,3 +124,50 @@ def export_viewing_key(
         ),
         expect=zcash_messages.ViewingKey,
     )
+
+
+def sign_pczt(
+    session: Session,
+    instance_id: int,
+    pczt: bytes,
+    network: Network,
+    account: int,
+    host_reference_height: int,
+) -> list[zcash_messages.SpendAuthSignature]:
+    """Send the PCZT in the chunks the device requests, and return its spend
+    authorization signatures, one per real spend in ascending action order."""
+    request = call_ext(
+        session,
+        instance_id,
+        msg=zcash_messages.SignPczt(
+            address_n=address_n(network, account),
+            pczt_length=len(pczt),
+            host_reference_height=host_reference_height,
+        ),
+        expect=zcash_messages.PcztRequest,
+        finished=False,
+    )
+    transfer_id = request.transfer_id
+    while True:
+        end = request.offset + request.length
+        ack = zcash_messages.PcztAck(
+            transfer_id=transfer_id,
+            offset=request.offset,
+            data=pczt[request.offset : end],
+        )
+        if end == len(pczt):
+            break
+        request = call_ext(
+            session,
+            instance_id,
+            msg=ack,
+            expect=zcash_messages.PcztRequest,
+            finished=False,
+        )
+        assert (request.transfer_id, request.offset) == (transfer_id, end)
+
+    response = call_ext(
+        session, instance_id, msg=ack, expect=zcash_messages.SpendAuthSignatures
+    )
+    assert response.transfer_id == transfer_id
+    return response.signatures
