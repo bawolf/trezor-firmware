@@ -100,5 +100,27 @@ pub use wire::{
     wire_request_raw, wire_respond_raw,
 };
 
+/// Size, in bytes, of the inbox in which Core's messages to the app arrive; it
+/// must hold the largest one. xtask passes the app manifest's
+/// `ipc-buffer-size`; a plain `cargo build` without xtask gets xtask's default,
+/// 1 KiB.
 #[cfg(feature = "app")]
-crate::static_service!(CORE_SERVICE, CoreApp, service::CoreIpcService, 16384);
+const IPC_BUFFER_SIZE: usize = match option_env!("TREZOR_APP_IPC_BUFFER_SIZE") {
+    Some(size) => match usize::from_str_radix(size, 10) {
+        Ok(size) => size,
+        Err(_) => panic!("TREZOR_APP_IPC_BUFFER_SIZE must be a number of bytes"),
+    },
+    None => 1024,
+};
+
+// `static_service!` allocates the inbox in `usize` words.
+#[cfg(feature = "app")]
+const _: () = assert!(IPC_BUFFER_SIZE % core::mem::size_of::<usize>() == 0);
+
+#[cfg(feature = "app")]
+crate::static_service!(
+    CORE_SERVICE,
+    CoreApp,
+    service::CoreIpcService,
+    IPC_BUFFER_SIZE
+);
