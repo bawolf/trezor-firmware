@@ -65,17 +65,17 @@ static uint32_t rng_get_u32(void) {
 }
 
 void rng_fill_buffer(void* buffer, size_t buffer_size) {
-  uint32_t* dst = (uint32_t*)buffer;
+  // `buffer` may be unaligned (an app can pass any byte slice), so it is
+  // written bytewise.
+  uint8_t* dst = (uint8_t*)buffer;
   size_t remaining = buffer_size;
 
-  while (remaining >= sizeof(uint32_t)) {
-    *dst++ = rng_get_u32();
-    remaining -= sizeof(uint32_t);
-  }
-
-  if (remaining > 0) {
+  while (remaining > 0) {
     uint32_t r = rng_get_u32();
-    memcpy(dst, &r, remaining);
+    size_t n = MIN(remaining, sizeof(r));
+    memcpy(dst, &r, n);
+    dst += n;
+    remaining -= n;
   }
 
   rng_use_flag_set(RNG_TYPE_MCU);
