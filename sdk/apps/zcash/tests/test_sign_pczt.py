@@ -37,6 +37,7 @@ from .zcash_ext import DIVERSIFIER_INDEX_BYTES, Network
 
 MAX_PCZT_BYTES = 65_536
 TRANSFER_ID_BYTES = 16
+CHUNK_BYTES = 1024
 SIGNATURE_BYTES = 64
 # The manifest's `ipc-buffer-size`.
 APP_INBOX_BYTES = 2048
@@ -309,3 +310,37 @@ def test_sign_pczt_invalid_request(
         host_reference_height=height,
     )
     assert_refused_before_any_screen(session, instance_id, msg, error)
+
+
+def test_diagnostics(session: Session, instance_id: int):
+    """A debug build reports its heap peak and its longest IPC silence, which
+    Core limits to 1 s; each request starts new counters."""
+    parameters, result = vector("2_actions")
+    seen = []
+    with session.test_ctx as client:
+        IF = InputFlowSignPczt(client, parameters, result)
+        client.set_input_flow(IF.get())
+        zcash_ext.sign_pczt(
+            session,
+            instance_id,
+            bytes.fromhex(parameters["pczt"]),
+            parse_network(parameters["network"]),
+            parameters["account"],
+            parameters["host_reference_height"],
+            seen.append,
+        )
+
+    pczt_length = len(bytes.fromhex(parameters["pczt"]))
+    assert len(seen) == -(-pczt_length // CHUNK_BYTES)
+    for earlier, later in zip(seen, seen[1:]):
+        assert earlier.ipc_sent < later.ipc_sent
+        assert earlier.heap_peak <= later.heap_peak
+
+    counters = zcash_ext.get_diagnostics(session, instance_id)
+    assert 0 < counters.heap_used < counters.heap_peak <= counters.heap_size
+    assert counters.max_ipc_silence_ms < 1000
+    assert counters.heap_peak >= seen[-1].heap_peak
+    again = zcash_ext.get_diagnostics(session, instance_id)
+    # Since the previous request the app sent only its response.
+    assert again.ipc_sent == 1
+    assert again.heap_peak < counters.heap_peak

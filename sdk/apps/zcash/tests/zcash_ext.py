@@ -133,9 +133,13 @@ def sign_pczt(
     network: Network,
     account: int,
     host_reference_height: int,
+    on_diagnostics: t.Callable[[zcash_messages.Diagnostics], None] | None = None,
 ) -> list[zcash_messages.SpendAuthSignature]:
     """Send the PCZT in the chunks the device requests, and return its spend
-    authorization signatures, one per real spend in ascending action order."""
+    authorization signatures, one per real spend in ascending action order.
+
+    A debug build of the app sends its counters with every chunk request, to
+    `on_diagnostics`."""
     request = call_ext(
         session,
         instance_id,
@@ -149,6 +153,8 @@ def sign_pczt(
     )
     transfer_id = request.transfer_id
     while True:
+        if on_diagnostics is not None and request.diagnostics is not None:
+            on_diagnostics(request.diagnostics)
         end = request.offset + request.length
         ack = zcash_messages.PcztAck(
             transfer_id=transfer_id,
@@ -171,3 +177,14 @@ def sign_pczt(
     )
     assert response.transfer_id == transfer_id
     return response.signatures
+
+
+def get_diagnostics(session: Session, instance_id: int) -> zcash_messages.Diagnostics:
+    """The app's heap and IPC counters since the previous call, which starts
+    new ones. Debug builds of the app only."""
+    return call_ext(
+        session,
+        instance_id,
+        msg=zcash_messages.GetDiagnostics(),
+        expect=zcash_messages.Diagnostics,
+    )
