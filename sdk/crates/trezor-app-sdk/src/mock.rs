@@ -321,6 +321,11 @@ unsafe extern "C" fn dummy_app_get_heap(
     ts_t { code: -1 }
 }
 
+/// **Stub** — fills the buffer with zeros. Not random.
+unsafe extern "C" fn dummy_rng_fill_buffer(buffer: *mut cty::c_void, buffer_size: usize) {
+    unsafe { core::ptr::write_bytes(buffer as *mut u8, 0, buffer_size) };
+}
+
 pub static DUMMY_TREZOR_API_V1: trezor_api_v1_t = trezor_api_v1_t {
     system_exit: Some(dummy_system_exit),
     system_exit_error_ex: Some(dummy_system_exit_error_ex),
@@ -336,6 +341,7 @@ pub static DUMMY_TREZOR_API_V1: trezor_api_v1_t = trezor_api_v1_t {
     ipc_send: Some(dummy_ipc_send),
     app_get_heap: Some(dummy_app_get_heap),
     trezor_crypto_v1: &DUMMY_TREZOR_CRYPTO_V1,
+    rng_fill_buffer: Some(dummy_rng_fill_buffer),
 };
 
 pub unsafe extern "C" fn dummy_trezor_api_getter_t(version: u32) -> *mut core::ffi::c_void {

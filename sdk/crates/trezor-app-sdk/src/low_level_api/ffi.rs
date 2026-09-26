@@ -274,6 +274,8 @@ pub struct trezor_api_v1_t {
         unsafe extern "C" fn(heap_ptr: *mut *mut cty::c_void, heap_size: *mut usize) -> ts_t,
     >,
     pub trezor_crypto_v1: *const trezor_crypto_v1_t,
+    pub rng_fill_buffer:
+        ::core::option::Option<unsafe extern "C" fn(buffer: *mut cty::c_void, buffer_size: usize)>,
 }
 impl Default for trezor_api_v1_t {
     fn default() -> Self {
