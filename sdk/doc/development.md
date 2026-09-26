@@ -357,12 +357,12 @@ use trezor_app_sdk::ui::Progress;
 let mut progress = Progress::show(None, None, true)?;
 for chunk in work {
     process(chunk);
-    progress.keep_alive()?; // reports at most every 250 ms; otherwise one clock read
+    progress.keep_alive()?; // reports at most every 100 ms; otherwise one clock read
 }
 // dropping `progress` ends the screen, on error paths too
 ```
 
-- Report from inside the long-running loop, not only around it: a single step that exceeds 1 s cannot be rescued by the reports before and after it.
+- Report from inside the long-running loop, not only around it: a single step that exceeds 1 s cannot be rescued by the reports before and after it. The app is silent for at most `Progress::KEEP_ALIVE_MS` (100 ms) plus its longest step between two `keep_alive` calls.
 - `keep_alive` repeats the last reported value, so an indeterminate screen can use it without ever calling `report`.
 - The emulator runs much faster than hardware, so it will not reveal a missing report.
 - The lower-level `init_progress`/`update_progress`/`end_progress` functions track whether a screen is shown: `update_progress` without `init_progress` fails locally instead of Core stopping the app, and `end_progress` without one does nothing. A response or error ends a screen the app left open.

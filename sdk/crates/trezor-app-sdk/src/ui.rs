@@ -164,7 +164,9 @@ pub fn end_progress() -> Result<()> {
 /// request (`core/src/apps/extapp/run.py`). A computation that can take longer
 /// must call [`Progress::keep_alive`] (or [`Progress::report`]) often enough,
 /// e.g. from its inner loop: `keep_alive` reports at most every
-/// [`Progress::KEEP_ALIVE_MS`] and costs one clock read otherwise.
+/// [`Progress::KEEP_ALIVE_MS`] and costs one clock read otherwise. The
+/// longest silence is then `KEEP_ALIVE_MS` plus the longest stretch between
+/// two calls.
 ///
 /// ## Example
 ///
@@ -186,9 +188,10 @@ pub struct Progress {
 }
 
 impl Progress {
-    /// Longest interval between two reports sent by [`Progress::keep_alive`],
-    /// well within Core's 1 s limit.
-    pub const KEEP_ALIVE_MS: u32 = 250;
+    /// Shortest interval between two reports sent by [`Progress::keep_alive`].
+    /// It leaves 900 ms of Core's 1 s limit for the longest stretch between
+    /// two calls, and costs at most ten reports a second.
+    pub const KEEP_ALIVE_MS: u32 = 100;
 
     /// Shows a progress screen at value 0; the arguments are those of
     /// [`init_progress`].
