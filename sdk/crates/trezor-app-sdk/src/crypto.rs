@@ -10,7 +10,9 @@ use crate::alloc_types::Vec;
 use crate::core_services::services_or_die;
 use crate::ipc::IpcMessage;
 pub use crate::low_level_api::ffi::{HMAC_SHA256_CTX, SHA256_CTX, SHA512_CTX};
-use crate::low_level_api::{ed25519_cosi_combine_publickeys, ed25519_sign_open, get_crypto_or_die};
+use crate::low_level_api::{
+    ed25519_cosi_combine_publickeys, ed25519_sign_open, get_crypto_or_die, rng_fill_buffer,
+};
 use crate::service::CoreIpcService;
 use crate::structs::TrezorCryptoResultRef;
 pub use crate::structs::{TrezorCryptoEnum, TrezorCryptoResult};
@@ -255,6 +257,12 @@ pub fn verify_nonce_cache(nonce: &[u8]) -> Result<bool> {
         // TODO: proper error type
         Err(Error::ApiError(crate::low_level_api::ApiError::Failed))?
     }
+}
+
+/// Fills `buffer` with random bytes from the device's hardware random number
+/// generator.
+pub fn random_bytes(buffer: &mut [u8]) {
+    rng_fill_buffer(buffer);
 }
 
 /// ECDSA over the secp256k1 curve.
