@@ -54,17 +54,18 @@ def from_fn_id(fn_id: int) -> tuple[int, int]:
     return ((fn_id >> 16) & 0xFFFF, fn_id & 0xFFFF)
 
 
-def _extract_slip44_id(patterns: list[str]) -> int:
-    """Extract the app's SLIP-44 coin type from its allowed path patterns.
+def _path_schemas(patterns: list[str]) -> tuple[list[paths.PathSchema], int | None]:
+    """Parse the app's allowed path patterns, each with the SLIP-44 coin type it
+    hard-codes as its second path component (e.g. `m/44'/60'/...`).
 
-    Every pattern is expected to hard-code the same coin type as its second
-    path component (e.g. `m/44'/60'/...`), so the value is derived from the
-    patterns themselves instead of being passed in separately.
+    Also returns the coin type that address MACs bind: the one all patterns
+    share, or None if they name several (e.g. a mainnet and a testnet).
     """
     if not patterns:
         raise DataError("Expected at least one allowed path")
 
-    slip44_id: int | None = None
+    schemas: list[paths.PathSchema] = []
+    coin_types: set[int] = set()
     for pattern in patterns:
         component = pattern.split("/")[2]
         if component[-1] == "'":
@@ -74,13 +75,11 @@ def _extract_slip44_id(patterns: list[str]) -> int:
         except ValueError:
             raise DataError(f"Invalid coin type in path pattern: {pattern}")
 
-        if slip44_id is None:
-            slip44_id = coin_type
-        elif slip44_id != coin_type:
-            raise DataError("Expected the same coin type in every allowed path")
+        coin_types.add(coin_type)
+        schemas.append(paths.PathSchema.parse(pattern, coin_type).copy())
 
-    assert slip44_id is not None
-    return slip44_id
+    slip44_id = coin_types.pop() if len(coin_types) == 1 else None
+    return schemas, slip44_id
 
 
 async def run(request: ExtAppMessage) -> ExtAppResponse:
@@ -102,17 +101,13 @@ async def run(request: ExtAppMessage) -> ExtAppResponse:
     curve = curves[0]
 
     patterns: list[str] = list(image.allowed_paths())
-    slip44_id: int = _extract_slip44_id(patterns)
+    schemas, slip44_id = _path_schemas(patterns)
 
     if __debug__:
         log.debug(
             __name__,
             f"Allowed curves: {curves}, slip44_id: {slip44_id}, patterns: {patterns}",
         )
-    schemas = []
-    for pattern in patterns:
-        schemas.append(paths.PathSchema.parse(pattern, slip44_id))
-    schemas: list[paths.PathSchema] = [s.copy() for s in schemas]
 
     if not image.is_running():
         if __debug__:
@@ -295,6 +290,8 @@ async def run(request: ExtAppMessage) -> ExtAppResponse:
                             log.debug(
                                 __name__, f"Getting address MAC for path: {address_n}"
                             )
+                        if slip44_id is None:
+                            raise ValueError  # an address MAC binds one coin type
                         keychain = await get_keychain(curve, schemas, [[b"SLIP-0024"]])
                         await paths.validate_path(keychain, address_n)
                         from apps.common.address_mac import get_address_mac
@@ -315,6 +312,8 @@ async def run(request: ExtAppMessage) -> ExtAppResponse:
                             log.debug(
                                 __name__, f"Checking address MAC for path: {address_n}"
                             )
+                        if slip44_id is None:
+                            raise ValueError  # an address MAC binds one coin type
                         keychain = await get_keychain(curve, schemas, [[b"SLIP-0024"]])
                         await paths.validate_path(keychain, address_n)
                         from apps.common.address_mac import check_address_mac
