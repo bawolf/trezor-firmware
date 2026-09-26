@@ -72,6 +72,29 @@ wire_handler!(
     MessageType::ZcashSpendAuthSignatures,
     sign_pczt::sign_pczt
 );
+#[cfg(feature = "debug")]
+wire_handler!(
+    handle_get_diagnostics,
+    ProstCodec,
+    proto::zcash::ZcashGetDiagnostics,
+    MessageType::ZcashDiagnostics,
+    get_diagnostics
+);
+
+/// The SDK's heap and IPC counters, for measuring the app on a device. Debug
+/// builds only.
+#[cfg(feature = "debug")]
+fn get_diagnostics(_: proto::zcash::ZcashGetDiagnostics) -> Result<proto::zcash::ZcashDiagnostics> {
+    let counters = trezor_app_sdk::diagnostics::take();
+    Ok(proto::zcash::ZcashDiagnostics {
+        heap_size: counters.heap_size,
+        heap_used: counters.heap_used,
+        heap_peak: counters.heap_peak,
+        max_ipc_silence_ms: counters.max_ipc_silence_ms,
+        max_ipc_silence_service: counters.max_ipc_silence_service.into(),
+        ipc_sent: counters.ipc_sent,
+    })
+}
 
 #[unsafe(no_mangle)]
 pub fn app() -> Result<()> {
@@ -89,6 +112,8 @@ fn handle_wire_message(id: u16, data: &[u8]) -> Result<()> {
         // A cancel with no signing request in progress, answered as Core
         // answers `Cancel`.
         Ok(MessageType::ZcashCancel) => wire_error_raw(&Error::Cancelled),
+        #[cfg(feature = "debug")]
+        Ok(MessageType::ZcashGetDiagnostics) => handle_get_diagnostics(data),
         _ => {
             error!("Unexpected message type: {}", id);
             Err(Error::InvalidFunction)

@@ -534,6 +534,26 @@ def test_two_signs_in_one_app_instance(session: Session, instance_id: int) -> No
         assert [s.action_index for s in signatures] == result["real_spend_actions"]
 
 
+def test_diagnostics_measure_a_sign(session: Session, instance_id: int) -> None:
+    """A debug build (as the device tests use) reports its heap high-water
+    mark and its longest IPC silence, which Core limits to 1 s; each request
+    starts new counters."""
+    parameters, result = vector("2_actions")
+    _sign(
+        session, instance_id, parameters, _accept_flow(session, len(result["payments"]))
+    )
+
+    counters = zcash_ext.get_diagnostics(session, instance_id)
+    assert 0 < counters.heap_used < counters.heap_peak <= counters.heap_size
+    assert counters.max_ipc_silence_ms < 1000
+    assert counters.ipc_sent > 0
+
+    again = zcash_ext.get_diagnostics(session, instance_id)
+    # Since the previous request the app sent only its response.
+    assert again.ipc_sent == 1
+    assert again.heap_peak < counters.heap_peak
+
+
 # The app's own transport checks, which the series had in Core.
 
 

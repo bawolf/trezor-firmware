@@ -200,6 +200,19 @@ def sign_pczt(
     return _parse_records(transfer_id, signatures)
 
 
+def get_diagnostics(
+    session: "Session", instance_id: int
+) -> zcash_messages.ZcashDiagnostics:
+    """The app's heap and IPC counters since the previous call, which starts
+    new ones. Debug builds of the app only: a release build stops on it."""
+    return call_ext(
+        session,
+        instance_id,
+        zcash_messages.ZcashGetDiagnostics(),
+        zcash_messages.ZcashDiagnostics,
+    )
+
+
 def cancel(session: "Session", instance_id: int) -> None:
     """Abandon the signing request in progress and consume the device's answer.
 

@@ -147,3 +147,25 @@ message ZcashSpendAuthSignatures {
     required bytes transfer_id = 1;  // the transfer the records belong to
     required bytes records = 2;      // n * 66 bytes, 1 <= n <= 32
 }
+
+/**
+ * Request: The app's resource counters since the previous request (or since
+ * it was loaded), for measuring it on a device. Debug builds only.
+ * @start
+ * @next ZcashDiagnostics
+ */
+message ZcashGetDiagnostics {
+}
+
+/**
+ * Response: The app's resource counters; the request starts new ones.
+ * @end
+ */
+message ZcashDiagnostics {
+    required uint32 heap_size = 1;                 // bytes in the app heap
+    required uint32 heap_used = 2;                 // bytes allocated now
+    required uint32 heap_peak = 3;                 // most bytes allocated at once
+    required uint32 max_ipc_silence_ms = 4;        // longest time Core waited for the app's next message
+    required uint32 max_ipc_silence_service = 5;   // service of the message that ended it (5 = Progress)
+    required uint32 ipc_sent = 6;                  // messages the app sent
+}

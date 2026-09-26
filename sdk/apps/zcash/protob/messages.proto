@@ -14,4 +14,7 @@ enum MessageType {
     MessageType_ZcashPcztAck = 6;
     MessageType_ZcashSpendAuthSignatures = 7;
     MessageType_ZcashCancel = 8;
+    // Debug builds only (a release build stops on an unknown message).
+    MessageType_ZcashGetDiagnostics = 9;
+    MessageType_ZcashDiagnostics = 10;
 }
