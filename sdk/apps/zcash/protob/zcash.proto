@@ -1,0 +1,42 @@
+syntax = "proto2";
+package hw.trezor.zcash;
+
+/**
+ * Request: Ask device for a Zcash unified address with an Orchard receiver
+ * @start
+ * @next Address
+ * @next Failure
+ */
+message GetAddress {
+    repeated uint32 address_n = 1;         // ZIP-32 account path m/32'/coin_type'/account'
+    required bytes diversifier_index = 2;  // 11 bytes, little-endian
+    optional bool chunkify = 3;            // Display the address in chunks of 4 characters
+}
+
+/**
+ * Response: Contains a unified address, confirmed on the device
+ * @end
+ */
+message Address {
+    required string address = 1;
+}
+
+/**
+ * Request: Ask device for an Orchard-only unified full viewing key
+ * @start
+ * @next ViewingKey
+ * @next Failure
+ */
+message GetViewingKey {
+    repeated uint32 address_n = 1;                                // ZIP-32 account path m/32'/coin_type'/account'
+    optional bool include_seed_fingerprint = 2 [default = false];  // Also export the ZIP-32 seed fingerprint
+}
+
+/**
+ * Response: Contains the unified full viewing key, and the seed fingerprint if requested
+ * @end
+ */
+message ViewingKey {
+    required string key = 1;
+    optional bytes seed_fingerprint = 2;
+}

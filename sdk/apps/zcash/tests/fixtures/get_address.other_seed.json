@@ -1,0 +1,19 @@
+{
+  "setup": {
+    "mnemonic": "alcohol woman abuse must during monitor noble actual mixed trade anger aisle",
+    "passphrase": ""
+  },
+  "tests": [
+    {
+      "name": "other_seed",
+      "parameters": {
+        "network": "mainnet",
+        "account": 0,
+        "diversifier_index": 0
+      },
+      "result": {
+        "address": "u128xx4m082yc34nv2a68gc42kttpdqzj7tfswywl4vseleujnc5d2zjygw9zwtrqmcg2uhv0ku5syech3qng5qvxgdxkgm5prxclzj7qc"
+      }
+    }
+  ]
+}

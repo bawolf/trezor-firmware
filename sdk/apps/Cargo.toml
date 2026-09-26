@@ -1,7 +1,7 @@
 cargo-features = ["panic-immediate-abort"]
 
 [workspace]
-members = ["ethereum", "tron", "zcash/signer"]
+members = ["ethereum", "tron", "zcash", "zcash/signer"]
 # Tests with the Zcash crates, whose pre-release `digest` conflicts with the
 # SDK's test mock.
 exclude = ["zcash/signer-tests"]

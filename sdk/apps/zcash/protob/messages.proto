@@ -1,0 +1,17 @@
+syntax = "proto2";
+package hw.trezor.messages;
+
+/**
+ * Messages for Trezor communication
+ */
+
+/**
+ * Mapping between Trezor wire identifier (uint) and a protobuf message
+ */
+enum MessageType {
+    // Zcash
+    MessageType_GetAddress = 0;
+    MessageType_Address = 1;
+    MessageType_GetViewingKey = 2;
+    MessageType_ViewingKey = 3;
+}

@@ -14,6 +14,7 @@ pasta_curves = { version = "0.5.1", default-features = false }
 pczt = { version = "=0.9.3", default-features = false, features = ["orchard", "signer", "io-finalizer", "zcp-builder"] }
 rand_chacha = { version = "0.3.1", default-features = false }
 rand_core = { version = "0.6.4", default-features = false }
+serde = { version = "1", features = ["derive"] }
 serde_json = "1.0.145"
 zcash-signer = { path = "../signer" }
 zcash_note_encryption = { version = "0.4.1", default-features = false }
@@ -23,6 +24,7 @@ zip32 = { version = "=0.2.1", default-features = false }
 
 [dev-dependencies]
 jubjub = { version = "0.10.0", default-features = false }
+zcash_address = { version = "=0.13.0", default-features = false }
 
 # The tests are their own workspace: the Zcash crates need a pre-release
 # `digest` that the `sdk/apps` workspace cannot share.
