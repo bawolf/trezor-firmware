@@ -396,8 +396,9 @@ impl<R: RngCore + CryptoRng> Session<R> {
     }
 
     /// [`Session::feed`], calling `progress` between the expensive steps of
-    /// each action and of the final review, for a caller that must report
-    /// progress while the verification runs.
+    /// each action and of the final review, and during their Sinsemilla
+    /// hashes, for a caller that must report progress while the verification
+    /// runs.
     pub fn feed_with_progress(
         &mut self,
         chunk: &[u8],
@@ -979,7 +980,7 @@ impl Body {
         // by `verify_encryption` below. Proven by
         // tests/session_equivalence.rs `identity_rk_dummy_spend...`.
         ensure_malformed(*spend.rk != [0; 32])?;
-        let parsed = parse(action, wire_fvk)?;
+        let parsed = parse(action, wire_fvk, progress)?;
         progress();
 
         // Step 1: the running input and output totals.
@@ -996,7 +997,7 @@ impl Body {
         // a caller reporting progress is not silent for them and the nullifier
         // check together.
         if self.scope_classifier.is_none() {
-            self.scope_classifier = Some(IvkCache(fvk.scope_classifier()));
+            self.scope_classifier = Some(IvkCache(fvk.scope_classifier_with_progress(progress)));
             progress();
         }
         // Narrow borrows so the `&mut self.scope_classifier` never spans the
@@ -1023,7 +1024,7 @@ impl Body {
         // Reuse the cmx-validated note for output recovery.
         let note = parsed
             .output()
-            .verify_note_commitment(parsed.spend())
+            .verify_note_commitment_with_progress(parsed.spend(), progress)
             .map_err(|_| Error::malformed())?;
         progress();
         // Step 4: the spend record; the dummy signature waits for the sighash.
@@ -1093,11 +1094,16 @@ impl Body {
 /// `pczt` crate hands them (pczt-0.9.3/src/orchard.rs:2143-2233); the
 /// redactable fields are never absent on this wire, so the crate's field
 /// resolution is a no-op. A parse failure is what `Pczt::parse` turns into
-/// `Malformed` (`validate`).
-fn parse(action: &stream::Action<'_>, fvk: Option<[u8; 96]>) -> Result<Action> {
+/// `Malformed` (`validate`). `progress` is called during the Sinsemilla hashes
+/// that validate the host-supplied `fvk` of a dummy spend.
+fn parse(
+    action: &stream::Action<'_>,
+    fvk: Option<[u8; 96]>,
+    progress: &mut dyn FnMut(),
+) -> Result<Action> {
     let spend = &action.spend;
     let output = &action.output;
-    let spend = Spend::parse(
+    let spend = Spend::parse_with_progress(
         *spend.nullifier,
         *spend.rk,
         spend.spend_auth_sig.copied(),
@@ -1112,6 +1118,7 @@ fn parse(action: &stream::Action<'_>, fvk: Option<[u8; 96]>) -> Result<Action> {
         None,
         NoteVersion::V3,
         BTreeMap::new(),
+        progress,
     )
     .map_err(|_| Error::malformed())?;
     let output = Output::parse(

@@ -953,7 +953,7 @@ checksum = "c08d65885ee38876c4f86fa503fb49d7b507c2b62552df7c70b2fce627e06381"
 [[package]]
 name = "orchard"
 version = "0.15.3"
-source = "git+https://github.com/bawolf/orchard?rev=e23177a9dd1c35ee35b5034fc237c4d56de5fabf#e23177a9dd1c35ee35b5034fc237c4d56de5fabf"
+source = "git+https://github.com/bawolf/orchard?rev=61704d46253e9ac9dc97358b0e17f82bc2b7fc1f#61704d46253e9ac9dc97358b0e17f82bc2b7fc1f"
 dependencies = [
  "aes",
  "bitvec",
@@ -1571,7 +1571,7 @@ checksum = "e3a9fe34e3e7a50316060351f37187a3f546bce95496156754b601a5fa71b76e"
 [[package]]
 name = "sinsemilla"
 version = "0.1.0"
-source = "git+https://github.com/bawolf/sinsemilla?rev=6ca88ff52835899c87ff83489b95c5cda887e8a4#6ca88ff52835899c87ff83489b95c5cda887e8a4"
+source = "git+https://github.com/bawolf/sinsemilla?rev=6607cb019a587869a183b04172e20b4d2719a8e7#6607cb019a587869a183b04172e20b4d2719a8e7"
 dependencies = [
  "group",
  "pasta_curves",

@@ -22,8 +22,9 @@
 //! two `hash_to_curve` per domain that action 0 would pay anyway. It touches no
 //! wallet material: the fixed throwaway key below is a constant, not a secret.
 //!
-//! On a Cortex-M33 each call below takes up to ~0.25 s, so
-//! [`prewarm_with_progress`] reports progress after every one of them.
+//! On a Cortex-M33 each call below takes up to ~0.25 s, and with computed
+//! Sinsemilla generators up to ~0.7 s, so [`prewarm_with_progress`] reports
+//! progress after every one of them and during their Sinsemilla hashes.
 
 use core::hint::black_box;
 use core::sync::atomic::{AtomicBool, Ordering};
@@ -46,8 +47,9 @@ pub fn prewarm() {
     prewarm_with_progress(&mut || {});
 }
 
-/// [`prewarm`], calling `progress` after each of its expensive calls, for a
-/// caller that must report progress while it runs.
+/// [`prewarm`], calling `progress` after each of its expensive calls and
+/// during their Sinsemilla hashes, for a caller that must report progress while
+/// it runs.
 pub fn prewarm_with_progress(progress: &mut dyn FnMut()) {
     // Once: the caches built below persist across sessions, so a second run
     // only costs device time. Single-threaded, so a relaxed test-and-set is
@@ -75,7 +77,7 @@ fn warm_orchard_domains(progress: &mut dyn FnMut()) {
     // one; [1; 32] is valid in practice, the loop is just belt-and-braces.
     let mut found = None;
     for seed in 1u8..=32 {
-        let sk = SpendingKey::from_bytes([seed; 32]);
+        let sk = SpendingKey::from_bytes_with_progress([seed; 32], progress);
         progress();
         if bool::from(sk.is_some()) {
             found = Some(sk.unwrap());
@@ -91,7 +93,7 @@ fn warm_orchard_domains(progress: &mut dyn FnMut()) {
     // CommitIvk domain: building the scope classifier derives the external and
     // internal ivks via `spec::commit_ivk`, which fills `commit_ivk_domain` — the
     // exact call `Session::feed` makes on action 0.
-    let _ = black_box(fvk.scope_classifier());
+    let _ = black_box(fvk.scope_classifier_with_progress(progress));
     progress();
 
     // NoteCommit domain: evaluate one note commitment on a throwaway note built
@@ -99,7 +101,8 @@ fn warm_orchard_domains(progress: &mut dyn FnMut()) {
     // has a commitment, which fills `note_commit_domain`. The address comes
     // from a raw diversifier, not `address_at`, whose FF1 index encryption
     // would link the `fpe`/`num-bigint` code nothing else on the device uses.
-    let address = fvk.address(Diversifier::from_bytes([0; 11]), Scope::External);
+    let address =
+        fvk.address_with_progress(Diversifier::from_bytes([0; 11]), Scope::External, progress);
     progress();
     let value = NoteValue::from_raw(0);
     let rho = match Option::<Rho>::from(Rho::from_bytes(&[0u8; 32])) {
@@ -111,7 +114,8 @@ fn warm_orchard_domains(progress: &mut dyn FnMut()) {
             Some(rseed) => rseed,
             None => continue,
         };
-        let note = Note::from_parts(address, value, rho, rseed, NoteVersion::V3);
+        let note =
+            Note::from_parts_with_progress(address, value, rho, rseed, NoteVersion::V3, progress);
         progress();
         if bool::from(note.is_some()) {
             return;

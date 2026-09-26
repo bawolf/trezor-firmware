@@ -112,13 +112,14 @@ rand_chacha = { version = "=0.3.1", default-features = false }
 serde_json = "1.0.145"
 zip32 = { version = "=0.2.1", default-features = false }
 
-# Ironwood (Orchard v2) is not released upstream yet; these are the forks that
-# source pins, by full commit. The orchard pin is the source's `d479291` plus
-# one commit, branch `ironwood/nullifier-progress`: progress reports inside the
-# nullifier check, which alone takes ~0.4-0.55 s on the device.
+# Ironwood (Orchard v2) is unreleased. These forks are the revisions the
+# `ironwood` source pins (sinsemilla `6ca88ff`, orchard `d479291`) plus progress
+# callbacks, so that the app messages Core at least once a second (branch
+# `ironwood/sinsemilla-progress` of each): sinsemilla after each 10-bit piece of
+# a hash, orchard in the nullifier, key and note checks.
 [patch.crates-io]
-sinsemilla = { git = "https://github.com/bawolf/sinsemilla", rev = "6ca88ff52835899c87ff83489b95c5cda887e8a4" }
-orchard = { git = "https://github.com/bawolf/orchard", rev = "e23177a9dd1c35ee35b5034fc237c4d56de5fabf" }
+sinsemilla = { git = "https://github.com/bawolf/sinsemilla", rev = "6607cb019a587869a183b04172e20b4d2719a8e7" }
+orchard = { git = "https://github.com/bawolf/orchard", rev = "61704d46253e9ac9dc97358b0e17f82bc2b7fc1f" }
 
 [profile.debug-fw]
 inherits = "dev"
