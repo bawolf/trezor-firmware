@@ -466,11 +466,13 @@ bool telemetry_get(telemetry_data_t *out) {
 
 #include <sec/mldsa44.h>
 
+#ifndef MLDSA44_IN_KERNEL
 ts_t mldsa44_verify(const mldsa44_signature_t *sig, const void *m, size_t mlen,
                     const mldsa44_public_key_t *pk, secbool *valid) {
   return ts_make(smcall_invoke5((uint32_t)sig, (uint32_t)m, mlen, (uint32_t)pk,
                                 (uint32_t)valid, SMCALL_MLDSA44_VERIFY));
 }
+#endif  // MLDSA44_IN_KERNEL
 
 #endif  // USE_MLDSA44
 
