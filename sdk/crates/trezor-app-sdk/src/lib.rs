@@ -6,7 +6,8 @@
 //!
 //! - `app`: Enables full app runtime (heap allocation, IPC, UI, crypto, etc.)
 //!          Required for extapps / standalone app binaries.
-//! - `debug`: Enables debug logging and richer error context
+//! - `debug`: Enables debug logging, richer error context and the
+//!            [`diagnostics`] counters
 //! - `test`: Enables std-based testing utilities
 //! - `nightly`: Enables unstable (nightly-only) language/library features
 //!              used by the default panic/abort machinery. Default-enabled;
@@ -42,6 +43,9 @@ mod ipc;
 mod low_level_api;
 #[cfg(feature = "app")]
 mod sysevent;
+
+#[cfg(all(feature = "app", feature = "debug", not(feature = "test")))]
+pub mod diagnostics;
 
 #[cfg(not(feature = "app"))]
 pub mod crypto {
