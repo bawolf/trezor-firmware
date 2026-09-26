@@ -22,7 +22,7 @@ pub fn run(args: &ProjectArgs, check_only: bool) -> Result<()> {
     if helpers::is_workspace()? {
         ensure!(
             !args.project.is_empty(),
-            "Project name must be specified when running py-style in a workspace"
+            "Project name must be specified when running translation-style in a workspace"
         );
         project_dir = project_dir.join(&args.project);
     }
