@@ -866,6 +866,13 @@ pub enum TrezorCryptoEnum<'a> {
     VerifyNonceCache {
         nonce: Slice<'a, u8>,
     },
+    /// The ZIP-32 Orchard account `m/32'/coin_type'/account'`.
+    GetZip32OrchardAccount {
+        /// 133 (mainnet) or 1 (testnet).
+        coin_type: u32,
+        /// Below 2^31.
+        account: u32,
+    },
 }
 
 impl<'a> TrezorCryptoEnum<'a> {
@@ -878,6 +885,7 @@ impl<'a> TrezorCryptoEnum<'a> {
             Self::GetAddressMac { .. } => 4,
             Self::CheckAddressMac { .. } => 5,
             Self::VerifyNonceCache { .. } => 6,
+            Self::GetZip32OrchardAccount { .. } => 7,
         }
     }
 }
@@ -893,6 +901,7 @@ impl ArchivedTrezorCryptoEnum<'_> {
             Self::GetAddressMac { .. } => 4,
             Self::CheckAddressMac { .. } => 5,
             Self::VerifyNonceCache { .. } => 6,
+            Self::GetZip32OrchardAccount { .. } => 7,
         }
     }
 }
@@ -920,11 +929,23 @@ pub enum TrezorCryptoResultRef<'a> {
     Signature([u8; 65]),
     AddressMac([u8; 32]),
     Boolean(bool),
+    /// See `crypto::Zip32OrchardAccount`.
+    Zip32OrchardAccount {
+        /// The account's Orchard spending key.
+        spending_key: [u8; 32],
+        /// The ZIP-32 seed fingerprint.
+        seed_fingerprint: [u8; 32],
+        /// Whether the backup holds fewer than 256 bits.
+        weak_backup: bool,
+    },
+    /// The user declined the request.
+    Cancelled,
 }
 
 // Manual uDebug: `[u8; 111]`/`[u8; 65]` are too long for ufmt's built-in
 // fixed-size-array uDebug impls (only implemented up to length 32), so the
-// large byte arrays are debug-printed as slices instead.
+// large byte arrays are debug-printed as slices instead. Spending keys are
+// never printed.
 impl<'a> ufmt::uDebug for TrezorCryptoResultRef<'a> {
     fn fmt<W: ?Sized>(&self, f: &mut ufmt::Formatter<'_, W>) -> Result<(), W::Error>
     where
@@ -936,6 +957,8 @@ impl<'a> ufmt::uDebug for TrezorCryptoResultRef<'a> {
             Self::Signature(sig) => f.debug_tuple("Signature")?.field(&&sig[..])?.finish(),
             Self::AddressMac(mac) => f.debug_tuple("AddressMac")?.field(mac)?.finish(),
             Self::Boolean(b) => f.debug_tuple("Boolean")?.field(b)?.finish(),
+            Self::Zip32OrchardAccount { .. } => f.write_str("Zip32OrchardAccount { .. }"),
+            Self::Cancelled => f.write_str("Cancelled"),
         }
     }
 }
@@ -1108,12 +1131,20 @@ mod tests {
                 .id(),
                 "VerifyNonceCache",
             ),
+            (
+                GetZip32OrchardAccount {
+                    coin_type: 133,
+                    account: 0,
+                }
+                .id(),
+                "GetZip32OrchardAccount",
+            ),
         ];
         let mut seen = std::collections::HashSet::new();
         for (id, name) in variants {
             assert!(seen.insert(id), "duplicate id {} for variant {}", id, name);
         }
-        assert_eq!(variants.len(), 7, "new variant added but test not updated");
+        assert_eq!(variants.len(), 8, "new variant added but test not updated");
     }
 
     /// Ensures every variant of TrezorProgressEnum has a unique id()
@@ -1194,10 +1225,14 @@ mod tests {
             TrezorCryptoEnum::VerifyNonceCache {
                 nonce: nonce.into(),
             },
+            TrezorCryptoEnum::GetZip32OrchardAccount {
+                coin_type: 133,
+                account: 5,
+            },
         ];
         for request in &requests {
             let bytes = archive(request);
-            for id in 0..=7u16 {
+            for id in 0..=8u16 {
                 let accepted = access_crypto_request(&bytes, id).is_some();
                 assert_eq!(accepted, id == u16::from(request.id()), "id {}", id);
             }

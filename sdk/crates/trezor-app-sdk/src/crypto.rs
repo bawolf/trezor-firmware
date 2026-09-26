@@ -25,7 +25,11 @@ use crate::{Error, Result, unwrap};
 
 type CryptoResult = Result<TrezorCryptoResult>;
 
-fn ipc_crypto_call<'a>(value: &TrezorCryptoEnum<'a>) -> CryptoResult {
+/// Sends `value` to Core's Crypto service and hands the archived reply to `read`.
+fn with_crypto_reply<R>(
+    value: &TrezorCryptoEnum<'_>,
+    read: impl FnOnce(&Archived<TrezorCryptoResultRef<'_>>) -> Result<R>,
+) -> Result<R> {
     let bytes = unwrap!(to_bytes::<Failure>(value));
 
     let message = IpcMessage::new(value.id() as _, bytes.as_ref());
@@ -36,19 +40,34 @@ fn ipc_crypto_call<'a>(value: &TrezorCryptoEnum<'a>) -> CryptoResult {
         result.data()
     ));
 
-    let result = match archived {
-        Archived::<TrezorCryptoResultRef>::AddressMac(mac) => TrezorCryptoResult::AddressMac(*mac),
-        Archived::<TrezorCryptoResultRef>::Boolean(valid) => TrezorCryptoResult::Boolean(*valid),
-        Archived::<TrezorCryptoResultRef>::Xpub(xpub) => TrezorCryptoResult::Xpub(*xpub),
-        Archived::<TrezorCryptoResultRef>::PublicKey(xpub) => {
-            TrezorCryptoResult::PublicKey(Vec::from(xpub.as_ref()))
-        }
-        Archived::<TrezorCryptoResultRef>::Signature(signature) => {
-            TrezorCryptoResult::Signature(*signature)
-        }
-    };
+    read(archived)
+}
 
-    Ok(result)
+fn ipc_crypto_call<'a>(value: &TrezorCryptoEnum<'a>) -> CryptoResult {
+    with_crypto_reply(value, |archived| {
+        let result = match archived {
+            Archived::<TrezorCryptoResultRef>::AddressMac(mac) => {
+                TrezorCryptoResult::AddressMac(*mac)
+            }
+            Archived::<TrezorCryptoResultRef>::Boolean(valid) => {
+                TrezorCryptoResult::Boolean(*valid)
+            }
+            Archived::<TrezorCryptoResultRef>::Xpub(xpub) => TrezorCryptoResult::Xpub(*xpub),
+            Archived::<TrezorCryptoResultRef>::PublicKey(xpub) => {
+                TrezorCryptoResult::PublicKey(Vec::from(xpub.as_ref()))
+            }
+            Archived::<TrezorCryptoResultRef>::Signature(signature) => {
+                TrezorCryptoResult::Signature(*signature)
+            }
+            Archived::<TrezorCryptoResultRef>::Cancelled => return Err(Error::Cancelled),
+            // Account keys are read only by `get_zip32_orchard_account`, which
+            // does not copy them into the cloneable `TrezorCryptoResult`.
+            Archived::<TrezorCryptoResultRef>::Zip32OrchardAccount { .. } => {
+                return Err(Error::ApiError(crate::low_level_api::ApiError::Failed));
+            }
+        };
+        Ok(result)
+    })
 }
 
 fn ecdsa_verify_digest(
@@ -257,6 +276,62 @@ pub fn verify_nonce_cache(nonce: &[u8]) -> Result<bool> {
         // TODO: proper error type
         Err(Error::ApiError(crate::low_level_api::ApiError::Failed))?
     }
+}
+
+/// A ZIP-32 Orchard account, returned by [`get_zip32_orchard_account`].
+///
+/// The spending key is zeroed on drop (not moved-from copies, nor the IPC
+/// buffer it arrived in, which is the app's own memory).
+pub struct Zip32OrchardAccount {
+    /// The account's Orchard spending key `sk` (ZIP 32).
+    pub spending_key: [u8; 32],
+    /// The ZIP-32 seed fingerprint. It is the same for every account and
+    /// network of the seed, so it links them all.
+    pub seed_fingerprint: [u8; 32],
+    /// Whether wallets should warn about the backup, as ZIP 315 asks: it holds
+    /// fewer than 256 bits (a BIP-39 mnemonic of fewer than 24 words, or a
+    /// SLIP-39 secret shorter than 32 bytes).
+    pub weak_backup: bool,
+}
+
+impl Drop for Zip32OrchardAccount {
+    fn drop(&mut self) {
+        for byte in self.spending_key.iter_mut() {
+            // SAFETY: `byte` is a valid, aligned and exclusive reference.
+            unsafe { core::ptr::write_volatile(byte, 0) };
+        }
+        core::sync::atomic::compiler_fence(core::sync::atomic::Ordering::SeqCst);
+    }
+}
+
+/// Derives the ZIP-32 Orchard account `m/32'/coin_type'/account'` from the
+/// wallet seed.
+///
+/// `coin_type` is 133 (mainnet) or 1 (testnet) and `account` is below 2^31.
+/// Core refuses unless the app declares the `zip32-orchard` curve and a path
+/// pattern matching the account path. The first request for an account asks
+/// the user to allow it; a rejection returns [`Error::Cancelled`].
+///
+/// The app must check the key before use (in `orchard`,
+/// `SpendingKey::from_bytes` returns `None` for an invalid key) and fail if it
+/// is invalid: Core has no Pallas arithmetic, so it cannot reject the rare
+/// seeds and paths for which ZIP 32 defines no valid key.
+pub fn get_zip32_orchard_account(coin_type: u32, account: u32) -> Result<Zip32OrchardAccount> {
+    let value = TrezorCryptoEnum::GetZip32OrchardAccount { coin_type, account };
+    with_crypto_reply(&value, |archived| match archived {
+        Archived::<TrezorCryptoResultRef>::Zip32OrchardAccount {
+            spending_key,
+            seed_fingerprint,
+            weak_backup,
+        } => Ok(Zip32OrchardAccount {
+            spending_key: *spending_key,
+            seed_fingerprint: *seed_fingerprint,
+            weak_backup: *weak_backup,
+        }),
+        Archived::<TrezorCryptoResultRef>::Cancelled => Err(Error::Cancelled),
+        // TODO: proper error type
+        _ => Err(Error::ApiError(crate::low_level_api::ApiError::Failed)),
+    })
 }
 
 /// Fills `buffer` with random bytes from the device's hardware random number
