@@ -12,7 +12,9 @@ vendor = "Bryant Wolf"
 # Heap: a 32-action sign peaks at 56,522 B on the host (64-bit), 30,186 B of
 # it the Pallas and orchard caches that stay for the app's life; receive peaks
 # at 38,010 B. 72 KiB leaves ~16 KiB for fragmentation and the IPC and screen
-# buffers. Stack: not measured on hardware yet, twice the samples' 16 KiB.
+# buffers. Stack: the deepest call chain, SignPczt's session verifying an
+# action, needs 28,564 B by static analysis of the T3W1 debug image (objdump
+# call graph, direct calls only); receive needs ~6.4 KB.
 stack-size = 32768
 heap-size = 73728
 app-ring = 0

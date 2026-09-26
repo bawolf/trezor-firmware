@@ -14,7 +14,7 @@ use alloc::vec::Vec;
 use ironwood::receive::Network;
 use ironwood::{
     Account, ErrorCode, Event, Hedged, Limits, Memo, OutputKind, Policy, Projection,
-    RequestContext, Session, TransparentOutput,
+    RequestContext, Review, ReviewedOutput, Session, TransparentOutput,
 };
 use orchard::keys::{FullViewingKey, SpendAuthorizingKey};
 use prost::Message;
@@ -91,11 +91,7 @@ pub(crate) fn sign_pczt(msg: ZcashSignPczt) -> Result<ZcashSpendAuthSignatures> 
 
     // Up before the session starts: the bar tracks PCZT bytes verified.
     let mut progress = Progress::show(Some(tr!("progress__loading_transaction")), None, false)?;
-    // Builds the persistent Pasta and orchard caches once, before the
-    // session's first allocation, so they sit low in the heap.
-    keeping_alive(&mut progress, ironwood::prewarm_with_progress)?;
-    let fvk = Wiped(FullViewingKey::from(&keys.spending_key));
-    progress.keep_alive()?;
+    let fvk = prepare(&keys, &mut progress)?;
     let mut session = begin(&request, &keys, &fvk).map_err(rejected)?;
 
     let mut transfer_id = [0; TRANSFER_ID_BYTES];
@@ -117,10 +113,7 @@ pub(crate) fn sign_pczt(msg: ZcashSignPczt) -> Result<ZcashSpendAuthSignatures> 
             progress.report((1000 * verified / u64::from(request.pczt_length)) as u32)?;
             // One chunk may complete several outputs; each comes back
             // separately, and the rest is fed again after its confirmation.
-            let (consumed, event) = keeping_alive(&mut progress, |tick| {
-                session.feed_with_progress(&chunk[fed..], &fvk, tick)
-            })?
-            .map_err(rejected)?;
+            let (consumed, event) = feed(&mut session, &chunk[fed..], &fvk, &mut progress)?;
             fed += consumed;
             match event {
                 Event::ConfirmTransparentOutput(output) => {
@@ -147,14 +140,7 @@ pub(crate) fn sign_pczt(msg: ZcashSignPczt) -> Result<ZcashSpendAuthSignatures> 
                     if output.kind != OutputKind::Payment {
                         return Err(rejected(ErrorCode::State));
                     }
-                    let address = payment_address(request.network, output.receiver, user_address)?;
-                    let amount = format_amount(output.value, request.network);
-                    confirm_output(&address, &amount, number, &source)?;
-                    match &output.memo {
-                        Memo::Empty => {}
-                        Memo::Text(text) => confirm_memo(text.as_str(), false, number)?,
-                        Memo::Digest(digest) => confirm_memo(&hex(digest), true, number)?,
-                    }
+                    confirm_payment(request.network, &output, user_address, number, &source)?;
                     number += 1;
                 }
                 Event::Review(reviewed) => review = Some(reviewed),
@@ -170,7 +156,36 @@ pub(crate) fn sign_pczt(msg: ZcashSignPczt) -> Result<ZcashSpendAuthSignatures> 
     confirm_totals(review.projection(), &request, &label, &path)?;
     session.approve(review.token()).map_err(rejected)?;
 
-    // One RedPallas signature per real spend.
+    Ok(ZcashSpendAuthSignatures {
+        transfer_id: transfer_id.to_vec(),
+        records: sign(&mut session, &review, keys)?,
+    })
+}
+
+// The functions marked `#[inline(never)]` below keep their locals off the
+// stack while the session verifies an action, the app's deepest call chain:
+// inlined into `sign_pczt`, the screens, key setup and signing overflowed the
+// 32 KiB stack there on the device.
+
+/// Builds the persistent Pasta and orchard caches before the session's first
+/// allocation, so they sit low in the heap, then derives the account's full
+/// viewing key.
+#[inline(never)]
+fn prepare(keys: &AccountKeys, progress: &mut Progress) -> Result<Wiped<FullViewingKey>> {
+    keeping_alive(progress, ironwood::prewarm_with_progress)?;
+    let fvk = Wiped(FullViewingKey::from(&keys.spending_key));
+    progress.keep_alive()?;
+    Ok(fvk)
+}
+
+/// One RedPallas signature per real spend, as `pool ‖ action_index ‖
+/// signature` records. The spending key is dropped once `ask` is derived.
+#[inline(never)]
+fn sign(
+    session: &mut Session<Hedged<DeviceRng>>,
+    review: &Review,
+    keys: AccountKeys,
+) -> Result<Vec<u8>> {
     let mut progress = Progress::show(Some(tr!("progress__signing_transaction")), None, false)?;
     let ask = Wiped(SpendAuthorizingKey::from(&keys.spending_key));
     drop(keys);
@@ -190,10 +205,7 @@ pub(crate) fn sign_pczt(msg: ZcashSignPczt) -> Result<ZcashSpendAuthSignatures> 
     if records.is_empty() {
         return Err(Error::DataError("Zcash signing failed"));
     }
-    Ok(ZcashSpendAuthSignatures {
-        transfer_id: transfer_id.to_vec(),
-        records,
-    })
+    Ok(records)
 }
 
 /// Starts a session for the account's full viewing key. The nonce hedge is
@@ -221,6 +233,20 @@ fn begin(
     )?;
     session.begin(request.pczt_length as usize, fvk, &keys.seed_fingerprint)?;
     Ok(session)
+}
+
+/// Feeds `bytes` to the session, reporting progress while it verifies.
+#[inline(never)]
+fn feed(
+    session: &mut Session<Hedged<DeviceRng>>,
+    bytes: &[u8],
+    fvk: &FullViewingKey,
+    progress: &mut Progress,
+) -> Result<(usize, Event)> {
+    keeping_alive(progress, |tick| {
+        session.feed_with_progress(bytes, fvk, tick)
+    })?
+    .map_err(rejected)
 }
 
 /// Pulls `length` bytes at `offset` from the host. A `ZcashCancel` in place of
@@ -299,8 +325,32 @@ fn payment_address(
     Ok(user_address)
 }
 
+/// A payment output (§7), then its memo if it has one.
+#[inline(never)]
+fn confirm_payment(
+    network: Network,
+    output: &ReviewedOutput,
+    user_address: Option<String>,
+    number: usize,
+    source: &Source<'_>,
+) -> Result<()> {
+    let address = payment_address(network, output.receiver, user_address)?;
+    confirm_output(
+        &address,
+        &format_amount(output.value, network),
+        number,
+        source,
+    )?;
+    match &output.memo {
+        Memo::Empty => Ok(()),
+        Memo::Text(text) => confirm_memo(text.as_str(), false, number),
+        Memo::Digest(digest) => confirm_memo(&hex(digest), true, number),
+    }
+}
+
 /// A transparent output, shown by the address the device solved from its
 /// signed `scriptPubKey` (§8); the wallet's `user_address` is ignored.
+#[inline(never)]
 fn confirm_transparent_output(
     network: Network,
     output: &TransparentOutput,
@@ -320,6 +370,7 @@ fn confirm_transparent_output(
 /// fee and the source account, with the digest-bound expiry height, the
 /// public part of the payment, and the true size of the transaction. The
 /// host's reference height is a policy input only and is not shown.
+#[inline(never)]
 fn confirm_totals(
     projection: &Projection,
     request: &Request,
