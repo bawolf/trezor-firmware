@@ -10,7 +10,9 @@ use rkyv::{
     Archived,
 };
 #[cfg(feature = "app_loading")]
-use trezor_app_sdk::crypto::{Slice, TrezorCryptoEnum, TrezorCryptoResultRef};
+use trezor_app_sdk::crypto::{
+    access_crypto_request, Slice, TrezorCryptoEnum, TrezorCryptoResultRef,
+};
 
 #[cfg(feature = "app_loading")]
 use crate::micropython::gc::Gc;
@@ -30,6 +32,7 @@ extern "C" fn new_deserialize_crypto_message(
 ) -> Obj {
     let block = |_args: &[Obj], kwargs: &Map| {
         let obj: Obj = kwargs.get(Qstr::MP_QSTR_data)?;
+        let message_id: u16 = kwargs.get(Qstr::MP_QSTR_message_id)?.try_into()?;
 
         let data = unwrap!(unsafe { crate::micropython::buffer::get_buffer(obj) });
 
@@ -43,8 +46,9 @@ extern "C" fn new_deserialize_crypto_message(
             unwrap!(List::alloc(unsafe { list.as_slice() })).into()
         }
 
-        // Deserialize the rkyv archived data directly from the static buffer
-        let archived = unsafe { rkyv::access_unchecked::<Archived<TrezorCryptoEnum>>(data) };
+        // The request comes from an untrusted app: validate it before reading.
+        let archived = access_crypto_request(data, message_id)
+            .ok_or(Error::ValueError(c"Invalid crypto request"))?;
 
         // Access the archived data zero-copy using safe Deref access
         let result: Obj = match archived {
@@ -243,7 +247,10 @@ pub static mp_module_trezorcrypto_api: Module = obj_module! {
     /// def deserialize_crypto_message(
     ///     *,
     ///     data: bytes,
+    ///     message_id: int,
     /// ) -> Obj:
-    ///     """Deserialize a crypto message from bytes and return it as a MicroPython object."""
+    ///     """Validate a crypto request for operation `message_id` and return its
+    ///     fields as a MicroPython object. Raises ValueError if it is malformed or
+    ///     another operation."""
     Qstr::MP_QSTR_deserialize_crypto_message => obj_fn_kw!(0, new_deserialize_crypto_message).as_obj(),
 };

@@ -162,9 +162,14 @@ async def run(request: ExtAppMessage) -> ExtAppResponse:
         service, message_id = from_fn_id(msg.fn)
 
         if service == _SERVICE_UI:
-            main_layout_obj, br_code, br_name = trezorui_api.process_ipc_message(
-                data=bytes(msg.data)
-            )
+            try:
+                main_layout_obj, br_code, br_name = trezorui_api.process_ipc_message(
+                    data=bytes(msg.data)
+                )
+            except ValueError as e:
+                if __debug__:
+                    log.error(__name__, f"Invalid UI request: {e}")
+                die(DataError("Invalid UI request"))
 
             result = await interact(
                 main_layout_obj, br_name, br_code, raise_on_cancel=None
@@ -177,7 +182,9 @@ async def run(request: ExtAppMessage) -> ExtAppResponse:
             try:
                 if __debug__:
                     log.debug(__name__, "Processing crypto message")
-                obj = trezorcrypto_api.deserialize_crypto_message(data=bytes(msg.data))
+                obj = trezorcrypto_api.deserialize_crypto_message(
+                    data=bytes(msg.data), message_id=message_id
+                )
 
                 if message_id == _SERVICE_CRYPTO_GET_XPUB:
                     assert len(obj) == 2
@@ -390,7 +397,14 @@ async def run(request: ExtAppMessage) -> ExtAppResponse:
         elif service == _SERVICE_PROGRESS:
             if __debug__:
                 log.debug(__name__, f"Processing progress message: {message_id}")
-            obj = trezorui_api.deserialize_progress_message(data=bytes(msg.data))
+            try:
+                obj = trezorui_api.deserialize_progress_message(
+                    data=bytes(msg.data), message_id=message_id
+                )
+            except ValueError as e:
+                if __debug__:
+                    log.error(__name__, f"Invalid progress request: {e}")
+                die(DataError("Invalid progress request"))
             if message_id == _SERVICE_PROGRESS_INIT:
                 # Initialize a progress context
                 assert isinstance(obj, tuple)
