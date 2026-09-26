@@ -139,7 +139,8 @@ async def run(request: ExtAppMessage) -> ExtAppResponse:
     progress_obj: ProgressLayout | None = None
 
     def crypto_resp_cb(data: bytes) -> None:
-        log.debug(__name__, "Sending crypto result")
+        if __debug__:
+            log.debug(__name__, "Sending crypto result")
         io.ipc_send(task_id, fn_id(_SERVICE_CRYPTO, 0), data)
 
     def ui_resp_cb(data: bytes) -> None:
@@ -168,7 +169,8 @@ async def run(request: ExtAppMessage) -> ExtAppResponse:
             result = await interact(
                 main_layout_obj, br_name, br_code, raise_on_cancel=None
             )
-            log.debug(__name__, f"UI interaction result: {result}")
+            if __debug__:
+                log.debug(__name__, f"UI interaction result: {result}")
             # Serialize and send the result back
             trezorui_api.send_ui_result(result=result, ipc_cb=ui_resp_cb)
 
@@ -250,7 +252,8 @@ async def run(request: ExtAppMessage) -> ExtAppResponse:
                         )
 
                     except Exception:
-                        log.error(__name__, "Failed to sign digest")
+                        if __debug__:
+                            log.error(__name__, "Failed to sign digest")
                         result = False
 
                 elif message_id == _SERVICE_CRYPTO_SIGN_TYPED_HASH:
@@ -284,7 +287,8 @@ async def run(request: ExtAppMessage) -> ExtAppResponse:
                         )
 
                     except Exception:
-                        log.error(__name__, "Failed to sign typed hash")
+                        if __debug__:
+                            log.error(__name__, "Failed to sign typed hash")
                         result = False
 
                 elif message_id == _SERVICE_CRYPTO_GET_ADDRESS_MAC:
@@ -310,7 +314,8 @@ async def run(request: ExtAppMessage) -> ExtAppResponse:
                             keychain,
                         )
                     except Exception:
-                        log.error(__name__, "Failed to get address MAC")
+                        if __debug__:
+                            log.error(__name__, "Failed to get address MAC")
                         result = False
                 elif message_id == _SERVICE_CRYPTO_CHECK_ADDRESS_MAC:
                     assert len(obj) == 3
@@ -337,7 +342,8 @@ async def run(request: ExtAppMessage) -> ExtAppResponse:
                         )
                         result = True
                     except Exception:
-                        log.error(__name__, "Failed to check address MAC")
+                        if __debug__:
+                            log.error(__name__, "Failed to check address MAC")
                         result = False
                 elif message_id == _SERVICE_CRYPTO_VERIFY_NONCE_CACHE:
                     nonce: bytes = obj
@@ -348,7 +354,8 @@ async def run(request: ExtAppMessage) -> ExtAppResponse:
                             )
                         result = await _verify_nonce_cache(bytes(nonce))
                     except Exception:
-                        log.error(__name__, "Failed to verify nonce cache")
+                        if __debug__:
+                            log.error(__name__, "Failed to verify nonce cache")
                         result = False
 
                 elif message_id == _SERVICE_CRYPTO_GET_ZIP32_ORCHARD_ACCOUNT:
@@ -382,11 +389,13 @@ async def run(request: ExtAppMessage) -> ExtAppResponse:
                         result = False
 
                 else:
-                    log.error(__name__, f"Unknown crypto operation: {message_id}")
+                    if __debug__:
+                        log.error(__name__, f"Unknown crypto operation: {message_id}")
                     die(DataError("Unknown crypto operation"))
 
             except Exception:
-                log.error(__name__, "Failed to process crypto message")
+                if __debug__:
+                    log.error(__name__, "Failed to process crypto message")
                 result = False
 
             # Serialize and send the result back
@@ -511,7 +520,8 @@ async def _get_xpub(address_n: list[int], keychain: Keychain, xpub_magic: int) -
 
     if address_n and address_n[0] == paths.SLIP25_PURPOSE:
         # UnlockPath is required to access SLIP25 paths.
-        log.error(__name__, "Forbidden key path: SLIP25 purpose detected")
+        if __debug__:
+            log.error(__name__, "Forbidden key path: SLIP25 purpose detected")
         raise ForbiddenKeyPath()
 
     node = keychain.derive(address_n)
@@ -527,19 +537,22 @@ async def _get_public_key(
 
     if address_n and address_n[0] == paths.SLIP25_PURPOSE:
         # UnlockPath is required to access SLIP25 paths.
-        log.error(__name__, "Forbidden key path: SLIP25 purpose detected")
+        if __debug__:
+            log.error(__name__, "Forbidden key path: SLIP25 purpose detected")
         raise ForbiddenKeyPath()
 
-    log.debug(__name__, f"Deriving keychain for path: {address_n}")
+    if __debug__:
+        log.debug(__name__, f"Deriving keychain for path: {address_n}")
     node = keychain.derive(address_n)
 
     if curve_name == "secp256k1":
         from trezor.crypto.curve import secp256k1
 
-        log.debug(
-            __name__,
-            f"Getting secp256k1 public key bytes for path: {address_n} compressed={compressed}",
-        )
+        if __debug__:
+            log.debug(
+                __name__,
+                f"Getting secp256k1 public key bytes for path: {address_n} compressed={compressed}",
+            )
         return secp256k1.publickey(node.private_key(), compressed)
     elif curve_name == "nist256p1":
         from trezor.crypto.curve import nist256p1
