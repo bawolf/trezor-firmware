@@ -1009,6 +1009,28 @@ impl<'a> TrezorProgressEnum<'a> {
     }
 }
 
+/// Checks an app's UI-service request, as [`access_crypto_request`] does.
+pub fn access_ui_request(bytes: &[u8]) -> Option<&ArchivedTrezorUiEnum<'_>> {
+    rkyv::api::low::access::<ArchivedTrezorUiEnum<'_>, rkyv::rancor::Failure>(bytes).ok()
+}
+
+/// Checks an app's Progress-service request, as [`access_crypto_request`] does.
+pub fn access_progress_request(bytes: &[u8]) -> Option<&ArchivedTrezorProgressEnum<'_>> {
+    rkyv::api::low::access::<ArchivedTrezorProgressEnum<'_>, rkyv::rancor::Failure>(bytes).ok()
+}
+
+/// The alignment of IPC message data on the device.
+///
+/// The kernel aligns each message to `sizeof(size_t)` (`IPC_DATA_ALIGNMENT` in
+/// `sys/ipc/ipc.c`): 4 bytes on the device, 8 on the 64-bit emulator. An app
+/// reads Core's replies in place, and a checked `rkyv::access` refuses an
+/// archive that is not aligned for its type, so a reply type aligned to more
+/// than this would be read on the emulator but refused on the device.
+pub const DEVICE_IPC_ALIGNMENT: usize = 4;
+
+const _: () = assert!(align_of::<ArchivedTrezorCryptoResultRef<'_>>() <= DEVICE_IPC_ALIGNMENT);
+const _: () = assert!(align_of::<ArchivedTrezorUiResult>() <= DEVICE_IPC_ALIGNMENT);
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1204,6 +1226,117 @@ mod tests {
         let at = bytes.windows(5).position(|w| w == b"0xabc").unwrap();
         bytes[at] = 0xff;
         assert!(access_crypto_request(&bytes, 4).is_none());
+    }
+
+    /// `bytes` copied to each offset 0..16 of a 16-aligned buffer.
+    fn at_every_offset(bytes: &[u8]) -> impl Iterator<Item = (usize, rkyv::util::AlignedVec<16>)> {
+        (0..16).map(move |offset| {
+            let mut buffer = rkyv::util::AlignedVec::<16>::new();
+            buffer.extend_from_slice(&[0; 16][..offset]);
+            buffer.extend_from_slice(bytes);
+            (offset, buffer)
+        })
+    }
+
+    /// Core's validators accept a request exactly where it is aligned for its
+    /// type, and refuse it (rather than panic) anywhere else.
+    #[test]
+    fn misaligned_requests_are_refused() {
+        let path: &[u32] = &[0x8000_0020, 0x8000_0085, 0x8000_0000];
+        let crypto = [
+            TrezorCryptoEnum::GetZip32OrchardAccount {
+                coin_type: 1,
+                account: 0,
+            },
+            // `chain_id` makes this type 8-aligned.
+            TrezorCryptoEnum::SignTypedHash {
+                address_n: path.into(),
+                hash: [9; 32],
+                encoded_network: None,
+                encoded_token: None,
+                chain_id: Some(1),
+                show_progress: false,
+            },
+        ];
+        let align = align_of::<ArchivedTrezorCryptoEnum>();
+        for request in &crypto {
+            let id = u16::from(request.id());
+            for (offset, buffer) in at_every_offset(&archive(request)) {
+                let accepted = access_crypto_request(&buffer[offset..], id).is_some();
+                assert_eq!(accepted, offset % align == 0, "crypto at offset {}", offset);
+            }
+        }
+
+        let warning = TrezorUiEnum::ShowWarning(ShowWarning::new(
+            "Important",
+            "Back up with 24 words",
+            "Continue anyway",
+            Some("zcash_weak_backup"),
+            3,
+            false,
+            true,
+        ));
+        let ui = rkyv::to_bytes::<rkyv::rancor::Failure>(&warning).unwrap();
+        let align = align_of::<ArchivedTrezorUiEnum>();
+        for (offset, buffer) in at_every_offset(&ui) {
+            let accepted = access_ui_request(&buffer[offset..]).is_some();
+            assert_eq!(accepted, offset % align == 0, "UI at offset {}", offset);
+        }
+
+        let report = TrezorProgressEnum::Update {
+            description: Some("Deriving".into()),
+            value: 500,
+        };
+        let progress = rkyv::to_bytes::<rkyv::rancor::Failure>(&report).unwrap();
+        let align = align_of::<ArchivedTrezorProgressEnum>();
+        for (offset, buffer) in at_every_offset(&progress) {
+            let accepted = access_progress_request(&buffer[offset..]).is_some();
+            assert_eq!(
+                accepted,
+                offset % align == 0,
+                "progress at offset {}",
+                offset
+            );
+        }
+    }
+
+    /// An app reads Core's replies where the device kernel puts them: 4-aligned,
+    /// and never 8-aligned when the message header is.
+    #[test]
+    fn replies_are_read_at_the_device_ipc_alignment() {
+        use rkyv::rancor::Failure;
+
+        let account = TrezorCryptoResultRef::Zip32OrchardAccount {
+            spending_key: [1; 32],
+            seed_fingerprint: [2; 32],
+            weak_backup: true,
+        };
+        let bytes = rkyv::to_bytes::<Failure>(&account).unwrap();
+        for (offset, buffer) in at_every_offset(&bytes).step_by(DEVICE_IPC_ALIGNMENT) {
+            let archived =
+                rkyv::access::<ArchivedTrezorCryptoResultRef, Failure>(&buffer[offset..]);
+            assert!(
+                matches!(
+                    archived,
+                    Ok(ArchivedTrezorCryptoResultRef::Zip32OrchardAccount {
+                        weak_backup: true,
+                        ..
+                    })
+                ),
+                "crypto reply at offset {}",
+                offset
+            );
+        }
+
+        let bytes = rkyv::to_bytes::<Failure>(&TrezorUiResult::Integer(7)).unwrap();
+        for (offset, buffer) in at_every_offset(&bytes).step_by(DEVICE_IPC_ALIGNMENT) {
+            let archived = rkyv::access::<ArchivedTrezorUiResult, Failure>(&buffer[offset..]);
+            assert!(
+                matches!(archived, Ok(ArchivedTrezorUiResult::Integer(n)) if *n == 7),
+                "UI reply at offset {}",
+                offset
+            );
+        }
     }
 
     /// Ensures every variant of TrezorProgressEnum has a unique id()
