@@ -28,6 +28,7 @@ import pytest
 
 from trezorlib import exceptions, messages
 from trezorlib.debuglink import DebugSession as Session
+from trezorlib.debuglink import LayoutType
 
 from . import zcash_ext
 from .common import (
@@ -109,9 +110,12 @@ def test_receive_address(
         (B.Address, "show_address"),
     ]
     assert flow.address.startswith("".join(address_pieces(flow.screen, flow.address)))
-    assert flow.subtitle == (
-        "Mainnet" if network == ZcashNetwork.Mainnet else "Testnet"
-    )
+    # Eckhart (T3W1) shows the network as the address screen's subtitle;
+    # Delizia's (T3T1) address screen has no subtitle.
+    if session.debug.layout_type is LayoutType.Eckhart:
+        assert flow.subtitle == (
+            "Mainnet" if network == ZcashNetwork.Mainnet else "Testnet"
+        )
 
 
 def test_receive_address_chunkify(session: Session, instance_id: int) -> None:
