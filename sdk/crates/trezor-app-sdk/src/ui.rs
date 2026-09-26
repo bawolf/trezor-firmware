@@ -11,6 +11,8 @@
 //! # Ok::<(), trezor_app_sdk::Error>(())
 //! ```
 
+use core::sync::atomic::{AtomicBool, Ordering};
+
 use rkyv::api::low::deserialize;
 use rkyv::rancor::Failure;
 use rkyv::{Archived, to_bytes};
@@ -75,16 +77,19 @@ fn ipc_progress_call(value: &TrezorProgressEnum) -> Result<()> {
     Ok(())
 }
 
-/// Initializes a progress screen.
-///
-/// Must be called before [`update_progress`] and [`end_progress`].
+/// Whether Core shows a progress screen for the current request. Core stops an
+/// app that updates or ends progress it never initialized, so `update_progress`
+/// and `end_progress` check this first.
+static PROGRESS_SHOWN: AtomicBool = AtomicBool::new(false);
+
+/// Initializes a progress screen, replacing one already shown.
 ///
 /// ## Example
 ///
 /// ```no_run
 /// use trezor_app_sdk::ui;
 /// ui::init_progress(Some("Signing..."), Some("Please wait"), false, false)?;
-/// ui::update_progress(None, 50)?;
+/// ui::update_progress(None, 500)?;
 /// ui::end_progress()?;
 /// # Ok::<(), trezor_app_sdk::Error>(())
 /// ```
@@ -100,24 +105,31 @@ pub fn init_progress(
         indeterminate,
         danger,
     };
-    ipc_progress_call(&value)
+    ipc_progress_call(&value)?;
+    PROGRESS_SHOWN.store(true, Ordering::Relaxed);
+    Ok(())
 }
 
-/// Updates the progress bar value and optionally the description text.
+/// Sets the progress bar to `value` (0..=1000) and optionally replaces the
+/// description text.
 ///
-/// Must be called after [`init_progress`].
+/// Fails with [`Error::DataError`], without contacting Core, if no progress
+/// screen is shown ([`init_progress`] was not called, or the screen ended).
 ///
 /// ## Example
 ///
 /// ```no_run
 /// use trezor_app_sdk::ui;
 /// ui::init_progress(Some("Working..."), None, false, false)?;
-/// ui::update_progress(Some("50% done"), 50)?;
-/// ui::update_progress(Some("Almost done"), 90)?;
+/// ui::update_progress(Some("50% done"), 500)?;
+/// ui::update_progress(Some("Almost done"), 900)?;
 /// ui::end_progress()?;
 /// # Ok::<(), trezor_app_sdk::Error>(())
 /// ```
 pub fn update_progress(description: Option<&str>, value: u32) -> Result<()> {
+    if !PROGRESS_SHOWN.load(Ordering::Relaxed) {
+        return Err(Error::DataError("Progress not initialized"));
+    }
     let value = TrezorProgressEnum::Update {
         description: description.map(|d| d.into()),
         value,
@@ -125,22 +137,22 @@ pub fn update_progress(description: Option<&str>, value: u32) -> Result<()> {
     ipc_progress_call(&value)
 }
 
-/// Ends and dismisses the progress screen.
-///
-/// Must be called after [`init_progress`] to clean up the progress display.
+/// Ends and dismisses the progress screen. Does nothing if none is shown.
 ///
 /// ## Example
 ///
 /// ```no_run
 /// use trezor_app_sdk::ui;
 /// ui::init_progress(None, None, false, false)?;
-/// ui::update_progress(None, 100)?;
+/// ui::update_progress(None, 1000)?;
 /// ui::end_progress()?;
 /// # Ok::<(), trezor_app_sdk::Error>(())
 /// ```
 pub fn end_progress() -> Result<()> {
-    let value = TrezorProgressEnum::End;
-    ipc_progress_call(&value)
+    if !PROGRESS_SHOWN.swap(false, Ordering::Relaxed) {
+        return Ok(());
+    }
+    ipc_progress_call(&TrezorProgressEnum::End)
 }
 
 /// Runs a sequence of confirmation screens in order, supporting back navigation.
@@ -772,5 +784,21 @@ pub fn should_show_more<'a>(
         Ok(TrezorUiResult::Confirmed) => Ok(false),
         Ok(TrezorUiResult::Info) => Ok(true),
         _ => Err(Error::Cancelled),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Without a progress screen, reports fail and ends do nothing, both
+    /// without contacting Core.
+    #[test]
+    fn progress_without_a_screen() {
+        assert!(matches!(
+            update_progress(None, 500),
+            Err(Error::DataError("Progress not initialized"))
+        ));
+        assert!(end_progress().is_ok());
     }
 }
