@@ -1,6 +1,6 @@
 //! CLI argument types for `cargo app-tool <cmd>`, parsed with `clap`.
 
-use anyhow::Result;
+use anyhow::{Result, ensure};
 use cargo_metadata::Package;
 use clap::{Args, Parser, Subcommand, ValueEnum};
 
@@ -238,6 +238,11 @@ impl BuildArgs {
     /// plus `emulator`/`debug` when those flags are set, plus `dev_keys`
     /// unless this is a `--production` build.
     pub fn resolve_features(&self) -> Result<Vec<&'static str>> {
+        ensure!(
+            !(self.production && self.debug),
+            "--debug cannot be used in production builds"
+        );
+
         let mut features = vec![self.lang.feature_name(), self.log_level.feature_name()];
 
         if let Some(model) = &self.model {
@@ -457,6 +462,14 @@ mod tests {
     fn resolve_features_production_build_omits_dev_keys() {
         let features = build_args(false, false, true).resolve_features().unwrap();
         assert!(!features.contains(&"dev_keys"));
+    }
+
+    #[test]
+    fn resolve_features_rejects_debug_in_production_builds() {
+        let error = build_args(false, true, true)
+            .resolve_features()
+            .unwrap_err();
+        assert!(error.to_string().contains("production"));
     }
 
     #[test]
