@@ -33,8 +33,8 @@ sdk-wip draft is a note for the branch owner, not a PR.
 |---|---|---|---|---|---|---|
 | [run-log-pyopt](run-log-pyopt.md) | `extapp/run-log-pyopt` @ `cf7d5bc6a3` | sdk-wip | note: bug fix | bieleluk; matejcik | — | standalone (PYOPT=1 T3T1 emulator: Core fatal before, xpub after); no test |
 | [killed-not-timeout](killed-not-timeout.md) | `extapp/killed-not-timeout` @ `fc136e637c` | sdk-wip | note: bug fix | bieleluk | — | standalone (scratch Tron panic: "Timeout" before, "Task stopped" after); no test |
-| [run-coin-types](run-coin-types.md) | `extapp/run-coin-types` @ `4640bbee69` | sdk-wip | note: 2 bug fixes | bieleluk | — | commit 1 standalone (sdk-wip's function run on the host); commit 2 test fails (Core fatal) before, passes after |
-| [typed-hash-entitlement](typed-hash-entitlement.md) | `extapp/typed-hash-entitlement` @ `cdafac07e0` | sdk-wip | note: security bug fix | bieleluk; matejcik | run-coin-types (built on it; same test file) | standalone end to end (scratch Tron app gets an Ethereum signature before, refused after); 4 unit tests after, full Core unit suite passes |
+| [run-coin-types](run-coin-types.md) | `extapp/run-coin-types` @ `7b126357ca` | sdk-wip | note: 2 bug fixes | bieleluk | — | commit 1 standalone (sdk-wip's function run on the host); commit 2 test fails (Core fatal) before, passes after |
+| [typed-hash-entitlement](typed-hash-entitlement.md) | `extapp/typed-hash-entitlement` @ `23599d27b6` | sdk-wip | note: security bug fix | bieleluk; matejcik | run-coin-types (built on it; same test file) | standalone end to end (scratch Tron app gets an Ethereum signature before, refused after); 4 unit tests after, full Core unit suite passes |
 | [sdk-allocator-heap](sdk-allocator-heap.md) | `extapp/sdk-allocator-heap` @ `5f235435ed` | sdk-wip | note: bug fix | bieleluk | — (trivial manifest conflict with ipc-buffer-size) | standalone, deterministic (xtask size report); Ethereum subset: 3 allocator panics before, none after |
 | [emulator-declared-heap](emulator-declared-heap.md) | `extapp/emulator-declared-heap` @ `d502e1ed4d` | sdk-wip | note: feature (+ sample fix) | cepetr (loader); bieleluk | sdk-allocator-heap | standalone (Ethereum suite at declared heaps) |
 | [sdk-progress-api](sdk-progress-api.md) | `extapp/sdk-progress-api` @ `65166b3176` | sdk-wip | note: 2 bug fixes + feature | bieleluk; vojczejk (overlaps his modui progress) | — | standalone (Ethereum subset 0 → 8 of 15); SDK test after |
@@ -68,10 +68,8 @@ cherry-picked onto `extapp/run-coin-types`.
   `CheckAddressMac` arms, which its message did not say.
 - The older local `fix/*` branches are superseded by these `extapp/*` ones;
   `fix/extapp-progress-variant-id` by `extapp/bridge-validate-untrusted-input`.
-- Open, for the next push: the body of `4640bbee69` (run-coin-types) says an
-  empty component "indexed past the end of a list". Only a pattern with fewer
-  than three components does (the fatal assert); the empty components fail
-  differently. The draft says it correctly.
+- run-coin-types commit 2 was reworded (`4640bbee69` → `7b126357ca`, same tree), and
+  typed-hash-entitlement was rebased onto it (`cdafac07e0` → `23599d27b6`, same tree).
 
 ## Suggested order
 

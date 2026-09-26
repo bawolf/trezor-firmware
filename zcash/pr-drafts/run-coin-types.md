@@ -7,15 +7,15 @@ after this one.
 Rerun 2026-09-26: commit 1's repro on sdk-wip's `run.py`
 (`pr-drafts-rerun/logs/coin-types-extract-base.log`); the tip's test file with
 `run.py` at commit 1 `82ee9d3322` (`coin-types-commit1-with-tip-test.log`) and
-at the pushed tip `4640bbee69` (`coin-types-tip.log`), T3W1 non-frozen
+at the pushed tip `4640bbee69` (`coin-types-tip.log`; same tree as the current tip), T3W1 non-frozen
 `--apps` emulator built at each. No local changes. The Ethereum sample suite
 ran on typed-hash-entitlement, which contains this branch
 (`eth-pass-set-sdkwip-vs-typed-hash.txt`; the base run's 30 s worktree
 switch is in `INCIDENTS.txt`); the Tron suite was not run.
-Open for the next push: the body of `4640bbee69` says an empty component also
-"indexed past the end of a list"; only the short pattern does.
+Commit 2's message was reworded on 2026-09-26 (`4640bbee69` → `7b126357ca`, same tree) so it no
+longer says an empty component indexes past a list.
 
-Branch: https://github.com/bawolf/trezor-firmware/tree/extapp/run-coin-types @ `4640bbee69`
+Branch: https://github.com/bawolf/trezor-firmware/tree/extapp/run-coin-types @ `7b126357ca`
 (two commits on `bieleluk/sdk-wip` @ `4cd93ff4d8`)
 
 ---
@@ -25,7 +25,7 @@ one coin type, such as a mainnet and a testnet pattern. And a pattern with
 fewer than three components ended Core.
 
 - `82ee9d3322` fix(core): allow extapp path patterns with different coin types
-- `4640bbee69` fix(core): refuse a malformed extapp path pattern with a DataError
+- `7b126357ca` fix(core): refuse a malformed extapp path pattern with a DataError
 
 **Reproduce.**
 - Several coin types: [repro/run-coin-types/extract_slip44_id.py](repro/run-coin-types/extract_slip44_id.py)

@@ -6,7 +6,7 @@ commit message and test are already public on our fork, so it is handled like
 the `bridge-*` notes (README, "Security handling"). `_sign_typed_hash` is
 identical on `bieleluk/sdk-wip`, `bieleluk/stabby`, `cepetr/apptool` and
 `vojczejk/sdk-wip-modui`; this patch is against sdk-wip.
-Rerun 2026-09-26 on sdk-wip and on the pushed tip `cdafac07e0` (T3W1 non-frozen
+Rerun 2026-09-26 on sdk-wip and on `cdafac07e0` (same tree as the current tip; T3W1 non-frozen
 `--apps` emulator built at each): repro before/after
 (`pr-drafts-rerun/logs/typed-hash-{base,tip}.log`), `test_apps.extapp.run.py`
 9/9 and the full Core unit suite 136/136 at the tip
@@ -17,7 +17,7 @@ switched for about 30 s to a tree with byte-identical Python and tests, see
 cherry-picked for the emulator app); not needed on Linux.
 
 Branch: https://github.com/bawolf/trezor-firmware/tree/extapp/typed-hash-entitlement
-@ `cdafac07e0`. It is on `extapp/run-coin-types` @ `4640bbee69`, so it **depends on
+@ `23599d27b6`. It is on `extapp/run-coin-types` @ `7b126357ca`, so it **depends on
 run-coin-types** (2 commits on `bieleluk/sdk-wip` @ `4cd93ff4d8`), and adds its test class
 to that branch's `test_apps.extapp.run.py`. It touches only `core/src/apps/extapp/run.py`
 and that test file.
