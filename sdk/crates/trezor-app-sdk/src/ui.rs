@@ -13,7 +13,7 @@ pub use crate::traits::ui::{
 
 use core::sync::atomic::{AtomicBool, Ordering};
 
-use crate::app_runtime2::get_ui_or_die;
+use crate::app_runtime2::{get_ui_or_die, systick_ms};
 use crate::traits::ui::{UiV1Dyn as _, opt_bytes};
 use crate::{Error, IntoAppResult, Result};
 
@@ -394,6 +394,8 @@ static PROGRESS_SHOWN: AtomicBool = AtomicBool::new(false);
 /// Starts a progress indicator, with an optional `description`/`title` and
 /// whether it's `indeterminate` (no known end point) or `danger`ous (drawn
 /// in a warning style). Replaces one already shown.
+///
+/// Prefer [`Progress`], which also ends the screen on every return path.
 pub fn init_progress<'a>(
     description: Option<&'a str>,
     title: Option<&'a str>,
@@ -426,6 +428,77 @@ pub fn end_progress() -> Result<()> {
         return Ok(());
     }
     get_ui_or_die().end_progress().into_app_result()
+}
+
+/// A progress screen for the duration of a long computation, ended when
+/// dropped.
+///
+/// Call [`Progress::keep_alive`] from the computation's inner loop to stay
+/// within Core's 1 s limit ("Long computations" in `sdk/doc/development.md`).
+///
+/// ## Example
+///
+/// ```no_run
+/// use trezor_app_sdk::ui::Progress;
+/// # fn step(_: u32) {}
+/// let mut progress = Progress::show(None, None, true)?;
+/// for i in 0..1000 {
+///     step(i);
+///     progress.keep_alive()?;
+/// }
+/// drop(progress); // or let it go out of scope
+/// # Ok::<(), trezor_app_sdk::Error>(())
+/// ```
+#[must_use = "the progress screen ends when this is dropped"]
+pub struct Progress {
+    value: u32,
+    reported_at_ms: u32,
+}
+
+impl Progress {
+    /// Shortest interval between two reports sent by [`Progress::keep_alive`].
+    pub const KEEP_ALIVE_MS: u32 = 100;
+
+    /// Shows a progress screen at value 0; the arguments are those of
+    /// [`init_progress`].
+    pub fn show(
+        description: Option<&str>,
+        title: Option<&str>,
+        indeterminate: bool,
+    ) -> Result<Self> {
+        init_progress(description, title, indeterminate, false)?;
+        Ok(Self {
+            value: 0,
+            reported_at_ms: systick_ms(),
+        })
+    }
+
+    /// Sets the progress bar to `value` (0..=1000).
+    pub fn report(&mut self, value: u32) -> Result<()> {
+        update_progress(None, value)?;
+        self.value = value;
+        self.reported_at_ms = systick_ms();
+        Ok(())
+    }
+
+    /// Repeats the last reported value if [`Progress::KEEP_ALIVE_MS`] has
+    /// passed since it, so an indeterminate screen can use it without ever
+    /// calling [`Progress::report`].
+    pub fn keep_alive(&mut self) -> Result<()> {
+        let elapsed = systick_ms().wrapping_sub(self.reported_at_ms);
+        if elapsed >= Self::KEEP_ALIVE_MS {
+            self.report(self.value)?;
+        }
+        Ok(())
+    }
+}
+
+impl Drop for Progress {
+    fn drop(&mut self) {
+        // `end_progress` has already cleared the local state; a failed End
+        // leaves only Core's screen, which the next screen replaces.
+        let _ = end_progress();
+    }
 }
 
 #[cfg(test)]
