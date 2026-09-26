@@ -33,6 +33,7 @@ paths = [
 | `vendor` | App vendor name |
 | `stack-size` | Stack memory allocated for the app in bytes |
 | `heap-size` | Heap memory allocated for the app in bytes |
+| `ipc-buffer-size` | Optional: size in bytes of the inbox Core's messages arrive in (default 16384) |
 | `app-ring` | Privilege ring level; `0` is the most privileged |
 | `curves` | List of elliptic curves the app is permitted to use |
 | `paths` | Allowed BIP32 derivation path patterns (see below) |
@@ -53,6 +54,10 @@ The exact amount of heap the app receives depends on the target:
 - On the Unix emulator, the app instead receives *all* remaining arena memory, regardless of `heap-size`.
 
 `applet_main` hands that region (`app_get_heap`) to the SDK's Rust global allocator, so `heap-size` is the allocator you get on hardware. The emulator does not catch an app that outgrows it: measure the app's peak heap use and declare it with a margin.
+
+### IPC buffer size
+
+`ipc-buffer-size` is the size, in bytes, of the inbox in which the app receives Core's messages: host requests forwarded by Core and the replies of Core's services. It must hold the largest message the app receives plus a 12-byte kernel header (16 B on the 64-bit emulator). It is a power of two from 256 B to 64 KiB (the SDK allocates it as a `usize` array), and 16 KiB if omitted or 0. The SDK allocates it statically, so it counts against the app's RAM arena as part of the read-write segment.
 
 ### Application privilege
 
@@ -385,7 +390,7 @@ The SDK verifies that the API version required by the app is available on the ru
 
 #### 2. IPC Buffer Initialization
 
-The IPC buffer used for communication with Trezor Core is set up. Its size is configured via the `static_service!` macro and must be large enough to hold the largest message the app sends to Core.
+The IPC buffer used for communication with Trezor Core is set up. Its size is the manifest's [`ipc-buffer-size`](#ipc-buffer-size), which must hold the largest message the app receives.
 
 > ⚠️ No communication with Core (UI, Crypto, WireContinue, etc.) is available before this point.
 

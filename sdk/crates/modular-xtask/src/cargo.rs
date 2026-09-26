@@ -20,12 +20,7 @@ pub fn build(args: &BuildArgs) -> Result<()> {
 
     let elf_path = helpers::elf_path(args)?;
 
-    let app = if helpers::is_workspace()? {
-        args.project.clone()
-    } else {
-        helpers::standalone_project_name()?
-    };
-
+    let app = args.package_name()?;
     let app_package = helpers::app_package(&app)?;
 
     let bin_path = binary::convert_elf_to_bin(&elf_path, &app_package)?;

@@ -113,6 +113,55 @@ pub fn heap_size(package: &Package) -> Result<u32> {
     Ok(heap_size as u32)
 }
 
+/// Upper bound on an app's IPC inbox, mirroring the kernel's
+/// `IPC_MAX_BUFFER_SIZE` (`core/embed/sys/ipc/inc/sys/ipc.h`). `ipc_register`
+/// refuses anything larger.
+const IPC_BUFFER_MAX_SIZE: u64 = 64 * 1024;
+
+/// Smallest inbox accepted, as on upstream's stabby branch: anything smaller is
+/// always a mistake.
+const IPC_BUFFER_MIN_SIZE: u64 = 256;
+
+/// Inbox size of an app that does not declare `ipc-buffer-size` (or sets it to
+/// 0): the size every app had before the key existed. Host requests arrive in
+/// the same inbox as Core's replies, so it must also hold the largest of them.
+const IPC_BUFFER_DEFAULT_SIZE: u64 = 16 * 1024;
+
+/// Retrieves the size, in bytes, of the app's IPC inbox from the package
+/// metadata (`ipc-buffer-size`, optional).
+///
+/// The value must be a power of two: the SDK allocates the inbox as a
+/// `[usize]` array, so its size must be a multiple of `size_of::<usize>()`,
+/// which is 4 on the ARM target and 8 on the emulator.
+pub fn ipc_buffer_size(package: &Package) -> Result<u32> {
+    let size = match get_optional_metadata_number(package, "ipc-buffer-size")? {
+        None | Some(0) => IPC_BUFFER_DEFAULT_SIZE,
+        Some(size) => size,
+    };
+
+    ensure!(
+        size >= IPC_BUFFER_MIN_SIZE,
+        "IPC buffer size {} is too small (min {} bytes)",
+        size,
+        IPC_BUFFER_MIN_SIZE
+    );
+
+    ensure!(
+        size <= IPC_BUFFER_MAX_SIZE,
+        "IPC buffer size {} is too large (max {} bytes)",
+        size,
+        IPC_BUFFER_MAX_SIZE
+    );
+
+    ensure!(
+        size.is_power_of_two(),
+        "IPC buffer size {} must be a power of two",
+        size
+    );
+
+    Ok(size as u32)
+}
+
 /// Retrieves the app ring from the package metadata
 pub fn app_ring(package: &Package) -> Result<u8> {
     let ring = get_metadata_number(package, "app-ring")?;
@@ -188,6 +237,18 @@ fn get_metadata_string(package: &Package, key: &str) -> Result<String> {
         .ok_or_else(|| anyhow::anyhow!("{} not found in Cargo.toml", key))?;
 
     Ok(value.to_string())
+}
+
+fn get_optional_metadata_number(package: &Package, key: &str) -> Result<Option<u64>> {
+    let present = package
+        .metadata
+        .get("trezor")
+        .is_some_and(|m| m.get(key).is_some());
+    if present {
+        get_metadata_number(package, key).map(Some)
+    } else {
+        Ok(None)
+    }
 }
 
 fn get_metadata_number(package: &Package, key: &str) -> Result<u64> {
