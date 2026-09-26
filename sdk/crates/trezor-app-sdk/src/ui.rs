@@ -11,6 +11,8 @@ pub use crate::traits::ui::{
     ShowWarning, StrExt, TrezorUiResult,
 };
 
+use core::sync::atomic::{AtomicBool, Ordering};
+
 use crate::app_runtime2::get_ui_or_die;
 use crate::traits::ui::{UiV1Dyn as _, opt_bytes};
 use crate::{Error, IntoAppResult, Result};
@@ -384,9 +386,14 @@ pub fn show_address<'a>(show_address: ShowAddress<'a>) -> UiResult {
         .into_app_result()
 }
 
+/// Whether Core shows a progress screen for the current request. Core stops an
+/// app that updates or ends progress it never initialized, so `update_progress`
+/// and `end_progress` check this first.
+static PROGRESS_SHOWN: AtomicBool = AtomicBool::new(false);
+
 /// Starts a progress indicator, with an optional `description`/`title` and
 /// whether it's `indeterminate` (no known end point) or `danger`ous (drawn
-/// in a warning style).
+/// in a warning style). Replaces one already shown.
 pub fn init_progress<'a>(
     description: Option<&'a str>,
     title: Option<&'a str>,
@@ -395,17 +402,44 @@ pub fn init_progress<'a>(
 ) -> Result<()> {
     get_ui_or_die()
         .init_progress(opt_bytes(description), opt_bytes(title), indeterminate, danger)
-        .into_app_result()
+        .into_app_result()?;
+    PROGRESS_SHOWN.store(true, Ordering::Relaxed);
+    Ok(())
 }
 
 /// Updates the current progress indicator's `description` and `value` (0-1000).
+///
+/// Fails with [`Error::DataError`], without contacting Core, if no progress
+/// indicator is shown ([`init_progress`] was not called, or it ended).
 pub fn update_progress<'a>(description: Option<&'a str>, value: u32) -> Result<()> {
+    if !PROGRESS_SHOWN.load(Ordering::Relaxed) {
+        return Err(Error::DataError("Progress not initialized"));
+    }
     get_ui_or_die()
         .update_progress(opt_bytes(description), value)
         .into_app_result()
 }
 
-/// Ends the current progress indicator.
+/// Ends the current progress indicator. Does nothing if none is shown.
 pub fn end_progress() -> Result<()> {
+    if !PROGRESS_SHOWN.swap(false, Ordering::Relaxed) {
+        return Ok(());
+    }
     get_ui_or_die().end_progress().into_app_result()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Without a progress screen, updates fail and ends do nothing, both
+    /// without contacting Core.
+    #[test]
+    fn progress_without_a_screen() {
+        assert!(matches!(
+            update_progress(None, 500),
+            Err(Error::DataError("Progress not initialized"))
+        ));
+        assert!(end_progress().is_ok());
+    }
 }
