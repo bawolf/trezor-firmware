@@ -9,4 +9,9 @@ enum MessageType {
     MessageType_ZcashAddress = 1;
     MessageType_ZcashGetViewingKey = 2;
     MessageType_ZcashViewingKey = 3;
+    MessageType_ZcashSignPczt = 4;
+    MessageType_ZcashPcztRequest = 5;
+    MessageType_ZcashPcztAck = 6;
+    MessageType_ZcashSpendAuthSignatures = 7;
+    MessageType_ZcashCancel = 8;
 }

@@ -4,10 +4,36 @@
     "version": "2.11.2"
   },
   "translations": {
+    "address_details__account_info": "Account info",
+    "address_details__derivation_path": "Derivation path",
+    "buttons__cancel": "Cancel",
+    "buttons__continue": "Continue",
+    "confirm_total__title_fee": "Fee info",
+    "progress__loading_transaction": "Loading transaction...",
+    "progress__signing_transaction": "Signing transaction...",
+    "send__cancel_sign": {
+      "Delizia": "Cancel sign",
+      "Eckhart": "Cancel sign?"
+    },
+    "send__incl_transaction_fee": "incl. Transaction fee",
+    "send__send_from": "Send from",
+    "send__total_amount": "Total amount",
+    "words__account": "Account",
+    "words__amount": "Amount",
     "words__continue_anyway": "Continue anyway",
     "words__important": "Important",
+    "words__outputs": "outputs",
+    "words__recipient": "Recipient",
+    "words__send": "Send",
+    "words__wallet": "Wallet",
+    "zcash__expires_at_block": "Expires at block",
     "zcash__export_viewing_key": "Export Zcash viewing key?",
+    "zcash__memo": "Memo (text)",
+    "zcash__memo_hash": "Memo (hash)",
+    "zcash__public_amount": "Public amount",
     "zcash__seed_fingerprint_warning": "This also reveals a fingerprint of your recovery seed, which links all of your Zcash accounts.",
+    "zcash__total_actions": "Total actions",
+    "zcash__transparent_payment_warning": "This payment is transparent: amount and recipient are public.",
     "zcash__viewing_key_warning": "The connected app will be able to see and link all activity for this account, but cannot spend.",
     "zcash__weak_backup_warning": "This wallet uses a weaker backup. Move funds to a new wallet with a stronger backup."
   }

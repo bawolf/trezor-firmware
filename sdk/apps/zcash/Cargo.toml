@@ -9,11 +9,12 @@ edition = "2024"
 id = "zcash.trezor.com"
 name = "Zcash"
 vendor = "Bryant Wolf"
-# Heap: 38,010 B peak measured on the host (64-bit), almost all of it the
-# Pallas square-root table built on first use, plus margin. Stack: not measured
-# on hardware yet, twice the samples' 16 KiB.
+# Heap: a 32-action sign peaks at 56,522 B on the host (64-bit), 30,186 B of
+# it the Pallas and orchard caches that stay for the app's life; receive peaks
+# at 38,010 B. 72 KiB leaves ~16 KiB for fragmentation and the IPC and screen
+# buffers. Stack: not measured on hardware yet, twice the samples' 16 KiB.
 stack-size = 32768
-heap-size = 49152
+heap-size = 73728
 app-ring = 0
 # The ZIP-32 Orchard account keys from Core's key service.
 curves = ["zip32-orchard"]
@@ -27,6 +28,7 @@ trezor-app-sdk = { path = "../../crates/trezor-app-sdk" }
 ironwood.workspace = true
 orchard.workspace = true
 prost = { version = "0.14.1", default-features = false, features = ["derive"] }
+rand_core.workspace = true
 # The SDK's log macros expand to ufmt calls.
 ufmt = { version = "0.2.0", default-features = false }
 zcash_address.workspace = true
@@ -65,6 +67,9 @@ log_level_debug = ['trezor-app-sdk/log_level_debug']
 # coexist with the pre-release `digest` the Zcash crates pin.
 emulator = []
 debug = ['trezor-app-sdk/debug']
+# Computes the Sinsemilla generators instead of linking their table: smaller
+# code, slower signing (the Safe 5 configuration of the firmware series).
+computed-generators = ["ironwood/computed-generators"]
 
 # --------------------------------------------------------------------------
 # Automatically derived features (do not enable from outside)

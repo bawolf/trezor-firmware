@@ -1,9 +1,9 @@
 syntax = "proto2";
 package hw.trezor.messages.zcash;
 
-// Every request field that selects what the device derives must be present
-// (marked "required:" below), so that an omitted scalar cannot silently select
-// network or account zero. They are `optional` because prost does not enforce
+// Every request field marked "required:" below must be present, so that an
+// omitted scalar cannot silently become zero (network or account zero, a PCZT
+// chunk at offset zero). They are `optional` because prost does not enforce
 // proto2 `required` and would decode an absent field as zero; the app rejects
 // an absent field itself. The other optional fields are opt-ins: an extra
 // export (include_seed_fingerprint) or a screen-formatting preference
@@ -78,4 +78,72 @@ message ZcashGetViewingKey {
 message ZcashViewingKey {
     required string key = 1;
     optional bytes seed_fingerprint = 2;  // exactly 32 bytes when present
+}
+
+/**
+ * Request: Ask device to sign the Ironwood spends of a PCZT, which the device
+ * pulls in chunks with ZcashPcztRequest. The device reviews each payment as
+ * it arrives and the totals at the end, and returns detached signatures; it
+ * never returns the PCZT.
+ * @start
+ * @next ZcashPcztRequest
+ * @next Failure
+ */
+message ZcashSignPczt {
+    optional ZcashNetwork network = 1;              // required
+    optional uint32 account = 2;                    // required: ZIP-32 account index in 0..2^31-1
+    optional uint32 pczt_length = 3;                // required: total upload length, 1..65536
+    optional uint32 host_reference_height = 4;      // required: host assertion only: NOT a header,
+                                                    // checkpoint, proof, or authenticated statement
+                                                    // of chain state
+}
+
+/**
+ * Response: Device requests one contiguous chunk of the uploaded PCZT.
+ * Requests advance contiguously from offset zero to the declared length with
+ * no gaps, duplicates, sparse writes, blind retry, or resume tokens.
+ * @next ZcashPcztAck
+ * @next ZcashCancel
+ */
+message ZcashPcztRequest {
+    required bytes transfer_id = 1;  // exactly 16 bytes, fresh per request
+    required uint32 offset = 2;
+    required uint32 length = 3;      // exactly min(1024, remaining)
+}
+
+/**
+ * Request: Host supplies the exact requested chunk.
+ * @next ZcashPcztRequest
+ * @next ZcashSpendAuthSignatures
+ * @next Failure
+ */
+message ZcashPcztAck {
+    optional bytes transfer_id = 1;  // required: repeats the requested transfer ID exactly
+    optional uint32 offset = 2;      // required: repeats the requested offset exactly
+    optional bytes data = 3;         // required: exactly the requested length
+}
+
+/**
+ * Request: Abandon the signing request in progress, in place of a
+ * ZcashPcztAck. The device answers Failure(ActionCancelled), also when no
+ * request is in progress.
+ * @next Failure
+ */
+message ZcashCancel {
+}
+
+/**
+ * Response: Spend authorization signatures for every real Ironwood spend of
+ * the uploaded PCZT, sent only once all of them exist. `records` is the
+ * concatenation of fixed 66-byte records in ascending action order:
+ *   pool u8 (0x03 = Ironwood) | action_index u8 | signature [64 bytes]
+ * The host applies each record with the pczt crate's
+ * apply_orchard_spend_auth_signature, which verifies it against the indexed
+ * action's rk and the host-computed sighash, so a record cannot be replayed
+ * into another transaction, pool, or action index.
+ * @end
+ */
+message ZcashSpendAuthSignatures {
+    required bytes transfer_id = 1;  // the transfer the records belong to
+    required bytes records = 2;      // n * 66 bytes, 1 <= n <= 32
 }

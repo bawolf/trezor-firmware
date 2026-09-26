@@ -1,7 +1,7 @@
 # Zcash
 
-Shielded Zcash (Orchard/Ironwood) receive addresses and viewing keys, with the
-`ironwood` crate. The app is its own cargo workspace; `xtask modular` finds it
+Shielded Zcash (Orchard/Ironwood) receive addresses, viewing keys and streamed
+PCZT signing, with the `ironwood` crate. The app is its own cargo workspace; `xtask modular` finds it
 from `core/embed` like the other apps.
 
 The app gets its account keys from Core's ZIP-32 Orchard key service, so the

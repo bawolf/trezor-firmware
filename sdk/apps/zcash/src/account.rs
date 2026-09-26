@@ -102,3 +102,20 @@ pub(crate) fn wipe<T>(value: &mut T) {
     }
     core::sync::atomic::compiler_fence(core::sync::atomic::Ordering::SeqCst);
 }
+
+/// A value [`wipe`]d when dropped, for the `orchard` key types.
+pub(crate) struct Wiped<T>(pub(crate) T);
+
+impl<T> core::ops::Deref for Wiped<T> {
+    type Target = T;
+
+    fn deref(&self) -> &T {
+        &self.0
+    }
+}
+
+impl<T> Drop for Wiped<T> {
+    fn drop(&mut self) {
+        wipe(&mut self.0);
+    }
+}
