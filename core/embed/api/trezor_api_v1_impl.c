@@ -80,6 +80,7 @@ const trezor_api_v1_t trezor_api_v1 = {
     .ipc_send = ipc_send,
     .app_get_heap = app_get_heap,
     .trezor_crypto_v1 = &trezor_crypto_v1,
+    .rng_fill_buffer = rng_fill_buffer,
 };
 
 const void* coreapp_api_get(uint32_t version) {
