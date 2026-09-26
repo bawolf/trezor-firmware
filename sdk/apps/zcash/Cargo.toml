@@ -49,7 +49,9 @@ serde_json = "1"
 # --------------------------------------------------------------------------
 # Model features
 # --------------------------------------------------------------------------
-model_t3t1 = []
+# The Safe 5's 231 KiB app arena has no room for the 64 KiB table of
+# Sinsemilla generators.
+model_t3t1 = ["computed-generators"]
 model_t3w1 = []
 
 # --------------------------------------------------------------------------
