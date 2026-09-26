@@ -10,7 +10,7 @@
 use crate::alloc_types::Vec;
 use crate::app_runtime::{Error, Result, ResultExt};
 use crate::ipc::IpcMessage;
-use crate::service::CoreIpcService;
+use crate::service::{self, CoreIpcService};
 use crate::util::Timeout;
 
 /// Decodes a wire message body into `T` using the implementing codec.
@@ -66,11 +66,17 @@ pub fn wire_error_raw(e: &Error) -> Result<()> {
 /// bypass [`WireRequest`]/[`WireEncode`]/[`WireDecode`] entirely.
 pub fn wire_request_raw(req_bytes: &[u8], id: u16) -> Result<(u16, Vec<u8>)> {
     let message = IpcMessage::new(id, req_bytes);
-    let result = crate::core_services::services_or_die().call(
-        CoreIpcService::WireContinue,
-        &message,
-        Timeout::max(),
-    )?;
+    let result = crate::core_services::services_or_die()
+        .call(CoreIpcService::WireContinue, &message, Timeout::max())
+        .inspect_err(|e| {
+            // The host abandoned this request for a new one, and Core's
+            // progress screen went with it.
+            if let service::Error::UnexpectedService(reply) = e
+                && reply.service() == u16::from(CoreIpcService::WireStart)
+            {
+                crate::ui::forget_progress();
+            }
+        })?;
     Ok((result.id(), result.data().to_vec()))
 }
 
