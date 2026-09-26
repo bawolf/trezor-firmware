@@ -268,17 +268,11 @@ async def run(request: ExtAppMessage) -> ExtAppResponse:
                             log.debug(
                                 __name__, f"Signing typed hash for path: {address_n}"
                             )
-                        keychain = None
-                        if (
-                            encoded_network is None
-                            and encoded_token is None
-                            and chain_id is None
-                        ):
-                            keychain = await get_keychain(curve, schemas)
                         result = await _sign_typed_hash(
+                            curve,
+                            schemas,
                             address_n,
                             data_hash,
-                            keychain,
                             encoded_network,
                             encoded_token,
                             chain_id,
@@ -568,9 +562,10 @@ async def _sign_digest(
 
 
 async def _sign_typed_hash(
+    curve: str,
+    schemas: list[paths.PathSchema],
     address_n: list[int],
     data_hash: bytes,
-    keychain: Keychain | None,
     encoded_network: bytes | None,
     encoded_token: bytes | None,
     chain_id: int | None,
@@ -580,12 +575,26 @@ async def _sign_typed_hash(
     from trezor.crypto.curve import secp256k1
     from trezor.ui.layouts.progress import progress
 
-    if keychain is None:
+    if curve != "secp256k1":
+        raise ValueError  # typed hashes are secp256k1 signatures
+
+    if encoded_network is None and encoded_token is None and chain_id is None:
+        keychain = await get_keychain(curve, schemas)
+    else:
         from apps.ethereum.keychain import (
             PATTERNS_ADDRESS,
             _schemas_from_network,
             _slip44_from_address_n,
         )
+
+        # With definitions, the app may use a path it declares for Ethereum
+        # (coin type 60) on the network they name.
+        if len(address_n) < 2:
+            raise ValueError  # no coin type
+        ethereum_path = list(address_n)
+        ethereum_path[1] = (address_n[1] & paths.HARDENED) | 60
+        if not any(schema.match(ethereum_path) for schema in schemas):
+            raise ValueError  # the app did not declare this path
 
         if chain_id is not None:
             if __debug__:
@@ -601,8 +610,8 @@ async def _sign_typed_hash(
             defs = Definitions.from_encoded(
                 encoded_network, encoded_token, slip44=slip44
             )
-        schemas = _schemas_from_network(PATTERNS_ADDRESS, defs.network)
-        keychain = await get_keychain("secp256k1", schemas, [[b"SLIP-0024"]])
+        network_schemas = _schemas_from_network(PATTERNS_ADDRESS, defs.network)
+        keychain = await get_keychain("secp256k1", network_schemas, [[b"SLIP-0024"]])
 
     await paths.validate_path(keychain, address_n)
 
