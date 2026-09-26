@@ -19,4 +19,7 @@ enum MessageType {
     MessageType_PcztAck = 6;
     MessageType_SpendAuthSignatures = 7;
     MessageType_Cancel = 8;
+    // Debug builds only.
+    MessageType_GetDiagnostics = 9;
+    MessageType_Diagnostics = 10;
 }

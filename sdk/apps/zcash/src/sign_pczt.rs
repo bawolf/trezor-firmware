@@ -223,6 +223,7 @@ fn request_chunk(
         transfer_id: transfer_id.to_vec(),
         offset,
         length,
+        diagnostics: diagnostics(),
     };
     // Not `wire_request`, which would decode a `Cancel` as a `PcztAck`.
     let (id, reply) = wire_request_raw(&request.encode_to_vec(), MessageType::PcztRequest as u16)?;
@@ -242,6 +243,20 @@ fn request_chunk(
         return Err(invalid());
     }
     Ok(data)
+}
+
+/// The app's counters so far, sent with every chunk request by a debug build,
+/// so that the host keeps them if Core stops the app mid-request.
+#[cfg(feature = "debug")]
+fn diagnostics() -> Option<crate::proto::zcash::Diagnostics> {
+    Some(crate::diagnostics_message(
+        trezor_app_sdk::diagnostics::snapshot(),
+    ))
+}
+
+#[cfg(not(feature = "debug"))]
+fn diagnostics() -> Option<crate::proto::zcash::Diagnostics> {
+    None
 }
 
 /// Names a malformed, oversized or out-of-range PCZT.

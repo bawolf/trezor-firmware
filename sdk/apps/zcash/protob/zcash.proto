@@ -63,6 +63,7 @@ message PcztRequest {
     required bytes transfer_id = 1;  // 16 random bytes, the same for every chunk of one PCZT
     required uint32 offset = 2;
     required uint32 length = 3;      // At most 1024
+    optional Diagnostics diagnostics = 4;  // Debug builds only: the counters so far
 }
 
 /**
@@ -98,4 +99,25 @@ message SpendAuthSignatures {
         required uint32 action_index = 1;
         required bytes signature = 2;  // 64-byte RedPallas signature
     }
+}
+
+/**
+ * Request: The app's resource counters since the previous request. Debug builds only.
+ * @start
+ * @next Diagnostics
+ */
+message GetDiagnostics {
+}
+
+/**
+ * Response: The app's resource counters; the request starts new ones
+ * @end
+ */
+message Diagnostics {
+    required uint32 heap_size = 1;                // Bytes in the app heap
+    required uint32 heap_used = 2;                // Bytes allocated now
+    required uint32 heap_peak = 3;                // Most bytes allocated at once
+    required uint32 max_ipc_silence_ms = 4;       // Longest time Core waited for the app's next message
+    required uint32 max_ipc_silence_service = 5;  // Service of the message that ended it
+    required uint32 ipc_sent = 6;                 // Messages the app sent
 }
