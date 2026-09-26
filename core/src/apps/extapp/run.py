@@ -422,11 +422,11 @@ async def run(request: ExtAppMessage) -> ExtAppResponse:
                 value: int = obj[1]
                 progress_obj.report(value, description=description)
             elif message_id == _SERVICE_PROGRESS_STOP:
-                if progress_obj is None:
-                    die(DataError("Progress not initialized"))
-                # Stop the progress context
-                progress_obj.stop()
-                progress_obj = None
+                # The screen is already gone if the host abandoned the request
+                # that showed it.
+                if progress_obj is not None:
+                    progress_obj.stop()
+                    progress_obj = None
             else:
                 die(DataError("Unknown progress message ID"))
 
