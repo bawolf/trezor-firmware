@@ -137,6 +137,12 @@ pub fn verify_nonce_cache(nonce: &[u8]) -> Result<bool> {
         .c()
 }
 
+/// Fills `buffer` with random bytes from the device's hardware random number
+/// generator.
+pub fn random_bytes(buffer: &mut [u8]) {
+    crate::app_runtime2::rng_fill_buffer(buffer);
+}
+
 /// Recovers the public key from `signature` over `message` (hashed with
 /// SHA-256 for the Weierstrass curves) and confirms it matches `public_key`.
 pub fn ec_verify_recover(

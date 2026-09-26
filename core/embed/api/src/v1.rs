@@ -1,3 +1,4 @@
+use stabby::slice::SliceMut;
 use stabby::str::Str;
 use trezor_app_sdk::traits::allocator::GlobalAllocatorV1Vtable;
 use trezor_app_sdk::traits::crypto::CryptoV1Vtable;
@@ -53,5 +54,9 @@ impl TrezorApiV1 for TrezorApiV1Impl {
     extern "C" fn sleep(&self, timeout_ms: u32) {
         let deadline = sys::time::ticks_ms().wrapping_add(timeout_ms);
         sys::sysevent::sleep_until(deadline);
+    }
+
+    extern "C" fn rng_fill_buffer<'a>(&self, mut buffer: SliceMut<'a, u8>) {
+        sys::rng::fill_buffer(&mut buffer);
     }
 }

@@ -18,7 +18,7 @@ use mock_sha3::{
     Sha3_512 as Sha3_512_impl,
 };
 use stabby::boxed::{Box, BoxedSlice};
-use stabby::slice::Slice;
+use stabby::slice::{Slice, SliceMut};
 use stabby::str::Str;
 
 use crate::traits::ApiVariant;
@@ -84,6 +84,11 @@ impl TrezorApiV1 for DummyApi {
     }
 
     extern "C" fn sleep(&self, _timeout_ms: u32) {}
+
+    /// **Stub** — fills the buffer with zeros. Not random.
+    extern "C" fn rng_fill_buffer<'a>(&self, mut buffer: SliceMut<'a, u8>) {
+        buffer.fill(0);
+    }
 }
 
 struct DummyAllocator;

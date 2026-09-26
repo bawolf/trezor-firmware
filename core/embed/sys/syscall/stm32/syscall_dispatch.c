@@ -126,6 +126,7 @@ static inline bool syscall_is_allowed(const applet_t *applet,
     case SYSCALL_IPC_SEND:
     case SYSCALL_APP_GET_HEAP:
     case SYSCALL_APP_GET_IPC_BUFFER_SIZE:
+    case SYSCALL_RNG_FILL_BUFFER:
       return true;
   }
 
