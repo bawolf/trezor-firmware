@@ -1000,16 +1000,18 @@ impl Body {
             progress();
         }
         // Narrow borrows so the `&mut self.scope_classifier` never spans the
-        // later `self` mutations.
+        // later `self` mutations. The check reports progress between the spent
+        // note's commitment, its ownership and its nullifier.
         parsed
             .spend()
-            .verify_nullifier_with_classifier(
+            .verify_nullifier_with_progress(
                 Some(fvk),
                 Some(
                     self.scope_classifier
                         .get_or_insert_with(|| IvkCache(fvk.scope_classifier()))
                         .classifier(),
                 ),
+                progress,
             )
             .map_err(|_| Error::malformed())?;
         progress();
@@ -1059,7 +1061,7 @@ impl Body {
         } else {
             Scope::External
         };
-        let memo = verify_encryption(&parsed, fvk, outgoing_scope, &note)?;
+        let memo = verify_encryption(&parsed, fvk, outgoing_scope, &note, progress)?;
         progress();
         self.records.0[index] = Some(record);
         self.seen += 1;

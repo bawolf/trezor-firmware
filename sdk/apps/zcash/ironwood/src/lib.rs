@@ -1080,7 +1080,7 @@ fn verify_bundle(
         } else {
             Scope::External
         };
-        let memo = verify_encryption(action, fvk, outgoing_scope, &note)?;
+        let memo = verify_encryption(action, fvk, outgoing_scope, &note, &mut || {})?;
         if output_value == 0 {
             projection.padding_outputs += 1;
             continue;
@@ -1137,7 +1137,8 @@ fn verify_bundle(
 /// the signed bytes. Memo policy (design §7): a padding output carries the
 /// empty marker or the all-zero empty text; a change output (hidden) must
 /// carry the empty marker; a payment may carry any memo, classified for
-/// display by [`classify_memo`].
+/// display by [`classify_memo`]. `progress` is called before each recovery
+/// after the first; each takes up to ~0.1 s on the device.
 fn verify_encryption(
     action: &orchard::pczt::Action,
     fvk: &FullViewingKey,
@@ -1147,6 +1148,7 @@ fn verify_encryption(
     // is therefore self-contained: recovery is bound to the cmx-validated note,
     // not to a separately rebuilt one.
     note: &Note,
+    progress: &mut dyn FnMut(),
 ) -> Result<Memo> {
     let output = action.output();
     let domain = IronwoodDomain::for_pczt_action(action);
@@ -1174,6 +1176,7 @@ fn verify_encryption(
     };
     let out_ciphertext = &output.encrypted_note().out_ciphertext;
     if let Some(ock) = output.ock() {
+        progress();
         ensure_malformed(
             orchard::note_encryption::recover_output_bound_with_ock(
                 &domain,
@@ -1186,7 +1189,8 @@ fn verify_encryption(
         )?;
     }
     if note.value().inner() > 0 {
-        let recovers_under = |scope| {
+        let mut recovers_under = |scope| {
+            progress();
             orchard::note_encryption::recover_output_bound_with_ovk(
                 &domain,
                 &fvk.to_ovk(scope),
