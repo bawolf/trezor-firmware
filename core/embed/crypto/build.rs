@@ -344,6 +344,9 @@ fn add_mldsa(lib: &mut CLibrary, attrs: &CompileAttrs) -> Result<()> {
     lib.add_defines([
         ("MLD_CONFIG_NAMESPACE_PREFIX", Some("mldsa")),
         ("MLD_CONFIG_NO_RANDOMIZED_API", Some("1")),
+        // Verification then needs 24,736 B of stack instead of 44,568 B,
+        // which a kernel that verifies itself (MLDSA44_IN_KERNEL) can hold.
+        ("MLD_CONFIG_REDUCE_RAM", None),
     ]);
 
     lib.add_sources_in_dir_with_attrs(

@@ -21,6 +21,14 @@
 
 #include <trezor_types.h>
 
+// Test devices only, not for upstream: a firmware built without
+// BOOTLOADER_DEVEL embeds the released, Trezor-signed secmon
+// (models/T3W1/secmon/secmon.bin), whose smcall table predates
+// SMCALL_MLDSA44_VERIFY. Such a kernel verifies ML-DSA-44 itself.
+#if defined(KERNEL) && defined(USE_SECMON_LAYOUT) && !defined(BOOTLOADER_DEVEL)
+#define MLDSA44_IN_KERNEL
+#endif
+
 /** Number of bytes in an ML-DSA-44 signature */
 #define MLDSA44_SIGNATURE_SIZE 2420
 
