@@ -46,7 +46,9 @@ mod sysevent;
 #[cfg(not(feature = "app"))]
 pub mod crypto {
 
-    pub use crate::structs::{Slice, TrezorCryptoEnum, TrezorCryptoResultRef};
+    pub use crate::structs::{
+        Slice, TrezorCryptoEnum, TrezorCryptoResultRef, access_crypto_request,
+    };
 }
 
 // Full crypto runtime — only when `app` feature is enabled
@@ -57,6 +59,7 @@ pub mod crypto;
 pub mod ui {
     pub use crate::structs::{
         Property, Slice, StrExt, StrSlice, TrezorProgressEnum, TrezorUiEnum, TrezorUiResult,
+        access_progress_request, access_ui_request,
     };
 }
 
