@@ -882,6 +882,33 @@ impl<'a> TrezorCryptoEnum<'a> {
     }
 }
 
+impl ArchivedTrezorCryptoEnum<'_> {
+    /// The operation id, as [`TrezorCryptoEnum::id`].
+    pub fn id(&self) -> u8 {
+        match self {
+            Self::GetXpub { .. } => 0,
+            Self::GetPublicKey { .. } => 1,
+            Self::SignDigest { .. } => 2,
+            Self::SignTypedHash { .. } => 3,
+            Self::GetAddressMac { .. } => 4,
+            Self::CheckAddressMac { .. } => 5,
+            Self::VerifyNonceCache { .. } => 6,
+        }
+    }
+}
+
+/// Checks an app's Crypto-service request and that it is operation `id`.
+///
+/// The bytes come from an untrusted app, so the whole archive is validated
+/// (bounds, alignment, enum tags, relative pointers, UTF-8) before any field is
+/// read. Returns `None` for a malformed request or another operation.
+pub fn access_crypto_request(bytes: &[u8], id: u16) -> Option<&ArchivedTrezorCryptoEnum<'_>> {
+    let request =
+        rkyv::api::low::access::<ArchivedTrezorCryptoEnum<'_>, rkyv::rancor::Failure>(bytes)
+            .ok()?;
+    (u16::from(request.id()) == id).then_some(request)
+}
+
 /// Result returned by the Core task after a crypto operation, borrowed
 /// directly from the archived IPC buffer.
 ///
@@ -969,6 +996,31 @@ impl<'a> TrezorProgressEnum<'a> {
             TrezorProgressEnum::End => 2,
         }
     }
+}
+
+impl ArchivedTrezorProgressEnum<'_> {
+    /// The operation id, as [`TrezorProgressEnum::id`].
+    pub fn id(&self) -> u16 {
+        match self {
+            Self::Init { .. } => 0,
+            Self::Update { .. } => 1,
+            Self::End => 2,
+        }
+    }
+}
+
+/// Checks an app's UI-service request, as [`access_crypto_request`] does.
+pub fn access_ui_request(bytes: &[u8]) -> Option<&ArchivedTrezorUiEnum<'_>> {
+    rkyv::api::low::access::<ArchivedTrezorUiEnum<'_>, rkyv::rancor::Failure>(bytes).ok()
+}
+
+/// Checks an app's Progress-service request and that it is operation `id`, as
+/// [`access_crypto_request`] does.
+pub fn access_progress_request(bytes: &[u8], id: u16) -> Option<&ArchivedTrezorProgressEnum<'_>> {
+    let request =
+        rkyv::api::low::access::<ArchivedTrezorProgressEnum<'_>, rkyv::rancor::Failure>(bytes)
+            .ok()?;
+    (request.id() == id).then_some(request)
 }
 
 #[cfg(test)]
@@ -1085,5 +1137,199 @@ mod tests {
         }
         // total count must match — add new variants here when extending the enum
         assert_eq!(variants.len(), 3, "new variant added but test not updated");
+    }
+
+    fn archive(request: &TrezorCryptoEnum) -> rkyv::util::AlignedVec {
+        rkyv::to_bytes::<rkyv::rancor::Failure>(request).unwrap()
+    }
+
+    /// Every well-formed request is accepted as its own operation only.
+    #[test]
+    fn crypto_request_must_match_the_operation_id() {
+        let path: &[u32] = &[0x8000_002c, 0x8000_003c, 0x8000_0000];
+        let nonce: &[u8] = &[1, 2, 3];
+        let requests = [
+            TrezorCryptoEnum::GetXpub {
+                address_n: path.into(),
+                xpub_magic: 0x0488_b21e,
+            },
+            TrezorCryptoEnum::GetPublicKey {
+                address_n: path.into(),
+                compressed: true,
+            },
+            TrezorCryptoEnum::SignDigest {
+                address_n: path.into(),
+                digest: [7; 32],
+                compressed: false,
+            },
+            TrezorCryptoEnum::SignTypedHash {
+                address_n: path.into(),
+                hash: [9; 32],
+                encoded_network: Some(nonce.into()),
+                encoded_token: None,
+                chain_id: Some(1),
+                show_progress: true,
+            },
+            TrezorCryptoEnum::GetAddressMac {
+                address_n: path.into(),
+                address: "0xabc".into(),
+            },
+            TrezorCryptoEnum::CheckAddressMac {
+                address_n: path.into(),
+                mac: [3; 32],
+                address: "0xabc".into(),
+            },
+            TrezorCryptoEnum::VerifyNonceCache {
+                nonce: nonce.into(),
+            },
+        ];
+        for request in &requests {
+            let bytes = archive(request);
+            for id in 0..=7u16 {
+                let accepted = access_crypto_request(&bytes, id).is_some();
+                assert_eq!(accepted, id == u16::from(request.id()), "id {}", id);
+            }
+        }
+    }
+
+    /// Every well-formed request is accepted as its own operation only.
+    #[test]
+    fn progress_request_must_match_the_operation_id() {
+        let requests = [
+            TrezorProgressEnum::Init {
+                description: Some("Loading".into()),
+                title: None,
+                indeterminate: false,
+                danger: false,
+            },
+            TrezorProgressEnum::Update {
+                description: None,
+                value: 500,
+            },
+            TrezorProgressEnum::End,
+        ];
+        for request in &requests {
+            let bytes = rkyv::to_bytes::<rkyv::rancor::Failure>(request).unwrap();
+            for id in 0..=3u16 {
+                let accepted = access_progress_request(&bytes, id).is_some();
+                assert_eq!(accepted, id == request.id(), "id {}", id);
+            }
+        }
+    }
+
+    /// Malformed requests are refused before any field is read.
+    #[test]
+    fn malformed_crypto_requests_are_refused() {
+        let path: &[u32] = &[0x8000_002c, 0x8000_003c];
+        let request = TrezorCryptoEnum::GetPublicKey {
+            address_n: path.into(),
+            compressed: true,
+        };
+        let bytes = archive(&request);
+        assert!(access_crypto_request(&bytes, 1).is_some());
+        let root = bytes.len() - size_of::<ArchivedTrezorCryptoEnum>();
+        let corrupt = |at: usize, value: &[u8]| {
+            let mut copy = rkyv::util::AlignedVec::<16>::new();
+            copy.extend_from_slice(&bytes);
+            copy[at..at + value.len()].copy_from_slice(value);
+            access_crypto_request(&copy, 1).is_none()
+        };
+
+        // The copy itself is accepted when left intact.
+        assert!(!corrupt(root, &bytes[root..root + 1]));
+
+        // Empty, truncated or misaligned input.
+        assert!(access_crypto_request(&[], 1).is_none());
+        assert!(access_crypto_request(&bytes[..bytes.len() - 1], 1).is_none());
+        assert!(access_crypto_request(&bytes[..root], 1).is_none());
+        let mut shifted = rkyv::util::AlignedVec::<16>::new();
+        shifted.push(0);
+        shifted.extend_from_slice(&bytes);
+        assert!(access_crypto_request(&shifted[1..], 1).is_none());
+
+        // Unknown variant tag.
+        assert!(corrupt(root, &[0xff]));
+
+        // A string that is not UTF-8.
+        let request = TrezorCryptoEnum::GetAddressMac {
+            address_n: path.into(),
+            address: "0xabc".into(),
+        };
+        let mut bytes = archive(&request);
+        assert!(access_crypto_request(&bytes, 4).is_some());
+        let at = bytes.windows(5).position(|w| w == b"0xabc").unwrap();
+        bytes[at] = 0xff;
+        assert!(access_crypto_request(&bytes, 4).is_none());
+    }
+
+    /// `bytes` copied to each offset 0..16 of a 16-aligned buffer.
+    fn at_every_offset(bytes: &[u8]) -> impl Iterator<Item = (usize, rkyv::util::AlignedVec<16>)> {
+        (0..16).map(move |offset| {
+            let mut buffer = rkyv::util::AlignedVec::<16>::new();
+            buffer.extend_from_slice(&[0; 16][..offset]);
+            buffer.extend_from_slice(bytes);
+            (offset, buffer)
+        })
+    }
+
+    /// Requests are accepted exactly where they are aligned for their type,
+    /// and refused (rather than read) anywhere else.
+    #[test]
+    fn misaligned_requests_are_refused() {
+        let path: &[u32] = &[0x8000_002c, 0x8000_003c, 0x8000_0000];
+        let crypto = [
+            TrezorCryptoEnum::GetPublicKey {
+                address_n: path.into(),
+                compressed: true,
+            },
+            TrezorCryptoEnum::SignTypedHash {
+                address_n: path.into(),
+                hash: [9; 32],
+                encoded_network: None,
+                encoded_token: None,
+                chain_id: Some(1),
+                show_progress: false,
+            },
+        ];
+        let align = align_of::<ArchivedTrezorCryptoEnum>();
+        for request in &crypto {
+            let id = u16::from(request.id());
+            for (offset, buffer) in at_every_offset(&archive(request)) {
+                let accepted = access_crypto_request(&buffer[offset..], id).is_some();
+                assert_eq!(accepted, offset % align == 0, "crypto at offset {}", offset);
+            }
+        }
+
+        let warning = TrezorUiEnum::ShowWarning(ShowWarning::new(
+            "Title",
+            "Content",
+            "Continue",
+            Some("warning"),
+            3,
+            false,
+            true,
+        ));
+        let align = align_of::<ArchivedTrezorUiEnum>();
+        let ui = rkyv::to_bytes::<rkyv::rancor::Failure>(&warning).unwrap();
+        for (offset, buffer) in at_every_offset(&ui) {
+            let accepted = access_ui_request(&buffer[offset..]).is_some();
+            assert_eq!(accepted, offset % align == 0, "UI at offset {}", offset);
+        }
+
+        let report = TrezorProgressEnum::Update {
+            description: Some("Loading".into()),
+            value: 500,
+        };
+        let align = align_of::<ArchivedTrezorProgressEnum>();
+        let progress = rkyv::to_bytes::<rkyv::rancor::Failure>(&report).unwrap();
+        for (offset, buffer) in at_every_offset(&progress) {
+            let accepted = access_progress_request(&buffer[offset..], 1).is_some();
+            assert_eq!(
+                accepted,
+                offset % align == 0,
+                "progress at offset {}",
+                offset
+            );
+        }
     }
 }

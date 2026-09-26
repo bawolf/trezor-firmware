@@ -61,6 +61,14 @@ notes = "forbid-unsafe"
 version = "1.12.1"
 criteria = "safe-to-deploy"
 
+[[exemptions.bytecheck]]
+version = "0.8.3"
+criteria = "safe-to-deploy"
+
+[[exemptions.bytecheck_derive]]
+version = "0.8.3"
+criteria = "safe-to-deploy"
+
 [[exemptions.camino]]
 version = "1.2.2"
 criteria = "safe-to-deploy"
@@ -228,6 +236,10 @@ criteria = "safe-to-deploy"
 
 [[exemptions.serde_spanned]]
 version = "0.6.8"
+criteria = "safe-to-deploy"
+
+[[exemptions.simdutf8]]
+version = "0.1.5"
 criteria = "safe-to-deploy"
 
 [[exemptions.spin]]
