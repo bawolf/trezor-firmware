@@ -91,6 +91,8 @@ impl<'a, T: Into<u16> + Copy> IpcRemote<'a, T> {
         }
         // this should not fail, because the kernel signalled us that a message is ready
         let message = self.inbox.try_receive().expect("Failed to receive message");
+        #[cfg(all(feature = "debug", not(feature = "test")))]
+        crate::diagnostics::ipc_received();
         Ok(message)
     }
 
@@ -125,6 +127,8 @@ impl<'a, T: Into<u16> + Copy> IpcRemote<'a, T> {
 
     pub fn send(&self, service: T, message: &IpcMessage) -> Result<(), Error<'a>> {
         let service_id = service.into();
+        #[cfg(all(feature = "debug", not(feature = "test")))]
+        crate::diagnostics::ipc_sent(service_id);
         message
             .send(self.inbox.remote(), service_id)
             .map_err(|_| Error::FailedToSend)

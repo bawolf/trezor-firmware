@@ -221,12 +221,15 @@ impl<T> ResultExt<T> for Result<T> {
     }
 }
 
-#[cfg(not(feature = "test"))]
+#[cfg(all(not(feature = "test"), not(feature = "debug")))]
 use embedded_alloc::LlffHeap as Heap;
+
+#[cfg(all(not(feature = "test"), feature = "debug"))]
+use crate::diagnostics::PeakHeap as Heap;
 
 #[cfg(not(feature = "test"))]
 #[global_allocator]
-static HEAP: Heap = Heap::empty();
+pub(crate) static HEAP: Heap = Heap::empty();
 
 #[cfg(not(feature = "test"))]
 unsafe extern "Rust" {
