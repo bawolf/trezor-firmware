@@ -14,7 +14,7 @@ sdk-version = "0.1.0"
 crate-type = ["rlib"]
 
 [dependencies]
-rkyv = { version = "0.8", default-features = false }
+rkyv = { version = "0.8", default-features = false, features = ["bytecheck"] }
 critical-section = "1.2.0"
 ufmt = "0.2.0"
 spin = "0.10.0"
@@ -38,7 +38,7 @@ log_level_debug = []
 
 debug = []
 
-app = ["rkyv/alloc", "rkyv/bytecheck"]
+app = ["rkyv/alloc"]
 app_runtime = []
 
 # Enables use of unstable (nightly-only) language/library features
