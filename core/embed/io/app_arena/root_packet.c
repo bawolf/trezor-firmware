@@ -32,8 +32,12 @@
 // higher-level root packet.
 #define ROOT_PACKET_MAX_DRIFT (90 * 86400)  // 90 days
 
+// The dev keys (core/tools/trezor_core_tools/extapp_tool.py) sign the root
+// packets of apps built for development; firmware that is not a production
+// build accepts them, as it accepts dev-signed translations and definitions.
 static const mldsa44_public_key_t * const ROOT_PACKET_KEYS[] = {
-#if defined(BOOTLOADER_DEVEL) || defined(TREZOR_EMULATOR)
+#if defined(BOOTLOADER_DEVEL) || defined(TREZOR_EMULATOR) || \
+    !defined(PRODUCTION)
     (const mldsa44_public_key_t*)
     "\x9c\x2c\x88\x0b\xf1\xb7\x73\xc1\xfc\x7f\x68\xe8\x58\x89\x7e\x18"
     "\x47\xd6\xbe\x83\xf0\x7f\xfc\xfa\xa1\x0e\xe3\x5e\x5b\x44\xff\x58"
