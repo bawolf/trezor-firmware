@@ -1023,6 +1023,18 @@ pub fn access_progress_request(bytes: &[u8], id: u16) -> Option<&ArchivedTrezorP
     (request.id() == id).then_some(request)
 }
 
+/// The alignment of IPC message data on the device.
+///
+/// The kernel aligns each message to `sizeof(size_t)` (`IPC_DATA_ALIGNMENT` in
+/// `sys/ipc/ipc.c`): 4 bytes on the device, 8 on the 64-bit emulator. An app
+/// reads Core's replies in place, and a checked `rkyv::access` refuses an
+/// archive that is not aligned for its type, so a reply type aligned to more
+/// than this would be read on the emulator but refused on the device.
+pub(crate) const DEVICE_IPC_ALIGNMENT: usize = 4;
+
+const _: () = assert!(align_of::<ArchivedTrezorCryptoResultRef<'_>>() <= DEVICE_IPC_ALIGNMENT);
+const _: () = assert!(align_of::<ArchivedTrezorUiResult>() <= DEVICE_IPC_ALIGNMENT);
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1328,6 +1340,35 @@ mod tests {
                 accepted,
                 offset % align == 0,
                 "progress at offset {}",
+                offset
+            );
+        }
+    }
+
+    /// Replies are read at every 4-byte-aligned offset, as the device places
+    /// them.
+    #[test]
+    fn replies_are_read_at_the_device_ipc_alignment() {
+        use rkyv::rancor::Failure;
+
+        let signature = TrezorCryptoResultRef::Signature([7; 65]);
+        let bytes = rkyv::to_bytes::<Failure>(&signature).unwrap();
+        for (offset, buffer) in at_every_offset(&bytes).step_by(DEVICE_IPC_ALIGNMENT) {
+            let archived =
+                rkyv::access::<ArchivedTrezorCryptoResultRef, Failure>(&buffer[offset..]);
+            assert!(
+                matches!(archived, Ok(ArchivedTrezorCryptoResultRef::Signature(s)) if *s == [7; 65]),
+                "crypto reply at offset {}",
+                offset
+            );
+        }
+
+        let bytes = rkyv::to_bytes::<Failure>(&TrezorUiResult::Integer(7)).unwrap();
+        for (offset, buffer) in at_every_offset(&bytes).step_by(DEVICE_IPC_ALIGNMENT) {
+            let archived = rkyv::access::<ArchivedTrezorUiResult, Failure>(&buffer[offset..]);
+            assert!(
+                matches!(archived, Ok(ArchivedTrezorUiResult::Integer(n)) if *n == 7),
+                "UI reply at offset {}",
                 offset
             );
         }
