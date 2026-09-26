@@ -204,7 +204,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        app: [tron]
+        app: [tron, zcash]
         model: [t3w1]
         lang: [en]
     env:
@@ -230,9 +230,12 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        app: [tron]
+        app: [tron, zcash]
         model: [t3w1]
         lang: ${{ fromJSON(needs.param.outputs.extapp_test_lang) }}
+        exclude:
+          - app: zcash  # English only
+            lang: cs
     env:
       EXTAPP: ${{ matrix.app }}
       EXTAPP_MODEL: ${{ matrix.model }}
@@ -255,7 +258,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        app: [tron]
+        app: [tron, zcash]
         model: [t3w1]
         lang: [en]
     env:
@@ -278,9 +281,12 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        app: [tron]
+        app: [tron, zcash]
         model: [t3w1]
         lang: ${{ fromJSON(needs.param.outputs.extapp_test_lang) }}
+        exclude:
+          - app: zcash  # English only
+            lang: cs
     env:
       EXTAPP: ${{ matrix.app }}
       EXTAPP_MODEL: ${{ matrix.model }}
@@ -328,7 +334,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        app: [tron]
+        app: [tron, zcash]
     env:
       EXTAPP: ${{ matrix.app }}
     steps:
@@ -344,7 +350,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        app: [tron]
+        app: [tron, zcash]
         model: [t3w1]
         lang: [en]
     env:
@@ -367,6 +373,19 @@ jobs:
           submodules: recursive
       - uses: ./.github/actions/environment
       - run: nix-shell --run "make extapp_vet"
+
+  extapp_zcash_signer:
+    name: extapp / Zcash signer
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # actions/checkout@v6.0.2
+        with:
+          submodules: recursive
+      - uses: ./.github/actions/environment
+      - run: nix-shell --run "make extapp_zcash_signer_test"
+      - run: nix-shell --run "make extapp_zcash_signer_audit"
+      - run: nix-shell --run "make extapp_zcash_signer_vet"
 
   # Post a comment with UI diff URLs, same idea as core_ui_comment in core.yml,
   # except the report columns are individual extapps rather than test types

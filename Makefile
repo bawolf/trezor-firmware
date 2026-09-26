@@ -22,6 +22,7 @@
 	extapp_py_style extapp_py_style_check \
 	extapp_translation_style extapp_translation_style_check \
 	extapp_clippy extapp_vet \
+	extapp_zcash_signer_test extapp_zcash_signer_audit extapp_zcash_signer_vet \
 	typecheck pyright \
 	mocks mocks_check \
 	templates templates_check \
@@ -331,6 +332,24 @@ extapp_clippy: ## run clippy on an extapp (set EXTAPP/EXTAPP_MODEL/EXTAPP_LANG)
 extapp_vet: ## run cargo vet on all extapps' dependencies
 	@echo [EXTAPP-VET]
 	@cd sdk/apps ; cargo vet --locked
+
+extapp_zcash_signer_test: ## run style checks and tests of the Zcash app's signer and its tests against librustzcash
+	@echo [EXTAPP-ZCASH-SIGNER-TEST]
+	@cd sdk/apps ; cargo fmt --check -p zcash-signer
+	@cd sdk/apps ; cargo clippy -p zcash-signer --tests -- -D warnings
+	@cd sdk/apps ; cargo test -p zcash-signer
+	@cd sdk/apps/zcash/signer-tests ; cargo fmt --check
+	@cd sdk/apps/zcash/signer-tests ; cargo clippy --tests -- -D warnings
+	@cd sdk/apps/zcash/signer-tests ; cargo test
+	@cd sdk/apps/zcash/signer-tests ; cargo test --features computed-generators
+
+extapp_zcash_signer_audit: ## run cargo audit on the Zcash signer tests' dependencies
+	@echo [EXTAPP-ZCASH-SIGNER-AUDIT]
+	@cd sdk/apps/zcash/signer-tests ; cargo audit
+
+extapp_zcash_signer_vet: ## run cargo vet on the Zcash signer tests' dependencies
+	@echo [EXTAPP-ZCASH-SIGNER-VET]
+	@cd sdk/apps/zcash/signer-tests ; cargo vet --locked
 
 typecheck: pyright
 
