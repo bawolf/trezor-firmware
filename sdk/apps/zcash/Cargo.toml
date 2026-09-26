@@ -9,14 +9,15 @@ edition = "2024"
 id = "zcash.trezor.com"
 name = "Zcash"
 vendor = "Bryant Wolf"
-# Heap: a 32-action sign peaks at 56,522 B on the host (64-bit), 30,186 B of
-# it the Pallas and orchard caches that stay for the app's life; receive peaks
-# at 38,010 B. 72 KiB leaves ~16 KiB for fragmentation and the IPC and screen
-# buffers. Stack: the deepest call chain, SignPczt's session verifying an
-# action, needs 28,564 B by static analysis of the T3W1 debug image (objdump
-# call graph, direct calls only); receive needs ~6.4 KB.
+# Heap: with the emulator granting exactly `heap-size`, every device test
+# passes at 60,416 B and a sign fails at 59,904 B; 68 KiB leaves 9 KiB of
+# margin. The need does not grow with the transaction: ~30 KiB are caches kept
+# for the app's life, and the review of up to 32 outputs is allocated up front.
+# Stack: the deepest chain, SignPczt verifying an action, needs at most
+# 29,800 B by static analysis of the release and debug images (objdump call
+# graph; a dynamic call may reach any function a vtable names).
 stack-size = 32768
-heap-size = 73728
+heap-size = 69632
 # The largest message the app receives is a ZcashPcztAck with a 1 KiB PCZT
 # chunk: 1,049 B, plus the kernel's 12-byte header (16 B on the emulator).
 ipc-buffer-size = 2048
