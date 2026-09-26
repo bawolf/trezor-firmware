@@ -228,6 +228,11 @@ impl BuildArgs {
     /// );
     /// ```
     pub fn resolve_features(&self) -> Result<Vec<&'static str>> {
+        ensure!(
+            !(self.production && self.debug),
+            "--debug cannot be used in production builds"
+        );
+
         let mut features = vec![
             self.model.feature_name(),
             self.lang.feature_name(),
@@ -472,6 +477,14 @@ mod tests {
     fn resolve_features_production_build_omits_dev_keys() {
         let features = build_args(false, false, true).resolve_features().unwrap();
         assert!(!features.contains(&"dev_keys"));
+    }
+
+    #[test]
+    fn resolve_features_rejects_debug_in_production_builds() {
+        let error = build_args(false, true, true)
+            .resolve_features()
+            .unwrap_err();
+        assert!(error.to_string().contains("production"));
     }
 
     #[test]
