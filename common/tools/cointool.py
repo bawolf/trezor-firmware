@@ -149,6 +149,7 @@ ALTCOIN_PREFIXES = (
     "cardano",
     "eos",
     "ethereum",
+    "extapp",
     "fido",
     "monero",
     "nem",

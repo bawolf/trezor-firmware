@@ -1369,6 +1369,10 @@ static void _librust_qstrs(void) {
   MP_QSTR_ethereum__withdraw_amount;
   MP_QSTR_ethereum__withdraw_from;
   MP_QSTR_ethereum__withdraw_to;
+  MP_QSTR_extapp__mainnet;
+  MP_QSTR_extapp__spending_key;
+  MP_QSTR_extapp__spending_key_template;
+  MP_QSTR_extapp__testnet;
   MP_QSTR_fido__already_registered;
   MP_QSTR_fido__device_already_registered;
   MP_QSTR_fido__device_already_registered_with_template;

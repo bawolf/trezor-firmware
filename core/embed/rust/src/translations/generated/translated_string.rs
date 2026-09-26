@@ -1683,6 +1683,14 @@ pub enum TranslatedString {
     stellar__deploy_contract = 1297,  // "Deploy contract"
     #[cfg(feature = "universal_fw")]
     stellar__wasm_hash = 1298,  // "Wasm hash"
+    #[cfg(feature = "universal_fw")]
+    extapp__spending_key = 1299,  // "Spending key"
+    #[cfg(feature = "universal_fw")]
+    extapp__spending_key_template = 1300,  // "{0} will receive the spending key of Zcash account #{1} ({2}) and can spend all of its funds."
+    #[cfg(feature = "universal_fw")]
+    extapp__mainnet = 1301,  // "Mainnet"
+    #[cfg(feature = "universal_fw")]
+    extapp__testnet = 1302,  // "Testnet"
 }
 
 impl TranslatedString {
@@ -2989,6 +2997,10 @@ impl TranslatedString {
                 "Multisig XPUB #{0} ",
                 "Deploy contract",
                 "Wasm hash",
+                "Spending key",
+                "{0} will receive the spending key of Zcash account #{1} ({2}) and can spend all of its funds.",
+                "Mainnet",
+                "Testnet",
             );
 
             #[cfg(all(feature = "debug", feature = "universal_fw"))]
@@ -4293,6 +4305,10 @@ impl TranslatedString {
                 19110,
                 19125,
                 19134,
+                19146,
+                19239,
+                19246,
+                19253,
             ];
 
             #[cfg(all(feature = "debug", not(feature = "universal_fw")))]
@@ -5596,6 +5612,10 @@ impl TranslatedString {
                 "Multisig XPUB #{0} ",
                 "Deploy contract",
                 "Wasm hash",
+                "Spending key",
+                "{0} will receive the spending key of Zcash account #{1} ({2}) and can spend all of its funds.",
+                "Mainnet",
+                "Testnet",
             );
 
             #[cfg(all(feature = "debug", not(feature = "universal_fw")))]
@@ -6900,6 +6920,10 @@ impl TranslatedString {
                 19110,
                 19125,
                 19134,
+                19146,
+                19239,
+                19246,
+                19253,
             ];
 
             #[cfg(all(not(feature = "debug"), feature = "universal_fw"))]
@@ -8203,6 +8227,10 @@ impl TranslatedString {
                 "Multisig XPUB #{0} ",
                 "Deploy contract",
                 "Wasm hash",
+                "Spending key",
+                "{0} will receive the spending key of Zcash account #{1} ({2}) and can spend all of its funds.",
+                "Mainnet",
+                "Testnet",
             );
 
             #[cfg(all(not(feature = "debug"), feature = "universal_fw"))]
@@ -9507,6 +9535,10 @@ impl TranslatedString {
                 19110,
                 19125,
                 19134,
+                19146,
+                19239,
+                19246,
+                19253,
             ];
 
             #[cfg(all(not(feature = "debug"), not(feature = "universal_fw")))]
@@ -10810,6 +10842,10 @@ impl TranslatedString {
                 "Multisig XPUB #{0} ",
                 "Deploy contract",
                 "Wasm hash",
+                "Spending key",
+                "{0} will receive the spending key of Zcash account #{1} ({2}) and can spend all of its funds.",
+                "Mainnet",
+                "Testnet",
             );
 
             #[cfg(all(not(feature = "debug"), not(feature = "universal_fw")))]
@@ -12114,6 +12150,10 @@ impl TranslatedString {
                 19110,
                 19125,
                 19134,
+                19146,
+                19239,
+                19246,
+                19253,
             ];
 
         } else if #[cfg(feature = "layout_caesar")] {
@@ -13418,6 +13458,10 @@ impl TranslatedString {
                 "Multisig XPUB #{0} ",
                 "Deploy contract",
                 "Wasm hash",
+                "Spending key",
+                "{0} will receive the spending key of Zcash account #{1} ({2}) and can spend all of its funds.",
+                "Mainnet",
+                "Testnet",
             );
 
             #[cfg(all(feature = "debug", feature = "universal_fw"))]
@@ -14722,6 +14766,10 @@ impl TranslatedString {
                 16971,
                 16986,
                 16995,
+                17007,
+                17100,
+                17107,
+                17114,
             ];
 
             #[cfg(all(feature = "debug", not(feature = "universal_fw")))]
@@ -16025,6 +16073,10 @@ impl TranslatedString {
                 "Multisig XPUB #{0} ",
                 "Deploy contract",
                 "Wasm hash",
+                "Spending key",
+                "{0} will receive the spending key of Zcash account #{1} ({2}) and can spend all of its funds.",
+                "Mainnet",
+                "Testnet",
             );
 
             #[cfg(all(feature = "debug", not(feature = "universal_fw")))]
@@ -17329,6 +17381,10 @@ impl TranslatedString {
                 16971,
                 16986,
                 16995,
+                17007,
+                17100,
+                17107,
+                17114,
             ];
 
             #[cfg(all(not(feature = "debug"), feature = "universal_fw"))]
@@ -18632,6 +18688,10 @@ impl TranslatedString {
                 "Multisig XPUB #{0} ",
                 "Deploy contract",
                 "Wasm hash",
+                "Spending key",
+                "{0} will receive the spending key of Zcash account #{1} ({2}) and can spend all of its funds.",
+                "Mainnet",
+                "Testnet",
             );
 
             #[cfg(all(not(feature = "debug"), feature = "universal_fw"))]
@@ -19936,6 +19996,10 @@ impl TranslatedString {
                 16971,
                 16986,
                 16995,
+                17007,
+                17100,
+                17107,
+                17114,
             ];
 
             #[cfg(all(not(feature = "debug"), not(feature = "universal_fw")))]
@@ -21239,6 +21303,10 @@ impl TranslatedString {
                 "Multisig XPUB #{0} ",
                 "Deploy contract",
                 "Wasm hash",
+                "Spending key",
+                "{0} will receive the spending key of Zcash account #{1} ({2}) and can spend all of its funds.",
+                "Mainnet",
+                "Testnet",
             );
 
             #[cfg(all(not(feature = "debug"), not(feature = "universal_fw")))]
@@ -22543,6 +22611,10 @@ impl TranslatedString {
                 16971,
                 16986,
                 16995,
+                17007,
+                17100,
+                17107,
+                17114,
             ];
 
         } else if #[cfg(feature = "layout_delizia")] {
@@ -23847,6 +23919,10 @@ impl TranslatedString {
                 "Multisig XPUB #{0} ",
                 "Deploy contract",
                 "Wasm hash",
+                "Spending key",
+                "{0} will receive the spending key of Zcash account #{1} ({2}) and can spend all of its funds.",
+                "Mainnet",
+                "Testnet",
             );
 
             #[cfg(all(feature = "debug", feature = "universal_fw"))]
@@ -25151,6 +25227,10 @@ impl TranslatedString {
                 19053,
                 19068,
                 19077,
+                19089,
+                19182,
+                19189,
+                19196,
             ];
 
             #[cfg(all(feature = "debug", not(feature = "universal_fw")))]
@@ -26454,6 +26534,10 @@ impl TranslatedString {
                 "Multisig XPUB #{0} ",
                 "Deploy contract",
                 "Wasm hash",
+                "Spending key",
+                "{0} will receive the spending key of Zcash account #{1} ({2}) and can spend all of its funds.",
+                "Mainnet",
+                "Testnet",
             );
 
             #[cfg(all(feature = "debug", not(feature = "universal_fw")))]
@@ -27758,6 +27842,10 @@ impl TranslatedString {
                 19053,
                 19068,
                 19077,
+                19089,
+                19182,
+                19189,
+                19196,
             ];
 
             #[cfg(all(not(feature = "debug"), feature = "universal_fw"))]
@@ -29061,6 +29149,10 @@ impl TranslatedString {
                 "Multisig XPUB #{0} ",
                 "Deploy contract",
                 "Wasm hash",
+                "Spending key",
+                "{0} will receive the spending key of Zcash account #{1} ({2}) and can spend all of its funds.",
+                "Mainnet",
+                "Testnet",
             );
 
             #[cfg(all(not(feature = "debug"), feature = "universal_fw"))]
@@ -30365,6 +30457,10 @@ impl TranslatedString {
                 19053,
                 19068,
                 19077,
+                19089,
+                19182,
+                19189,
+                19196,
             ];
 
             #[cfg(all(not(feature = "debug"), not(feature = "universal_fw")))]
@@ -31668,6 +31764,10 @@ impl TranslatedString {
                 "Multisig XPUB #{0} ",
                 "Deploy contract",
                 "Wasm hash",
+                "Spending key",
+                "{0} will receive the spending key of Zcash account #{1} ({2}) and can spend all of its funds.",
+                "Mainnet",
+                "Testnet",
             );
 
             #[cfg(all(not(feature = "debug"), not(feature = "universal_fw")))]
@@ -32972,6 +33072,10 @@ impl TranslatedString {
                 19053,
                 19068,
                 19077,
+                19089,
+                19182,
+                19189,
+                19196,
             ];
 
         } else if #[cfg(feature = "layout_eckhart")] {
@@ -34276,6 +34380,10 @@ impl TranslatedString {
                 "Multisig XPUB #{0} ",
                 "Deploy contract",
                 "Wasm hash",
+                "Spending key",
+                "{0} will receive the spending key of Zcash account #{1} ({2}) and can spend all of its funds.",
+                "Mainnet",
+                "Testnet",
             );
 
             #[cfg(all(feature = "debug", feature = "universal_fw"))]
@@ -35580,6 +35688,10 @@ impl TranslatedString {
                 20506,
                 20521,
                 20530,
+                20542,
+                20635,
+                20642,
+                20649,
             ];
 
             #[cfg(all(feature = "debug", not(feature = "universal_fw")))]
@@ -36883,6 +36995,10 @@ impl TranslatedString {
                 "Multisig XPUB #{0} ",
                 "Deploy contract",
                 "Wasm hash",
+                "Spending key",
+                "{0} will receive the spending key of Zcash account #{1} ({2}) and can spend all of its funds.",
+                "Mainnet",
+                "Testnet",
             );
 
             #[cfg(all(feature = "debug", not(feature = "universal_fw")))]
@@ -38187,6 +38303,10 @@ impl TranslatedString {
                 20506,
                 20521,
                 20530,
+                20542,
+                20635,
+                20642,
+                20649,
             ];
 
             #[cfg(all(not(feature = "debug"), feature = "universal_fw"))]
@@ -39490,6 +39610,10 @@ impl TranslatedString {
                 "Multisig XPUB #{0} ",
                 "Deploy contract",
                 "Wasm hash",
+                "Spending key",
+                "{0} will receive the spending key of Zcash account #{1} ({2}) and can spend all of its funds.",
+                "Mainnet",
+                "Testnet",
             );
 
             #[cfg(all(not(feature = "debug"), feature = "universal_fw"))]
@@ -40794,6 +40918,10 @@ impl TranslatedString {
                 20506,
                 20521,
                 20530,
+                20542,
+                20635,
+                20642,
+                20649,
             ];
 
             #[cfg(all(not(feature = "debug"), not(feature = "universal_fw")))]
@@ -42097,6 +42225,10 @@ impl TranslatedString {
                 "Multisig XPUB #{0} ",
                 "Deploy contract",
                 "Wasm hash",
+                "Spending key",
+                "{0} will receive the spending key of Zcash account #{1} ({2}) and can spend all of its funds.",
+                "Mainnet",
+                "Testnet",
             );
 
             #[cfg(all(not(feature = "debug"), not(feature = "universal_fw")))]
@@ -43401,6 +43533,10 @@ impl TranslatedString {
                 20506,
                 20521,
                 20530,
+                20542,
+                20635,
+                20642,
+                20649,
             ];
 
         }
@@ -44070,6 +44206,14 @@ impl TranslatedString {
         (Qstr::MP_QSTR_experimental_mode__enable, Self::experimental_mode__enable),
         (Qstr::MP_QSTR_experimental_mode__only_for_dev, Self::experimental_mode__only_for_dev),
         (Qstr::MP_QSTR_experimental_mode__title, Self::experimental_mode__title),
+        #[cfg(feature = "universal_fw")]
+        (Qstr::MP_QSTR_extapp__mainnet, Self::extapp__mainnet),
+        #[cfg(feature = "universal_fw")]
+        (Qstr::MP_QSTR_extapp__spending_key, Self::extapp__spending_key),
+        #[cfg(feature = "universal_fw")]
+        (Qstr::MP_QSTR_extapp__spending_key_template, Self::extapp__spending_key_template),
+        #[cfg(feature = "universal_fw")]
+        (Qstr::MP_QSTR_extapp__testnet, Self::extapp__testnet),
         #[cfg(feature = "universal_fw")]
         (Qstr::MP_QSTR_fido__already_registered, Self::fido__already_registered),
         #[cfg(feature = "universal_fw")]

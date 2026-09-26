@@ -41,6 +41,7 @@ class SessionCache(DataCache):
                 96,  # APP_CARDANO_ICARUS_SECRET
                 96,  # APP_CARDANO_ICARUS_TREZOR_SECRET
                 0,  # APP_MONERO_LIVE_REFRESH
+                76,  # APP_EXTAPP_ZIP32_APPROVALS
             )
         self.last_usage = 0
         super().__init__()
