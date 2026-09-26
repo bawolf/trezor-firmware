@@ -11,6 +11,9 @@ name = "Ethereum"
 vendor = "SatoshiLabs"
 stack-size = 16384
 heap-size = 131072
+# Host requests arrive in the IPC inbox too, up to Core's 8704-byte THP
+# buffer; the 1 KiB default holds only the replies of Core's services.
+ipc-buffer-size = 16384
 app-ring = 0
 curves = ["secp256k1"]
 paths = [

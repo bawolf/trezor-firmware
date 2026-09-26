@@ -113,6 +113,58 @@ pub fn heap_size(package: &Package) -> Result<u32> {
     Ok(heap_size as u32)
 }
 
+/// Upper bound on an app's IPC inbox, mirroring the kernel's
+/// `IPC_MAX_BUFFER_SIZE` (`core/embed/sys/ipc/inc/sys/ipc.h`). `ipc_register`
+/// refuses anything larger.
+const IPC_BUFFER_MAX_SIZE: u64 = 64 * 1024;
+
+/// Smallest inbox accepted: anything smaller is always a mistake.
+const IPC_BUFFER_MIN_SIZE: u64 = 256;
+
+/// Inbox size of an app that does not declare `ipc-buffer-size` (or sets it to
+/// 0), as in the SDK's `IPC_BUFFER_SIZE`. It holds the replies of Core's
+/// services; an app that also receives host messages declares a size that
+/// holds the largest of them.
+const IPC_BUFFER_DEFAULT_SIZE: u64 = 1024;
+
+/// Retrieves the size, in bytes, of the app's IPC inbox from the package
+/// metadata (`ipc-buffer-size`, optional).
+pub fn ipc_buffer_size(package: &Package) -> Result<u32> {
+    checked_ipc_buffer_size(get_optional_metadata_number(package, "ipc-buffer-size")?)
+}
+
+/// The SDK allocates the inbox as a `[usize]` array, so its size must be a
+/// multiple of `size_of::<usize>()`: 4 on the ARM target, 8 on the emulator.
+/// Requiring a power of two satisfies both with one rule.
+fn checked_ipc_buffer_size(declared: Option<u64>) -> Result<u32> {
+    let size = match declared {
+        None | Some(0) => IPC_BUFFER_DEFAULT_SIZE,
+        Some(size) => size,
+    };
+
+    ensure!(
+        size >= IPC_BUFFER_MIN_SIZE,
+        "IPC buffer size {} is too small (min {} bytes)",
+        size,
+        IPC_BUFFER_MIN_SIZE
+    );
+
+    ensure!(
+        size <= IPC_BUFFER_MAX_SIZE,
+        "IPC buffer size {} is too large (max {} bytes)",
+        size,
+        IPC_BUFFER_MAX_SIZE
+    );
+
+    ensure!(
+        size.is_power_of_two(),
+        "IPC buffer size {} must be a power of two",
+        size
+    );
+
+    Ok(size as u32)
+}
+
 /// Retrieves the app ring from the package metadata
 pub fn app_ring(package: &Package) -> Result<u8> {
     let ring = get_metadata_number(package, "app-ring")?;
@@ -190,6 +242,18 @@ fn get_metadata_string(package: &Package, key: &str) -> Result<String> {
     Ok(value.to_string())
 }
 
+fn get_optional_metadata_number(package: &Package, key: &str) -> Result<Option<u64>> {
+    let present = package
+        .metadata
+        .get("trezor")
+        .is_some_and(|m| m.get(key).is_some());
+    if present {
+        get_metadata_number(package, key).map(Some)
+    } else {
+        Ok(None)
+    }
+}
+
 fn get_metadata_number(package: &Package, key: &str) -> Result<u64> {
     let value = package
         .metadata
@@ -212,6 +276,22 @@ fn get_metadata_number(package: &Package, key: &str) -> Result<u64> {
 mod tests {
     use super::*;
     use serde_json::json;
+
+    #[test]
+    fn ipc_buffer_size_defaults_to_1_kib() {
+        assert_eq!(checked_ipc_buffer_size(None).unwrap(), 1024);
+        assert_eq!(checked_ipc_buffer_size(Some(0)).unwrap(), 1024);
+    }
+
+    #[test]
+    fn ipc_buffer_size_is_a_power_of_two_in_range() {
+        for size in [256, 2048, 65536] {
+            assert_eq!(checked_ipc_buffer_size(Some(size)).unwrap(), size as u32);
+        }
+        for size in [128, 3000, 131072] {
+            assert!(checked_ipc_buffer_size(Some(size)).is_err(), "{}", size);
+        }
+    }
 
     #[test]
     fn packs_strings_null_terminated_in_order() {

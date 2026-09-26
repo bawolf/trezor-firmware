@@ -5,7 +5,7 @@ use clap::{Args, Parser, Subcommand, ValueEnum};
 
 use std::process;
 
-use crate::{helpers, linker};
+use crate::{helpers, linker, metadata};
 
 /// A Trezor hardware model a modular app can be built for.
 #[derive(ValueEnum, Debug, Clone, Copy, PartialEq, Eq)]
@@ -249,6 +249,16 @@ impl BuildArgs {
         Ok(features)
     }
 
+    /// The app package to build: `project` in a workspace, otherwise the
+    /// standalone app's own package.
+    pub fn package_name(&self) -> Result<String> {
+        if helpers::is_workspace()? {
+            Ok(self.project.clone())
+        } else {
+            helpers::standalone_project_name()
+        }
+    }
+
     /// Configures the cargo command with the appropriate arguments and features
     /// based on the provided cli arguments
     pub fn configure_cargo(&self, cmd: &mut process::Command) -> Result<()> {
@@ -262,6 +272,13 @@ impl BuildArgs {
 
         let features = self.resolve_features()?;
         cmd.args(["--features", &features.join(",")]);
+
+        // The SDK sizes the app's IPC inbox from this at compile time.
+        let package = helpers::app_package(&self.package_name()?)?;
+        cmd.env(
+            "TREZOR_APP_IPC_BUFFER_SIZE",
+            metadata::ipc_buffer_size(&package)?.to_string(),
+        );
 
         if self.debug {
             cmd.arg("--profile").arg("debug-fw");
