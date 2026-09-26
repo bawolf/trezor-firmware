@@ -59,7 +59,8 @@ struct AppHeader {
     /// Size of binary payload (code + init and relocation data)
     code_size: U32<LittleEndian>,
     /// Size of RAM required by the app
-    /// (includes stack, heap, and static data)
+    /// (includes stack, heap, and static data; for an emulator app, which
+    /// keeps its stack and statics in the host process, only the heap)
     data_size: U32<LittleEndian>,
     /// Hash of the first payload chunk
     chunk_hash: [u8; 32],
@@ -116,8 +117,11 @@ pub fn convert_elf_to_bin(elf_path: &Path, package: &Package) -> Result<PathBuf>
         elf.format()
     );
 
+    let heap_size = metadata::heap_size(package)?;
     let (target_arch, code, data_size) = match elf.architecture() {
-        object::Architecture::Aarch64 if macos_emulator => (AppBinaryType::X86_64, raw_elf, 0),
+        object::Architecture::Aarch64 if macos_emulator => {
+            (AppBinaryType::X86_64, raw_elf, heap_size)
+        }
         object::Architecture::Arm => {
             let arm_binary = armv8m::Armv8mBinary::from_object_file(&elf, package)?;
             arm_binary.print_info();
@@ -127,7 +131,7 @@ pub fn convert_elf_to_bin(elf_path: &Path, package: &Package) -> Result<PathBuf>
                 arm_binary.ram_size(),
             )
         }
-        object::Architecture::X86_64 => (AppBinaryType::X86_64, raw_elf, 0),
+        object::Architecture::X86_64 => (AppBinaryType::X86_64, raw_elf, heap_size),
         arch => anyhow::bail!("Unsupported architecture: {:?}", arch),
     };
 

@@ -64,7 +64,9 @@ typedef struct {
   uint8_t reserved1;
   /** Size of the binary payload in bytes. */
   uint32_t code_size;
-  /** Size of RAM required by the app (includes stack, heap, and static data) */
+  /** Size of RAM required by the app (includes stack, heap, and static data;
+   * for an emulator app, which keeps its stack and statics in the host
+   * process, only the heap) */
   uint32_t data_size;
   /** Head hash of the application chunk chain */
   sha256_digest_t chunk_hash;
