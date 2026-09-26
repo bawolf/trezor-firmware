@@ -392,14 +392,31 @@ impl<R: RngCore + CryptoRng> Session<R> {
     /// lends the key for every call and a different key is a `State` error.
     /// Any error, including bytes after `Review`, resets the session.
     pub fn feed(&mut self, chunk: &[u8], fvk: &FullViewingKey) -> Result<(usize, Event)> {
-        let result = self.advance(chunk, fvk);
+        self.feed_with_progress(chunk, fvk, &mut || {})
+    }
+
+    /// [`Session::feed`], calling `progress` between the expensive steps of
+    /// each action and of the final review, for a caller that must report
+    /// progress while the verification runs.
+    pub fn feed_with_progress(
+        &mut self,
+        chunk: &[u8],
+        fvk: &FullViewingKey,
+        progress: &mut dyn FnMut(),
+    ) -> Result<(usize, Event)> {
+        let result = self.advance(chunk, fvk, progress);
         if result.is_err() {
             self.reset();
         }
         result
     }
 
-    fn advance(&mut self, chunk: &[u8], fvk: &FullViewingKey) -> Result<(usize, Event)> {
+    fn advance(
+        &mut self,
+        chunk: &[u8],
+        fvk: &FullViewingKey,
+        progress: &mut dyn FnMut(),
+    ) -> Result<(usize, Event)> {
         let bound = self.stream.as_deref().ok_or(Error::state())?;
         let offered = Zeroizing::new(fvk.to_bytes());
         ensure_state(same_bytes(offered.as_slice(), bound.fvk.as_slice()))?;
@@ -451,7 +468,7 @@ impl<R: RngCore + CryptoRng> Session<R> {
                 }
                 Some(Item::Action(action)) => {
                     let body = stream.body.as_deref_mut().ok_or(Error::internal())?;
-                    match body.action(&action, fvk, &stream.fvk, &stream.own)? {
+                    match body.action(&action, fvk, &stream.fvk, &stream.own, progress)? {
                         Some(output) => {
                             let user_address = action.output.user_address.map(String::from);
                             return Ok((
@@ -471,7 +488,7 @@ impl<R: RngCore + CryptoRng> Session<R> {
                     anchor: trailer.anchor.copied(),
                 },
             };
-            let review = self.review(trailer)?;
+            let review = self.review(trailer, progress)?;
             return Ok((consumed, Event::Review(review)));
         }
         Ok((consumed, Event::None))
@@ -494,8 +511,8 @@ impl<R: RngCore + CryptoRng> Session<R> {
     /// `Scanner::drop` and `Zeroizing` then clear the section buffer and the
     /// FVK encoding in place, and the records leave through
     /// [`Records::take_zeroizing`].
-    fn review(&mut self, trailer: Trailer) -> Result<Review> {
-        let result = self.review_stream(trailer);
+    fn review(&mut self, trailer: Trailer, progress: &mut dyn FnMut()) -> Result<Review> {
+        let result = self.review_stream(trailer, progress);
         self.stream = None;
         result
     }
@@ -504,7 +521,7 @@ impl<R: RngCore + CryptoRng> Session<R> {
     // pending temporaries are NOT reserved in the always-live `session_feed`
     // frame that the per-action verify runs under.
     #[inline(never)]
-    fn review_stream(&mut self, trailer: Trailer) -> Result<Review> {
+    fn review_stream(&mut self, trailer: Trailer, progress: &mut dyn FnMut()) -> Result<Review> {
         let stream = self.stream.as_deref_mut().ok_or(Error::internal())?;
         if !stream.scanner.is_finished() {
             return Err(Error::internal());
@@ -580,6 +597,7 @@ impl<R: RngCore + CryptoRng> Session<R> {
                     .map_err(|_| Error::internal())?
                     .verify(&sighash, &Signature::from(*signature))
                     .map_err(|_| Error::malformed())?;
+                progress();
             }
         }
 
@@ -693,10 +711,20 @@ impl<R: RngCore + CryptoRng> Session<R> {
     /// cleared in place on every exit, so the records and the retained
     /// token zeroize where they were stored.
     pub fn sign(&mut self, token: &Token, ask: &SpendAuthorizingKey) -> Result<Signatures> {
+        self.sign_with_progress(token, ask, &mut || {})
+    }
+
+    /// [`Session::sign`], calling `progress` after each signature.
+    pub fn sign_with_progress(
+        &mut self,
+        token: &Token,
+        ask: &SpendAuthorizingKey,
+        progress: &mut dyn FnMut(),
+    ) -> Result<Signatures> {
         self.stream = None;
         let result = match (&self.slot.pending, &self.slot.token) {
             (Some(pending), Some(retained)) => {
-                Self::sign_records(pending, ask, token, retained, &mut self.rng)
+                Self::sign_records(pending, ask, token, retained, &mut self.rng, progress)
             }
             _ => Err(Error::state()),
         };
@@ -710,6 +738,7 @@ impl<R: RngCore + CryptoRng> Session<R> {
         token: &Token,
         retained_token: &Token,
         rng: &mut R,
+        progress: &mut dyn FnMut(),
     ) -> Result<Signatures> {
         ensure_state(pending.approved && *retained_token == *token)?;
         if SpendValidatingKey::from(ask) != pending.expected_ak {
@@ -752,6 +781,7 @@ impl<R: RngCore + CryptoRng> Session<R> {
                 action_index: u8::try_from(index).map_err(|_| Error::internal())?,
                 signature: <[u8; 64]>::from(&signature),
             })?;
+            progress();
         }
         Ok(signatures)
     }
@@ -897,6 +927,7 @@ impl Body {
         fvk: &FullViewingKey,
         fvk_bytes: &[u8; 96],
         own: &OwnDerivation,
+        progress: &mut dyn FnMut(),
     ) -> Result<Option<ReviewedOutput>> {
         let index = self.seen;
         if index >= self.count {
@@ -949,6 +980,7 @@ impl Body {
         // tests/session_equivalence.rs `identity_rk_dummy_spend...`.
         ensure_malformed(*spend.rk != [0; 32])?;
         let parsed = parse(action, wire_fvk)?;
+        progress();
 
         // Step 1: the running input and output totals.
         self.projection.input_total = add(self.projection.input_total, input_value)?;
@@ -958,6 +990,7 @@ impl Body {
         self.nullifiers[index] = *spend.nullifier;
         // Step 3: the value commitment, then nullifier ownership.
         parsed.verify_cv_net().map_err(|_| Error::malformed())?;
+        progress();
         // DEDUP LEVER 3: build the ivk cache once (first action), reuse for the
         // rest of the bundle. Narrow borrows so the `&mut self.scope_classifier`
         // never spans the later `self` mutations.
@@ -972,15 +1005,18 @@ impl Body {
                 ),
             )
             .map_err(|_| Error::malformed())?;
+        progress();
         parsed
             .spend()
             .verify_rk(Some(fvk))
             .map_err(|_| Error::malformed())?;
+        progress();
         // Reuse the cmx-validated note for output recovery.
         let note = parsed
             .output()
             .verify_note_commitment(parsed.spend())
             .map_err(|_| Error::malformed())?;
+        progress();
         // Step 4: the spend record; the dummy signature waits for the sighash.
         let record = if input_value == 0 {
             let signature = spend.spend_auth_sig.ok_or(Error::malformed())?;
@@ -1017,6 +1053,7 @@ impl Body {
             Scope::External
         };
         let memo = verify_encryption(&parsed, fvk, outgoing_scope, &note)?;
+        progress();
         self.records.0[index] = Some(record);
         self.seen += 1;
         // Step 6: padding, change and payment outputs.

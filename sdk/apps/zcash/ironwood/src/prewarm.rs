@@ -40,6 +40,12 @@ static WARMED: AtomicBool = AtomicBool::new(false);
 /// `OnceBox<CommitDomain>` caches before the per-action loop, once. Touches no signing material and changes no
 /// signing behaviour.
 pub fn prewarm() {
+    prewarm_with_progress(&mut || {});
+}
+
+/// [`prewarm`], calling `progress` between its three parts, for a caller that
+/// must report progress while it runs.
+pub fn prewarm_with_progress(progress: &mut dyn FnMut()) {
     // Once: the caches built below persist across sessions, so a second run
     // only costs device time. Single-threaded, so a relaxed test-and-set is
     // sufficient.
@@ -50,8 +56,9 @@ pub fn prewarm() {
     // `y` via `Fp::sqrt`, which builds the lazy `SqrtTables<Fp>`.
     let encoded = pallas::Point::generator().to_bytes();
     let _ = black_box(pallas::Point::from_bytes(black_box(&encoded)));
+    progress();
 
-    warm_orchard_domains();
+    warm_orchard_domains(progress);
 }
 
 /// Forces orchard's `commit_ivk` and `note_commit` `OnceBox<CommitDomain>`
@@ -59,7 +66,7 @@ pub fn prewarm() {
 /// of fragmenting the heap mid-action-0. Best-effort and never panics: if a
 /// constant somehow fails to yield a valid key/note the caches simply fill on
 /// first real use (correctness is unaffected either way).
-fn warm_orchard_domains() {
+fn warm_orchard_domains(progress: &mut dyn FnMut()) {
     // A fixed, non-secret throwaway spending key. `from_bytes` rejects a few
     // byte patterns (ask/ivk == 0), so scan a handful of constants for a valid
     // one; [1; 32] is valid in practice, the loop is just belt-and-braces.
@@ -80,6 +87,7 @@ fn warm_orchard_domains() {
     // internal ivks via `spec::commit_ivk`, which fills `commit_ivk_domain` — the
     // exact call `Session::feed` makes on action 0.
     let _ = black_box(fvk.scope_classifier());
+    progress();
 
     // NoteCommit domain: evaluate one note commitment on a throwaway note built
     // from one of the fvk's addresses; `Note::commitment()` calls

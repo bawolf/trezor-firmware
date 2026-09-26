@@ -33,7 +33,7 @@ mod wire;
 
 /// Session-start Pasta square-root table pre-warm; call it once before the
 /// first signing session's per-action loop.
-pub use prewarm::prewarm;
+pub use prewarm::{prewarm, prewarm_with_progress};
 
 /// Test-only access to bounded wire admission; not a production signing API.
 #[cfg(feature = "test")]
