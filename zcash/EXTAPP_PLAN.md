@@ -108,3 +108,16 @@ both. Trezor may assign its own id at admission.
   - **Signing:** both the 2- and 32-action signs failed with "Timeout waiting for message"
     about 3 s after the weak-backup warning. Signing start runs over Core's 1 s IPC watchdog.
     The fix is in progress (`EXTAPP_P4_WATCHDOG.md`).
+- **2026-09-26, Safe 7, firmware `0245f15fd0` (not reflashed), diagnostic app from bundle
+  `extapp-07a27d1d76`** (stack-frame split, stepped progress; `EXTAPP_P4_WATCHDOG.md`).
+  **All steps MATCH**; log `session-logs/2026-09-26-safe7-extapp-session-2.log`.
+  - **Load:** OK (186.0 KB upload, 5.9 s).
+  - **Receive:** testnet account 0 address #3 **MATCH**. Heap peak 40,076 of 73,736 B;
+    longest IPC silence 286 ms.
+  - **Viewing key:** **MATCH**. Heap peak 38,228 B; longest silence 259 ms.
+  - **2-action sign** (synthetic mainnet fixture, nothing broadcast): records **MATCH**.
+    Heap peak 57,448 B; longest silence 213 ms; 38 IPC messages.
+  - **32-action sign:** 16 payments, 32 recipient screens and the total; records **MATCH**.
+    Heap peak 57,452 B (16,284 B spare); longest silence 198 ms; 393 IPC messages.
+  - Core's 1 s IPC watchdog is unchanged, and no tables are precomputed. The worst IPC silence
+    in the session was 286 ms.
