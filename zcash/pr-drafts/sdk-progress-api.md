@@ -7,6 +7,13 @@ exists only on the draft SDK branches. `ui::Progress` overlaps vojczejk's
 Kind: two bug fixes and a feature.
 Reproduction status: standalone (a subset of the Ethereum sample's tests), plus
 an SDK unit test after the fix.
+Rerun 2026-09-26 on sdk-wip and on the pushed tip `65166b3176` (T3W1 non-frozen
+`--apps` emulator and Ethereum app built at each): receipts
+`pr-drafts-rerun/logs/progress-subset-{base,tip}.log`,
+`signtx-error-{base,progress-tip}.log`, `progress-tip-sdk.log`. Local macOS
+build fix only (`15de3664a6` cherry-picked for the emulator app); not needed on
+Linux. "As Core's Ethereum app does": its `_get_progress_indicator`
+(`core/src/apps/ethereum/helpers.py`) creates the screen with the indicator.
 
 Branch: https://github.com/bawolf/trezor-firmware/tree/extapp/sdk-progress-api @ `65166b3176`
 (three commits on `bieleluk/sdk-wip` @ `4cd93ff4d8`)
@@ -31,13 +38,17 @@ pytest --app=../target/artifacts/t3w1-emu/ethereum.elf --lang=en -rA \
 ```
 
 ```
-before: 15 failed (8 of them "DataError: Progress not initialized", app stopped)
-after:  8 passed, 7 failed
+before: 15 failed, 224 deselected in 75.74s (0:01:15)
+after:  7 failed, 8 passed, 224 deselected in 76.03s (0:01:16)
 ```
 
-The 7 left: 6 `unknown_token_unknown_chain` cases stop at a test-side
-`Translation key 'words__cancel_and_exit' not found`, and
-`access_list[max_count]` needs `extapp/sdk-allocator-heap`.
+Before, the 6 staking cases and `access_list[single_entry]` and
+`[larger_list]` fail with `DataError: Progress not initialized` (Core stops
+the app); these 8 pass after. In both runs the 6 `unknown_token_unknown_chain`
+cases stop at a test-side `Translation key 'words__cancel_and_exit' not found`
+(the key is not in Core's `en.json`), and `access_list[max_count]` times out
+on the app's `PANIC at alloc.rs:572`, which `extapp/sdk-allocator-heap`
+addresses.
 
 **Cause.** `get_progress_indicator` reported progress without `init_progress`,
 and the SDK did not know whether a screen was shown, so an out-of-order report
@@ -58,7 +69,10 @@ or end reached Core.
 **Tests.** SDK test `progress_without_a_screen`; the subset above.
 
 ### Notes for QA
-This unmasks sample gaps that passed only because Core stopped the app:
-`test_signtx_error[vault_*_with_eth]` and `[EIP-7702 - Uniswap …]` now reach
-the sample's own checks (its `prepare_vault_tx` checks `value.is_empty()` where
-Core checks `value != 0`). `ui::Progress` has no in-tree user yet.
+This unmasks sample gaps that passed only because Core stopped the app. The
+three `test_signtx_error[vault_*_with_eth]` cases and
+`[EIP-7702 - Uniswap - fails because we have safety checks]` now fail with
+`DID NOT RAISE`: the sample completes transactions the tests expect it to
+refuse. For the vaults, its `prepare_vault_tx` checks `value.is_empty()` where
+Core checks `value != 0`; the EIP-7702 case is a separate gap. `ui::Progress` has
+no in-tree user yet.

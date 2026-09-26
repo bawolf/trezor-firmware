@@ -1,53 +1,46 @@
 # fix(core): guard extapp run.py logging with __debug__
 
-Status: note for the owner of `bieleluk/sdk-wip` (#7516), not a PR. `run.py`'s
-dispatch exists only on the draft SDK branches (identical on `bieleluk/stabby`,
-`cepetr/apptool`, `vojczejk/sdk-wip-modui`); on `main` it is still a stub.
-Reproduction status: standalone repro on a PYOPT=1 emulator; no committed test.
+Status: note for the owner of `bieleluk/sdk-wip` (#7516), not a PR. `run.py`
+exists only on the draft SDK branches: `cepetr/apptool` has the identical
+file; `bieleluk/stabby` has the same bug with two more unguarded calls, and
+`vojczejk/sdk-wip-modui` too; this patch is against sdk-wip
+(`pr-drafts-rerun/logs/scan-branches.log`). No committed test.
+Rerun 2026-09-26 on T3T1 frozen PYOPT=1 emulators without debuglink, built at
+sdk-wip and at the pushed tip `cf7d5bc6a3`, on a profile seeded by a PYOPT=0
+build of sdk-wip: `pr-drafts-rerun/logs/pyopt-{seed,base,tip}.log`. Local macOS
+build fix only (`15de3664a6` cherry-picked for the emulator app); not needed on
+Linux. Land this first: the other `run.py` branches carry the base's unguarded
+calls until it does.
 
 Branch: https://github.com/bawolf/trezor-firmware/tree/extapp/run-log-pyopt @ `cf7d5bc6a3`
 (one commit on `bieleluk/sdk-wip` @ `4cd93ff4d8`)
 
 ---
 
-`run.py` imports `log` only under `if __debug__:`, but calls it unguarded in 13
-places. On a PYOPT=1 build, which every hardware build is, the first crypto
-reply to any app takes Core down.
+`run.py` imports `log` only under `if __debug__:`, but called it unguarded in
+13 places, so on a PYOPT=1 build the first crypto reply to any app ends Core:
+the `NameError` is raised inside `send_crypto_result`, which `unwrap!`s the
+callback's result. Each `log.*` call now goes under `if __debug__:`; nothing
+changes under PYOPT=0.
 
-**Reproduce.** T3T1 emulator without debuglink, device already seeded (with a
-PYOPT=0 build of the same tree), Ethereum sample loaded over the normal wire:
-
-```sh
-uv run xtask build firmware --emulator --model T3T1 --apps --frozen --pyopt true --debug-link false --disable-animation
-xtask modular build -p ethereum -m t3t1 --lang en -e
-```
-
-Then load the app with `trezorlib.extapp.load(...)` and send the sample's
-`GetPublicKey(m/44'/60'/0')` in an `ExtAppMessage`. It shows no screen, so no
-debuglink is needed. Observed:
+Tested on a T3T1 emulator built with
+`xtask build firmware --emulator --model T3T1 --apps --frozen --pyopt true --debug-link false --disable-animation`,
+seeded first through a PYOPT=0 build ([repro/run-log-pyopt/seed.py](repro/run-log-pyopt/seed.py)).
+[repro_pyopt_getpublickey.py](repro/run-log-pyopt/repro_pyopt_getpublickey.py)
+loads the Ethereum sample (`xtask modular build -p ethereum -m t3t1 --lang en -d -e`)
+and sends it `GetPublicKey(m/44'/60'/0')`, which shows no screen:
 
 ```
-RESULT: GetPublicKey got no answer: Timeout: Timeout reading UDP packet (20s)
-AFTER: Core does not answer: TransportException: Error opening udp:127.0.0.1:21490
-Fatal: unwrap failed at rust/src/crypto/api/firmware_micropython.rs:157
+before: GetPublicKey got no answer: Timeout: Timeout reading UDP packet (20s)
+        GetFeatures: TransportException: Error opening udp:127.0.0.1:21570
+after:  GetPublicKey: xpub6CNFa58kEQJu...
+        GetFeatures: Core answers
 ```
 
-With the fix, the xpub comes back and Core still answers `GetFeatures`. T3T1
-because a PYOPT=1 T3W1 speaks only THP, whose pairing needs someone to read the
-screen; the bug does not depend on the model.
+Before, the emulator console shows
+`Fatal: unwrap failed at rust/src/crypto/api/firmware_micropython.rs:157`.
 
-**Cause.** `crypto_resp_cb` calls `log.debug`, which is unbound under PYOPT=1.
-The `NameError` is raised inside `send_crypto_result`, which `unwrap!`s the
-callback's result. The call after each UI interaction ends the request with a
-`NameError` too.
-
-**Fix.** Each `log.*` call goes under `if __debug__:`. Nothing changes under
-PYOPT=0.
-
-**Tests.** None committed: a PYOPT=1 device test needs a harness without
-debuglink, which the repo does not have. A scan of `run.py` finds 13 unguarded
-calls before and 0 after.
-
-### Notes for QA
-On a PYOPT=1 build, load any app and make it request a key. Before the fix Core
-stops with "unwrap failed"; after it the app answers.
+T3T1 because a T3W1 needs THP pairing, which without debuglink needs someone
+to read the screen; the bug does not depend on the model. A committed test
+would need a PYOPT=1 device-test harness without debuglink, which the repo
+does not have.

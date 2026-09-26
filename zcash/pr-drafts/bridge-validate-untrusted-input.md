@@ -5,6 +5,13 @@ bridges and `trezor-app-sdk` exist only on the draft SDK branches.
 Reproduction status: a Core unit test fails before (and ends Core) and passes
 after.
 `extapp/bridge-raise-not-rsod` stacks on this branch.
+Rerun 2026-09-26: the tip's test file on a T3W1 non-frozen `--apps` emulator
+of sdk-wip and of the pushed tip `fc12e1b57b`, each built at its tree
+(`pr-drafts-rerun/logs/bridge-validate-{base,tip}.log`); SDK checks at the tip
+(`bridge-validate-tip-sdk.log`); flash with `--apps --bootloader-devel` at
+both (`build-hw-{T3T1,T3W1}-{sdkwip,validate}.log`). No local changes. The
+`cargo vet` count is from the series at `2839206d35`, which differs from
+`cbce6b97e2` only in a Zcash test file; not rerun.
 
 Branch: https://github.com/bawolf/trezor-firmware/tree/extapp/bridge-validate-untrusted-input @ `fc12e1b57b`
 (two commits on `bieleluk/sdk-wip` @ `4cd93ff4d8`)
@@ -19,18 +26,23 @@ operation its IPC id named.
 - `52a84bf3dd` feat(sdk): add checked accessors for extapp IPC requests
 - `fc12e1b57b` fix(core): validate extapp IPC requests before reading them
 
-**Reproduce.** The new `core/tests/test_apps.extapp.ipc.py` on a non-frozen
-T3W1 `--apps` emulator of sdk-wip
-(`cd core/tests && ./run_tests.sh test_apps.extapp.ipc.py`):
+**Reproduce.** This branch's new `core/tests/test_apps.extapp.ipc.py`, copied
+into an sdk-wip checkout and run on a non-frozen T3W1 `--apps` emulator built
+from it (`cd core/tests && ./run_tests.sh test_apps.extapp.ipc.py`;
+tracebacks and the home directory trimmed):
 
 ```
-test_crypto_request ... failed    AssertionError: <class 'ValueError'> not raised
-test_progress_request ... failed  AssertionError: <class 'ValueError'> not raised
-Fatal: rs at …/rkyv…:41
+  test_crypto_request ... failed
+AssertionError: <class 'ValueError'> not raised
+  test_progress_request ... failed
+AssertionError: <class 'ValueError'> not raised
+  test_ui_request ...Task #1 terminated.
+Fatal: rs at …/.cargo/registry/src/index.crates.io-1949cf8c6:41
 ```
 
 A progress `End` sent under the `Init` id reached the `Init` branch, and
-malformed bytes were read as an archive until rkyv itself aborted.
+malformed UI bytes were read as an archive until Core stopped with a fatal
+error in a dependency (the message truncates the path).
 
 **Fix.**
 - The SDK gains `access_crypto_request(bytes, id)`, `access_ui_request(bytes)`

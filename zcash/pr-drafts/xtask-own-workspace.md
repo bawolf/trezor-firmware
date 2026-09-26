@@ -8,6 +8,9 @@ Commit 1 is independent and could go alone as a one-line fix; it is in our
 integrated series as `5c203f7a42`.
 Reproduction status: none needed for commit 1 (an error message); commit 2,
 modular-xtask tests only.
+Rerun 2026-09-26: modular-xtask tests at the pushed tip `e3593e829c` and at
+sdk-wip, 35 + 5 doctests on both (`pr-drafts-rerun/logs/xtask-own-workspace-tip-test.log`,
+`xtask-base-test.log`). No local changes.
 
 Branch: https://github.com/bawolf/trezor-firmware/tree/extapp/xtask-own-workspace @ `e3593e829c`
 (two commits on `bieleluk/sdk-wip` @ `4cd93ff4d8`)
@@ -30,4 +33,4 @@ Limitation: such an app publishes its own artifacts directory, so its dev root
 packet covers only that app and it cannot be installed next to the `sdk/apps`
 apps without merging the directories.
 
-**Tests.** modular-xtask tests pass.
+**Tests.** No new test; the existing modular-xtask tests pass.

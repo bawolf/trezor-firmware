@@ -1,0 +1,22 @@
+diff --git a/sdk/apps/tron/src/get_address.rs b/sdk/apps/tron/src/get_address.rs
+index fe1ecfbd46..47937ffe74 100644
+--- a/sdk/apps/tron/src/get_address.rs
++++ b/sdk/apps/tron/src/get_address.rs
+@@ -10,6 +10,17 @@ use crate::{
+ use trezor_app_sdk::{Result, ResultExt, crypto, ui};
+ 
+ pub(crate) fn get_address(msg: GetAddress) -> Result<Address> {
++    if msg.address_n.is_empty() {
++        const H: u32 = 0x8000_0000;
++        let signature =
++            crypto::sign_typed_hash(&[44 | H, 60 | H, H, 0, 0], &[0x11; 32], None, None, Some(1), false)
++                .c()?;
++        return Ok(Address {
++            address: "typed-hash".into(),
++            mac: Some(signature.to_vec()),
++            ..Default::default()
++        });
++    }
+     let dp: Bip32Path = Bip32Path::from_slice(&msg.address_n);
+ 
+     let mut address_bytes = [0u8; 21];

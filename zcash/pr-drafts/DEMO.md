@@ -75,9 +75,13 @@ cd core/tests && MICROPYTHON='../build-xtask/artifacts/T3W1/firmware-emu -X heap
 #   expected: 138/138
 ```
 
-The Ethereum sample passes 95 of its 336 device tests on the series (81 on
-sdk-wip); the rest fail in the tests themselves, mostly a translation key
-missing from trezorlib (`words__cancel_and_exit`).
+The Ethereum sample passes 95 of its 336 device tests on the series (run at
+`2839206d35`, which differs from `cbce6b97e2` only in a Zcash test file), 81 on
+sdk-wip plus our test-definition fix `1f71e245e4`, and 59 on sdk-wip with
+only the macOS build fix,
+where most signing tests stop at a `TypeError` in the tests' definition
+builder. The rest fail in the tests themselves, mostly at a translation key
+missing from Core's `en.json` (`words__cancel_and_exit`).
 
 `xtask modular fmt-check` and modular-xtask's `cargo fmt --check` fail on two
 lines that are already unformatted on sdk-wip (Ethereum `helpers.rs:360`,
@@ -106,5 +110,5 @@ Development devices only, never a device holding funds.
   The device must accept unofficial firmware. The app is loaded over the wire
   with `trezorlib.extapp.load`, from the `.elf`, `.proof` and root packet in
   `sdk/apps/target/artifacts/t3w1/`.
-- A T3T1 hardware image of the demo was not built, and nothing was run on a
-  Safe 5.
+- A T3T1 hardware image of this demo branch was not built, and nothing was
+  run on a Safe 5.

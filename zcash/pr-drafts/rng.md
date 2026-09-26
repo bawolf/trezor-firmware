@@ -9,6 +9,10 @@ there; it could be a small PR against `main` for cepetr/TychoVrahe. Whether an
 unaligned buffer reaches it on `main` today was not checked.
 Kind: bug fix (commit 1) and feature (commit 2).
 Reproduction status: none; commit 1 is from code reading.
+Rerun 2026-09-26 at the pushed tip `ed9f103db3`: SDK checks
+(`pr-drafts-rerun/logs/rng-tip-sdk.log`) and T3T1/T3W1 hardware builds with
+`--apps --bootloader-devel` (`build-hw-{T3T1,T3W1}-rng.log`; flash unchanged
+from sdk-wip at the reported 0.5 KB precision). No local changes.
 
 Branch: https://github.com/bawolf/trezor-firmware/tree/extapp/rng @ `ed9f103db3`
 (two commits on `bieleluk/sdk-wip` @ `4cd93ff4d8`)
@@ -27,20 +31,21 @@ for example for signature nonces.
 not 4-byte aligned. An app can pass any byte slice through the syscall.
 
 **Fix.**
-- Commit 1: each word is copied into place with `memcpy`.
+- Commit 1: each random word is copied into place with `memcpy`, the last one
+  partly.
 - Commit 2: `trezor_api_v1_t` gains `rng_fill_buffer`, appended so the other
   field offsets stay put. The kernel admits `SYSCALL_RNG_FILL_BUFFER` from
   applets; its verifier already checks that the buffer is the caller's
   writable memory. The SDK exposes `crypto::random_bytes(&mut [u8])`; the test
   mock fills zeros.
 - Versioning: v1 is unreleased and has been changed in place before
-  (`f7fe40f57b` on sdk-wip), and `app_header.c` accepts only `abi_version == 1`, so this
-  appends to v1. Once v1 is frozen, this belongs in a v2 so that a new app
-  fails closed on old firmware.
+  (`f7fe40f57b` on sdk-wip, not on `main`, so v1 already differs between the
+  two), and `app_header.c` accepts only `abi_version == 1`, so this appends to
+  v1. Once v1 is frozen, this belongs in a v2 so that a new app fails closed
+  on old firmware.
 
 **Tests.** SDK checks pass; the T3T1 and T3W1 hardware builds compile the
-STM32 path; an app's hedged signature nonces use it on T3W1 and T3T1
-emulators. Nothing on the host exercises an unaligned STM32 write.
+STM32 path. Nothing on the host exercises an unaligned STM32 write.
 
 ### Notes for QA
 Apps can call `crypto::random_bytes`. Existing apps are unaffected.

@@ -9,6 +9,11 @@ of the platform fixes. They extend the crypto bridge lines that
 `extapp/bridge-validate-untrusted-input` and `extapp/bridge-raise-not-rsod`
 change, and the app's two networks need `extapp/run-coin-types`.
 Kind: feature. Reproduction status: not applicable.
+Evidence (not rerun on 2026-09-26): Core unit tests at `2839206d35`, which
+differs from `cbce6b97e2` only in a Zcash test file; device tests with the
+`cbce6b97e2` tree on emulator firmware built at `0d9fe9512a`, which differs
+only in the Zcash app's tests and UI fixtures (`shaping/fixround/logs/U-unit-final.log`,
+`D-zcash-{t3w1,t3t1}-ui-cbce.log`).
 
 Branch: https://github.com/bawolf/trezor-firmware/tree/zcash/extapp-series @ `cbce6b97e2`, commits:
 - `f8a8261663` feat(sdk): check that reply types fit the device IPC alignment
@@ -35,10 +40,11 @@ derives the key with BLAKE2b.
 - Core, `apps/extapp/zip32_orchard.py`, in this order: the app must declare the
   curve and the path, with coin type 133 or 1 and an account below 2^31; the
   backup type must be known; the user confirms; then `get_seed()` (which may
-  ask for a passphrase). Nothing that can be refused is checked after the
-  confirmation.
+  ask for a passphrase). The only check after the confirmation is the seed
+  length, which cannot fail on a device (the seed is 16, 32 or 64 bytes).
 - Consent: title "Spending key", text "{app} will receive the spending key of
-  Zcash account #{n} ({Mainnet|Testnet}) and can spend all of its funds.",
+  Zcash account #{account + 1} ({Mainnet|Testnet}) and can spend all of its
+  funds.",
   hold to confirm. `{app}` is the name from the app header verified at load.
   Asked once per session, app instance and account. An approval is keyed on
   the instance id and the SHA-256 fingerprint of the verified header, so
@@ -50,7 +56,11 @@ derives the key with BLAKE2b.
   codec's 10 sessions, 1,520 B with THP's 20).
 - Strings: `extapp__spending_key`, `extapp__spending_key_template`,
   `extapp__mainnet`, `extapp__testnet`, left out of bitcoin-only builds
-  (`extapp` added to `ALTCOIN_PREFIXES`).
+  (`extapp` added to `ALTCOIN_PREFIXES`). `signatures.json`'s "current" block
+  is regenerated; its `commit` field names a local commit from before the
+  rebase, so it will be regenerated on the final commit.
+- Also: `app_loading` enables `zeroize` in `core/embed/rust/Cargo.toml`, and
+  `run.py` names its crypto result tags (`_RESULT_*`).
 
 **Questions for Trezor.**
 1. May a Core service hand an app a spending key at all? The alternative is

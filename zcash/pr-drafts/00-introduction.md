@@ -1,8 +1,11 @@
 # Introduction to the platform team (issue or email)
 
-Status: draft, not sent. Send as an issue on trezor/trezor-firmware or, per
-#6770, as an email to jan.setina@satoshilabs.com and jan.matejek@satoshilabs.com.
-Fill in the video link before sending.
+Status: draft, not sent. Send as an issue on trezor/trezor-firmware or as an
+email to jan.setina@satoshilabs.com and jan.matejek@satoshilabs.com, the two
+contacts in Hannsek's reply on #6770 (a Kaspa proposal, closed not planned).
+Fill in the video link before sending. The device run was an earlier build
+(firmware `0245f15fd0`, app bundle `extapp-07a27d1d76`); the series itself
+has run only on emulators.
 
 ---
 
@@ -12,17 +15,18 @@ Hi,
 
 We built a shielded Zcash app on the extapp SDK from `bieleluk/sdk-wip`
 (#7516). It shows Orchard unified addresses, exports a viewing key and signs
-PCZTs that spend from the Ironwood pool. It runs on T3W1 and T3T1 emulators
-and on a T3W1 development device. Video: <link>
+PCZTs that spend from the Ironwood pool. It runs on T3W1 and T3T1 emulators,
+and an earlier build of it ran on a T3W1 development device. Video: <link>
 
-#6962 puts Zcash after the modularization, and #6770 asks third parties to get
-in touch. So we are asking before opening anything: how would you like
-contributions to the WIP SDK?
+#6962 puts Zcash after the modularization, and Hannsek's reply on #6770
+offers the modularization alpha to third-party contributors. So we are asking
+before opening anything: how would you like contributions to the WIP SDK?
 
 Everything is on our fork, based on `bieleluk/sdk-wip` @ `4cd93ff4d8`:
-- 16 small branches (`extapp/*`) with fixes and features for `run.py`, the
-  Rust bridges, `trezor-app-sdk` and `modular-xtask`. Most are a few lines
-  with a test or a reproduction. One of them fixes code on `main`.
+- 15 small branches (`extapp/*`): 14 with fixes and features for `run.py`,
+  the Rust bridges, `trezor-app-sdk` and `modular-xtask`, and one fix to
+  Core's Zcash address decoder on `main`. Most are a few lines with a test or
+  a reproduction.
 - A proposed Core service that derives ZIP-32 Orchard account keys for an app
   that declares them, after a hold-to-confirm screen. The app gets the account's
   spending key. That is a design decision for you, and we would like your view

@@ -1,0 +1,13 @@
+diff --git a/sdk/apps/ethereum/Cargo.toml b/sdk/apps/ethereum/Cargo.toml
+index c2aa253928..19607eb157 100644
+--- a/sdk/apps/ethereum/Cargo.toml
++++ b/sdk/apps/ethereum/Cargo.toml
+@@ -13,7 +13,7 @@ stack-size = 16384
+ heap-size = 1024
+ # Host requests arrive in the IPC inbox too, up to Core's 8704-byte THP
+ # buffer; the 1 KiB default holds only the replies of Core's services.
+-ipc-buffer-size = 16384
++ipc-buffer-size = 2048
+ app-ring = 0
+ curves = ["secp256k1"]
+ paths = [

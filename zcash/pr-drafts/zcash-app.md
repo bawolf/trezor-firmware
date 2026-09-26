@@ -2,11 +2,17 @@
 
 Status: **a feature proposal, last in the order; not a PR yet.** Trezor asks
 for product agreement before a new coin (#6962 puts Zcash after the
-modularization; #6770 invites third parties). Based on the draft SDK
+modularization; Hannsek's reply on #6770 offers the modularization alpha to
+third-party contributors). Based on the draft SDK
 (`bieleluk/sdk-wip`, #7516), so it cannot target `main`. It depends on the
 whole platform part of our series, including the key service
 (`key-service.md`), which needs design agreement first.
 Kind: feature. Reproduction status: not applicable.
+Evidence (not rerun on 2026-09-26): device tests with the `cbce6b97e2` tree
+on emulator firmware built at `0d9fe9512a`, which differs only in the app's
+tests and UI fixtures (checked with `--ui=test`); unit, signer and signer-tests runs at
+`2839206d35`, which differs from `cbce6b97e2` only in a Zcash test file
+(`shaping/fixround/logs/`).
 
 Branch: https://github.com/bawolf/trezor-firmware/tree/zcash/extapp-series @ `cbce6b97e2`, commits:
 - `1a9708f824` feat(extapp): add zcash signer crate
@@ -37,26 +43,34 @@ streams the PCZT to the app, which verifies it one action at a time. Related:
   new crate is audited; the exemptions only pin the set. The CI job's
   `cargo audit` step has never been run.
 - **Safe 5 signing is slower.** The Sinsemilla generator table does not fit the
-  T3T1 app arena, so the T3T1 build computes the generators
-  (`model_t3t1 = ["zcash-signer/computed-generators"]`, −66,112 B). On the
-  host, verifying 32 actions takes 384–395 ms computed against 114–120 ms with
-  the table, about 3.4×. Scaled by 260–440× that is an estimated 100–170 s of
-  verification for a 32-action PCZT on a Safe 5, not measured on a Safe 5. On a
-  T3W1 development device (table; an earlier build of this app), a 32-action
-  sign took 81.5 s wall, including
-  the user's time on its 34 screens, and the longest IPC silence was 213 ms of
-  the 1,000 ms limit. The estimated worst silence on a Safe 5 is 0.26–0.36 s.
-- **Sizes.** The T3T1 arena exists only in sdk-wip's WIP commit `534e35daa9`.
+  T3T1 app arena, so the T3T1 build computes the generators; signing a
+  32-action PCZT on a Safe 5 is estimated at 100–170 s of verification, not
+  measured (details below).
+- **Sizes.** The T3T1 image leaves 11,520 B of its arena (details below). The
+  T3T1 arena exists only in sdk-wip's WIP commit `534e35daa9`.
 
-  | | T3T1 | T3W1 |
-  |---|---|---|
-  | release image, code + data | 225,024 of 236,544 B (11,520 B left) | 291,296 of 393,216 B (101,920 B left) |
-  | declared stack / worst static stack | 32,768 / 28,804 B | 32,768 / 28,796 B |
-  | declared heap | 69,632 B | 69,632 B |
-  | IPC inbox | 2,048 B | 2,048 B |
+<details><summary>Sizes and the Safe 5 estimate</summary>
 
-  Heap peak while signing: 57,632 B on the T3W1 emulator; 57,452 B on a T3W1
-  device with the earlier build.
+| | T3T1 | T3W1 |
+|---|---|---|
+| release image, code + data | 225,024 of 236,544 B (11,520 B left) | 291,296 of 393,216 B (101,920 B left) |
+| declared stack / worst static stack | 32,768 / 28,804 B | 32,768 / 28,796 B |
+| declared heap | 69,632 B | 69,632 B |
+| IPC inbox | 2,048 B | 2,048 B |
+
+Heap peak while signing: 57,632 B on the T3W1 emulator; 57,452 B on a T3W1
+device with an earlier build of this app.
+
+The T3T1 build sets `model_t3t1 = ["zcash-signer/computed-generators"]`
+(−66,112 B). On the host, verifying 32 actions takes 384–395 ms computed
+against 114–120 ms with the table, about 3.4×. Scaled by 260–440× that is an
+estimated 100–170 s of verification for a 32-action PCZT on a Safe 5. On a
+T3W1 development device (table; the earlier build), a 32-action sign took
+81.5 s wall, including the user's time on its 34 screens, and its longest IPC
+silence was 198 ms of the 1,000 ms limit (286 ms over the whole session). The
+estimated worst silence on a Safe 5 is 0.26–0.36 s.
+
+</details>
 
 - **App id.** `zcash.trezor.com` is a placeholder, and the vendor is "Bryant
   Wolf"; the id and production signing are Trezor's.
@@ -91,8 +105,12 @@ streams the PCZT to the app, which verifies it one action at a time. Related:
   librustzcash in `signer-tests` 88 (also 88 with `computed-generators`);
   `make extapp_zcash_signer_test` runs them. Signatures are applied with
   the upstream `pczt` `Signer`, which checks them against the upstream sighash,
-  for 1–32 actions; every single-byte mutation is cross-checked with the
-  upstream parser and `Verifier`.
+  for 1–32 actions. In one PCZT that uses most of the grammar, each byte is
+  changed twice (bit 0, then bit 7); whenever the signer accepts the result,
+  librustzcash must accept it too (parser, `Signer`, `Verifier`) and the
+  signer's signatures must apply. 20 spend and output fields are also each
+  flipped by one bit, and other cases change values or lengths or drop
+  fields; the signer must refuse each.
 
 **What the tests do not show.** Device signatures are checked for count, order
 and length only: RedPallas signatures are randomized, so fixtures cannot hold

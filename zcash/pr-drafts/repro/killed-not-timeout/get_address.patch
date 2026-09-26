@@ -1,0 +1,14 @@
+diff --git a/sdk/apps/tron/src/get_address.rs b/sdk/apps/tron/src/get_address.rs
+index fe1ecfbd46..93509fbd6f 100644
+--- a/sdk/apps/tron/src/get_address.rs
++++ b/sdk/apps/tron/src/get_address.rs
+@@ -10,6 +10,9 @@ use crate::{
+ use trezor_app_sdk::{Result, ResultExt, crypto, ui};
+ 
+ pub(crate) fn get_address(msg: GetAddress) -> Result<Address> {
++    if msg.address_n.first() == Some(&0xDEAD_BEEF) {
++        panic!("probe: intentional fault");
++    }
+     let dp: Bip32Path = Bip32Path::from_slice(&msg.address_n);
+ 
+     let mut address_bytes = [0u8; 21];
