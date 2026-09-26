@@ -11,7 +11,7 @@ exclude = ["supply-chain/"]
 crate-type = ["rlib"]
 
 [dependencies]
-rkyv = { version = "0.8", default-features = false }
+rkyv = { version = "0.8", default-features = false, features = ["bytecheck"] }
 critical-section = "1.2.0"
 ufmt = "0.2.0"
 spin = "0.10.0"
@@ -33,7 +33,7 @@ log_level_debug = []
 
 debug = []
 
-app = ["rkyv/alloc", "rkyv/bytecheck", "embedded_alloc"]
+app = ["rkyv/alloc", "embedded_alloc"]
 
 # Enables use of unstable (nightly-only) language/library features
 # (`core_intrinsics`, `lang_items`). Required for the default panic/abort

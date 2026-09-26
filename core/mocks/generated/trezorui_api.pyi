@@ -898,8 +898,11 @@ def send_ui_result(
 def deserialize_progress_message(
     *,
     data: bytes,
+    message_id: int,
 ) -> Obj:
-    """Deserialize a progress message from bytes and return it as a MicroPython object."""
+    """Validate a progress request for operation `message_id` and return its
+    fields as a MicroPython object. Raises ValueError if it is malformed or
+    another operation."""
 
 
 # rust/src/ui/api/firmware_micropython.rs
