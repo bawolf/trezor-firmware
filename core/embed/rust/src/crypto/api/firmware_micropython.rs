@@ -36,16 +36,16 @@ extern "C" fn new_deserialize_crypto_message(
         let obj: Obj = kwargs.get(Qstr::MP_QSTR_data)?;
         let message_id: u16 = kwargs.get(Qstr::MP_QSTR_message_id)?.try_into()?;
 
-        let data = unwrap!(unsafe { crate::micropython::buffer::get_buffer(obj) });
+        let data = unsafe { crate::micropython::buffer::get_buffer(obj) }?;
 
-        fn obj_from_dp_slice(slice: &Archived<Slice<u32>>) -> Obj {
+        fn obj_from_dp_slice(slice: &Archived<Slice<u32>>) -> Result<Obj, Error> {
             let slice = slice.as_ref();
-            let mut list = unwrap!(List::with_capacity(slice.len()));
+            let mut list = List::with_capacity(slice.len())?;
 
             for &item in slice {
-                unwrap!(list.append(unwrap!(Obj::try_from(item.to_native()))));
+                list.append(Obj::try_from(item.to_native())?)?;
             }
-            unwrap!(List::alloc(unsafe { list.as_slice() })).into()
+            Ok(List::alloc(unsafe { list.as_slice() })?.into())
         }
 
         // The request comes from an untrusted app: validate it before reading.
@@ -58,16 +58,16 @@ extern "C" fn new_deserialize_crypto_message(
                 address_n,
                 xpub_magic,
             } => {
-                let dp_obj = obj_from_dp_slice(address_n);
-                let magic_obj = unwrap!(Obj::try_from(xpub_magic.to_native()));
+                let dp_obj = obj_from_dp_slice(address_n)?;
+                let magic_obj = Obj::try_from(xpub_magic.to_native())?;
                 (dp_obj, magic_obj).try_into()?
             }
             Archived::<TrezorCryptoEnum>::GetPublicKey {
                 address_n,
                 compressed,
             } => {
-                let dp_obj = obj_from_dp_slice(address_n);
-                let compressed_obj = unwrap!(Obj::try_from(*compressed));
+                let dp_obj = obj_from_dp_slice(address_n)?;
+                let compressed_obj = Obj::try_from(*compressed)?;
                 (dp_obj, compressed_obj).try_into()?
             }
             Archived::<TrezorCryptoEnum>::SignDigest {
@@ -77,7 +77,7 @@ extern "C" fn new_deserialize_crypto_message(
             } => {
                 let digest_obj = Obj::try_from(digest.as_slice())?;
                 (
-                    obj_from_dp_slice(address_n),
+                    obj_from_dp_slice(address_n)?,
                     digest_obj,
                     Obj::try_from(*compressed)?,
                 )
@@ -105,7 +105,7 @@ extern "C" fn new_deserialize_crypto_message(
                     None => Obj::const_none(),
                 };
                 (
-                    obj_from_dp_slice(address_n),
+                    obj_from_dp_slice(address_n)?,
                     hash_obj,
                     network_obj,
                     token_obj,
@@ -115,7 +115,7 @@ extern "C" fn new_deserialize_crypto_message(
                     .try_into()?
             }
             Archived::<TrezorCryptoEnum>::GetAddressMac { address_n, address } => (
-                obj_from_dp_slice(address_n),
+                obj_from_dp_slice(address_n)?,
                 Obj::try_from(address.as_ref())?,
             )
                 .try_into()?,
@@ -127,7 +127,7 @@ extern "C" fn new_deserialize_crypto_message(
                 mac,
                 address,
             } => (
-                obj_from_dp_slice(address_n),
+                obj_from_dp_slice(address_n)?,
                 Obj::try_from(mac.as_ref())?,
                 Obj::try_from(address.as_ref())?,
             )
@@ -186,42 +186,28 @@ extern "C" fn new_send_crypto_result(n_args: usize, args: *const Obj, kwargs: *m
     let block = |_args: &[Obj], kwargs: &Map| {
         let obj: Obj = kwargs.get(Qstr::MP_QSTR_result)?;
 
-        let ipc_callback: Option<Obj> = kwargs
-            .get(Qstr::MP_QSTR_ipc_cb)
-            .unwrap_or_else(|_| Obj::const_none())
-            .try_into_option()?;
-
-        let ipc_cb = unwrap!(ipc_callback.map(|cb| {
-            move |bytes: &[u8]| {
-                unwrap!(cb.call_with_n_args(&[unwrap!(bytes.try_into())]));
-            }
-        }));
+        let ipc_cb: Obj = kwargs.get(Qstr::MP_QSTR_ipc_cb)?;
 
         // Map MicroPython CryptoResult object to Rust enum for serialization
         let msg = WipedResult(if obj.is_str() {
-            let data = unwrap!(unsafe { crate::micropython::buffer::get_buffer(obj) });
-            match data.len() {
-                111 => TrezorCryptoResultRef::Xpub(unwrap!(data.try_into())),
-                _ => {
-                    return Err(Error::TypeError);
-                }
-            }
+            let data = unsafe { crate::micropython::buffer::get_buffer(obj) }?;
+            TrezorCryptoResultRef::Xpub(data.try_into().map_err(|_| Error::TypeError)?)
         } else if obj.is_bytes() {
-            let data = unwrap!(unsafe { crate::micropython::buffer::get_buffer(obj) });
-            match data.len() {
-                32 => TrezorCryptoResultRef::AddressMac(unwrap!(data.try_into())),
-                65 => TrezorCryptoResultRef::Signature(unwrap!(data.try_into())),
-                _ => {
-                    return Err(Error::TypeError);
-                }
+            let data = unsafe { crate::micropython::buffer::get_buffer(obj) }?;
+            if let Ok(mac) = data.try_into() {
+                TrezorCryptoResultRef::AddressMac(mac)
+            } else if let Ok(signature) = data.try_into() {
+                TrezorCryptoResultRef::Signature(signature)
+            } else {
+                return Err(Error::TypeError);
             }
         } else if obj.is_immediate() {
-            TrezorCryptoResultRef::Boolean(unwrap!(bool::try_from(obj)))
+            TrezorCryptoResultRef::Boolean(bool::try_from(obj)?)
         } else {
             // Expect a `[type_tag: int, ...]` list for results that a byte
             // length cannot identify (e.g. 32 or 65 bytes)
             let list: Gc<List> = obj.try_into()?;
-            let tag: u8 = unwrap!(list.get(0)?.try_into());
+            let tag: u8 = list.get(0)?.try_into()?;
             let bytes_at = |index: usize| -> Result<&[u8], Error> {
                 let item = list.get(index)?;
                 unsafe { crate::micropython::buffer::get_buffer(item) }
@@ -230,11 +216,10 @@ extern "C" fn new_send_crypto_result(n_args: usize, args: *const Obj, kwargs: *m
                 // [0, public_key]
                 (0, 2) => {
                     let data = bytes_at(1)?;
-                    assert!(
-                        data.len() == 32 || data.len() == 33 || data.len() == 65,
-                        "Expected public key to be 32, 33 or 65 bytes"
-                    );
-                    TrezorCryptoResultRef::PublicKey(unwrap!(data.try_into()))
+                    if !matches!(data.len(), 32 | 33 | 65) {
+                        return Err(Error::TypeError);
+                    }
+                    TrezorCryptoResultRef::PublicKey(data.into())
                 }
                 // [1, spending_key, seed_fingerprint, weak_backup]
                 (1, 4) => {
@@ -261,13 +246,15 @@ extern "C" fn new_send_crypto_result(n_args: usize, args: *const Obj, kwargs: *m
             out: Align([MaybeUninit::<u8>::uninit(); 200]),
         };
 
-        let bytes = unwrap!(to_bytes_in_with_alloc::<_, _, Failure>(
+        let bytes = to_bytes_in_with_alloc::<_, _, Failure>(
             &msg.0,
             Buffer::from(&mut *buffers.out),
             SubAllocator::new(&mut buffers.arena),
-        ));
-        //Send the response back via the ipc_cb callback
-        ipc_cb(bytes.as_ref());
+        )
+        .map_err(|_| Error::RuntimeError(c"Crypto result too large"))?;
+        // Send the response back via the ipc_cb callback. A failure (e.g. the
+        // app is gone) is raised to the caller, not fatal to Core.
+        ipc_cb.call_with_n_args(&[Obj::try_from(bytes.as_ref())?])?;
 
         Ok(Obj::const_none())
     };

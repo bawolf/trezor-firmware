@@ -172,7 +172,10 @@ async def run(request: ExtAppMessage) -> ExtAppResponse:
             if __debug__:
                 log.debug(__name__, f"UI interaction result: {result}")
             # Serialize and send the result back
-            trezorui_api.send_ui_result(result=result, ipc_cb=ui_resp_cb)
+            try:
+                trezorui_api.send_ui_result(result=result, ipc_cb=ui_resp_cb)
+            except Exception:
+                die(DataError("Failed to send UI result"))
 
         elif service == _SERVICE_CRYPTO:
             try:
