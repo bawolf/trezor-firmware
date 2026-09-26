@@ -157,6 +157,11 @@ pub fn end_progress() -> Result<()> {
     ipc_progress_call(&TrezorProgressEnum::End)
 }
 
+/// Forgets a progress screen that Core has already ended.
+pub(crate) fn forget_progress() {
+    PROGRESS_SHOWN.store(false, Ordering::Relaxed);
+}
+
 /// A progress screen for the duration of a long computation, ended when
 /// dropped.
 ///
