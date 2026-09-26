@@ -114,6 +114,22 @@ handler, tests, design doc).
   (`utest1qkmcs…`). The emulator tests check that the full string is reachable.
 - Logs: the author's `session-logs/2026-09-25-dcc602fd48-*`.
 
+**Hardware, Safe 7 (T3W1), 2026-09-25, image `7864a22444`** (SHA-256 `1c193f61…`). This is the
+first hardware run on a Safe 7: a retail unit that is now the dedicated dev device.
+- **Setup.** Trezor's official firmware 2.12.5 was installed first (fingerprint `6d813400…`),
+  and the bootloader was unlocked (user-approved; permanent). `UnlockBootloader` is a
+  bootloader-mode message, so the device was paired over THP code entry and rebooted to the
+  bootloader first. Our image was then flashed from the unlocked bootloader.
+- **Session.** The device reported revision `7864a22444` and capability 30. The public test seed
+  was recovered on the device. Then, in one paired THP session:
+  - `ZcashGetAddress` testnet index 3 returned exactly the Safe 5 address `utest1qkmcs…`;
+  - `ZcashGetViewingKey` testnet account 0 matched the Safe 5 UFVK;
+  - the synthetic 2-action fixture was signed with records for actions `[1]`, as expected.
+- **Host gap.** Our desktop wallet's device bridge speaks only protocol v1
+  (`TrezorClientV1` + `NullPairing`), so it cannot pair with a THP device yet. The Safe 7 run
+  used trezorlib directly.
+- Logs: the author's `session-logs/2026-09-25-safe7-*`.
+
 **Upstream note.** The same NUL-prefix and short-payload behaviour exists in upstream's own
 `unified_addresses.decode` on the transparent `SignTx` path. It is worth reporting upstream,
 subject to the user's decision on contact.
