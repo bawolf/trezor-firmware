@@ -104,7 +104,16 @@ def decode(addr_str: str, coin: CoinInfo) -> dict[int, bytes]:
     if encoding != Encoding.BECH32M:
         raise DataError("Bech32m encoding required.")
 
-    decoded = memoryview(bytearray(convertbits(data, 5, 8, False)))
+    try:
+        decoded = memoryview(bytearray(convertbits(data, 5, 8, False)))
+    except ValueError:
+        raise DataError("Bech32m decoding failed.")
+
+    # f4unjumble() only asserts its 48-byte minimum; every valid unified
+    # address (a shielded receiver and 16 bytes of padding) is longer.
+    if len(decoded) < 48:
+        raise DataError("Invalid address length")
+
     f4unjumble(decoded)
 
     # check trailing padding bytes
