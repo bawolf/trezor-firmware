@@ -321,6 +321,15 @@ pub(crate) fn app_get_heap() -> Result<&'static [u8], ApiError> {
     }
 }
 
+/// Fills `buffer` from the device's random number generator.
+pub(crate) fn rng_fill_buffer(buffer: &mut [u8]) {
+    // SAFETY: `buffer` is valid for writes of `buffer.len()` bytes, at any
+    // alignment.
+    unsafe {
+        unwrap!(get_or_die().rng_fill_buffer)(buffer.as_mut_ptr() as *mut c_void, buffer.len())
+    };
+}
+
 pub(crate) fn ed25519_sign_open(
     public_key: &[u8; 32],
     signature: &[u8; 64],
