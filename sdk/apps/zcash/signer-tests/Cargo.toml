@@ -1,0 +1,42 @@
+[package]
+name = "zcash-signer-tests"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+[features]
+computed-generators = ["zcash-signer/computed-generators"]
+
+[dependencies]
+blake2b_simd = { version = "1.0.2", default-features = false }
+orchard = { version = "=0.15.3", default-features = false }
+pasta_curves = { version = "0.5.1", default-features = false }
+pczt = { version = "=0.9.3", default-features = false, features = ["orchard", "signer", "io-finalizer", "zcp-builder"] }
+rand_chacha = { version = "0.3.1", default-features = false }
+rand_core = { version = "0.6.4", default-features = false }
+serde_json = "1.0.145"
+zcash-signer = { path = "../signer" }
+zcash_note_encryption = { version = "0.4.1", default-features = false }
+zcash_primitives = { version = "=0.30.1", default-features = false }
+zcash_protocol = { version = "0.10.5", default-features = false }
+zip32 = { version = "=0.2.1", default-features = false }
+
+[dev-dependencies]
+jubjub = { version = "0.10.0", default-features = false }
+
+# The tests are their own workspace: the Zcash crates need a pre-release
+# `digest` that the `sdk/apps` workspace cannot share.
+[workspace]
+
+[patch.crates-io]
+# Released orchard has Ironwood; the fork adds APIs no release has: the
+# `*_with_progress` functions, `ScopeClassifier`, `recover_output_bound_with_*`
+# and `wipe`.
+orchard = { git = "https://github.com/bawolf/orchard", rev = "61704d46253e9ac9dc97358b0e17f82bc2b7fc1f" }
+# The fork adds APIs no release has: the `*_with_progress` functions and the
+# `computed-generators` feature.
+sinsemilla = { git = "https://github.com/bawolf/sinsemilla", rev = "6607cb019a587869a183b04172e20b4d2719a8e7" }
+
+# Unoptimized curve arithmetic would make the suite take tens of minutes.
+[profile.dev.package."*"]
+opt-level = 3

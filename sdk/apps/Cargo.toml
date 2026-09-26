@@ -1,9 +1,21 @@
 cargo-features = ["panic-immediate-abort"]
 
 [workspace]
-members = ["ethereum", "tron"]
+members = ["ethereum", "tron", "zcash/signer"]
+# Tests with the Zcash crates, whose pre-release `digest` conflicts with the
+# SDK's test mock.
+exclude = ["zcash/signer-tests"]
 
 resolver = "2"
+
+[patch.crates-io]
+# Released orchard has Ironwood; the fork adds APIs no release has: the
+# `*_with_progress` functions, `ScopeClassifier`, `recover_output_bound_with_*`
+# and `wipe`.
+orchard = { git = "https://github.com/bawolf/orchard", rev = "61704d46253e9ac9dc97358b0e17f82bc2b7fc1f" }
+# The fork adds APIs no release has: the `*_with_progress` functions and the
+# `computed-generators` feature.
+sinsemilla = { git = "https://github.com/bawolf/sinsemilla", rev = "6607cb019a587869a183b04172e20b4d2719a8e7" }
 
 [profile.debug-fw]
 inherits = "dev"
