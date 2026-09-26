@@ -1,3 +1,4 @@
+use stabby::slice::SliceMut;
 use stabby::str::Str;
 
 use super::allocator::GlobalAllocatorV1Ref;
@@ -19,6 +20,9 @@ pub trait TrezorApiV1: Send + Sync {
 
     extern "C" fn systick_ms(&self) -> u32;
     extern "C" fn sleep(&self, timeout_ms: u32);
+
+    /// Fills `buffer` from the device's random number generator.
+    extern "C" fn rng_fill_buffer<'a>(&self, buffer: SliceMut<'a, u8>);
 }
 
 pub type TrezorApiV1Vtable = stabby::vtable!(TrezorApiV1 + Send + Sync);

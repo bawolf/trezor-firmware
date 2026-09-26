@@ -71,6 +71,10 @@ pub(crate) fn sleep(timeout_ms: u32) {
     get_api_or_die().api.sleep(timeout_ms);
 }
 
+pub(crate) fn rng_fill_buffer(buffer: &mut [u8]) {
+    get_api_or_die().api.rng_fill_buffer(buffer.into());
+}
+
 pub(crate) fn try_get_syslog() -> Option<StaticSyslogV1> {
     API.get().map(|api| api.syslog)
 }

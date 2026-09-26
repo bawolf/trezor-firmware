@@ -5,6 +5,7 @@ mod ffi;
 #[cfg(feature = "ipc")]
 pub mod ipc;
 pub mod irq;
+pub mod rng;
 
 // Compiled out for host-side unit tests, where std provides the handler.
 // Cargo builds test targets and their dependencies with `panic = "unwind"`;

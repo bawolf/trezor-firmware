@@ -2,6 +2,7 @@ use xbuild::{CLibrary, Result, bail_unsupported};
 
 pub fn def_module(lib: &mut CLibrary) -> Result<()> {
     lib.add_include("rng/inc");
+    lib.add_rust_bindings(add_rust_bindings)?;
 
     if cfg!(feature = "emulator") {
         lib.add_define("USE_INSECURE_PRNG", Some("1"));
@@ -18,4 +19,11 @@ pub fn def_module(lib: &mut CLibrary) -> Result<()> {
     }
 
     Ok(())
+}
+
+fn add_rust_bindings(builder: bindgen::Builder) -> Result<bindgen::Builder> {
+    let builder = builder
+        .header("rng/inc/sys/rng.h")
+        .allowlist_function("rng_fill_buffer");
+    Ok(builder)
 }
