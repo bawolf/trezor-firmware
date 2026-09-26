@@ -17,11 +17,11 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifdef SECURE_MODE
-
 #include <trezor_rtl.h>
 
 #include <sec/mldsa44.h>
+
+#if defined(SECURE_MODE) || defined(MLDSA44_IN_KERNEL)
 
 #include <mldsa_native.h>
 
@@ -53,4 +53,4 @@ cleanup:
   TSH_RETURN;
 }
 
-#endif  // SECURE_MODE
+#endif  // defined(SECURE_MODE) || defined(MLDSA44_IN_KERNEL)
