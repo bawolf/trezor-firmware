@@ -1,0 +1,67 @@
+cargo-features = ["panic-immediate-abort"]
+
+[package]
+name = "zcash"
+version = "0.1.0"
+edition = "2024"
+
+[package.metadata.trezor]
+id = "zcash.trezor.com"
+name = "Zcash"
+vendor = "Bryant Wolf"
+stack-size = 16384
+heap-size = 49152
+app-ring = 0
+curves = ["zip32-orchard"]
+paths = [
+    "m/32'/133'/[0-100]'",
+    "m/32'/1'/[0-100]'",
+]
+
+[dependencies]
+trezor-app-sdk = { path = "../../crates/trezor-app-sdk" }
+orchard = { version = "=0.15.3", default-features = false }
+prost = { version = "0.14.1", default-features = false, features = ["derive"] }
+ufmt = { version = "0.2.0", default-features = false }
+zcash-signer = { path = "signer" }
+zcash_address = { version = "0.13.0", default-features = false }
+zcash_protocol = { version = "0.10.5", default-features = false }
+zeroize = { version = "1.8.2", default-features = false }
+
+[build-dependencies]
+prost-build = "0.14.1"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+[features]
+# --------------------------------------------------------------------------
+# Model features
+# --------------------------------------------------------------------------
+# T3T1's app arena has no room for the Sinsemilla generator table.
+model_t3t1 = ["zcash-signer/computed-generators"]
+model_t3w1 = []
+
+# --------------------------------------------------------------------------
+# Language features
+# --------------------------------------------------------------------------
+lang_en = []
+
+# --------------------------------------------------------------------------
+# Log level features
+# --------------------------------------------------------------------------
+log_level_error = ['trezor-app-sdk/log_level_error']
+log_level_warn = ['trezor-app-sdk/log_level_warn']
+log_level_info = ['trezor-app-sdk/log_level_info']
+log_level_debug = ['trezor-app-sdk/log_level_debug']
+
+# --------------------------------------------------------------------------
+# Selectable features
+# --------------------------------------------------------------------------
+emulator = []
+test = ["dev_keys", 'trezor-app-sdk/test', 'trezor-app-sdk/log_level_debug']
+debug = ['trezor-app-sdk/debug']
+
+# --------------------------------------------------------------------------
+# Automatically derived features (do not enable from outside)
+# --------------------------------------------------------------------------
+dev_keys = []

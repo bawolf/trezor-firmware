@@ -371,6 +371,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "f4jumble"
+version = "0.1.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0d42773cb15447644d170be20231a3268600e0c4cea8987d013b93ac973d3cf7"
+dependencies = [
+ "blake2b_simd",
+]
+
+[[package]]
 name = "fastrand"
 version = "2.4.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1452,6 +1461,23 @@ dependencies = [
 ]
 
 [[package]]
+name = "zcash"
+version = "0.1.0"
+dependencies = [
+ "orchard",
+ "prost",
+ "prost-build",
+ "serde",
+ "serde_json",
+ "trezor-app-sdk",
+ "ufmt",
+ "zcash-signer",
+ "zcash_address",
+ "zcash_protocol",
+ "zeroize",
+]
+
+[[package]]
 name = "zcash-signer"
 version = "0.1.0"
 dependencies = [
@@ -1467,6 +1493,20 @@ dependencies = [
  "zcash_note_encryption",
  "zcash_protocol",
  "zeroize",
+]
+
+[[package]]
+name = "zcash_address"
+version = "0.13.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5a854b28c07dba372f4410ea8ad62b4bf7d5c2bf8be32fc4b31bc0db6521a975"
+dependencies = [
+ "bech32",
+ "bs58",
+ "corez",
+ "f4jumble",
+ "zcash_encoding",
+ "zcash_protocol",
 ]
 
 [[package]]

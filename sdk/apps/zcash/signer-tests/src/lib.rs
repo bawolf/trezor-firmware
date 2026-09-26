@@ -4,6 +4,8 @@
 //! `pczt` roles. They are edited through the `pczt` v2 serde view. Everything
 //! is seeded, so a built PCZT is the same on every run.
 
+pub mod fixtures;
+
 use core::convert::Infallible;
 
 use orchard::keys::{FullViewingKey, Scope, SpendAuthorizingKey, SpendingKey};
