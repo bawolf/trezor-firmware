@@ -17,6 +17,9 @@ vendor = "Bryant Wolf"
 # call graph, direct calls only); receive needs ~6.4 KB.
 stack-size = 32768
 heap-size = 73728
+# The largest message the app receives is a ZcashPcztAck with a 1 KiB PCZT
+# chunk: 1,049 B, plus the kernel's 12-byte header (16 B on the emulator).
+ipc-buffer-size = 2048
 app-ring = 0
 # The ZIP-32 Orchard account keys from Core's key service.
 curves = ["zip32-orchard"]

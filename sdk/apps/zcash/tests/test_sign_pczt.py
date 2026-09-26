@@ -645,6 +645,24 @@ def test_a_chunk_that_is_not_the_one_requested_is_refused(
             _ack(session, instance_id, ack)
 
 
+def test_a_chunk_larger_than_the_app_inbox_stops_the_app(
+    session: Session, instance_id: int
+) -> None:
+    """A chunk that the app's 2 KiB IPC inbox cannot hold fails the request,
+    and Core stops the app rather than leave it waiting for the chunk."""
+    parameters, _result = vector("2_actions")
+    with session.test_ctx as client:
+        client.set_input_flow(_accept_start(session))
+        request = _begin(session, instance_id, parameters)
+        ack = ZcashPcztAck(
+            transfer_id=request.transfer_id, offset=request.offset, data=bytes(4096)
+        )
+        with pytest.raises(TrezorFailure, match="Failed to send IPC message"):
+            _ack(session, instance_id, ack)
+    with pytest.raises(TrezorFailure, match="Task not running"):
+        zcash_ext.get_address(session, instance_id, ZcashNetwork.Mainnet, 0, bytes(11))
+
+
 def test_host_cancel_mid_stream(session: Session, instance_id: int) -> None:
     """`ZcashCancel` in place of a chunk ends the request with ActionCancelled
     and leaves the session usable."""
