@@ -67,16 +67,18 @@ def _path_schemas(patterns: list[str]) -> tuple[list[paths.PathSchema], int | No
     schemas: list[paths.PathSchema] = []
     coin_types: set[int] = set()
     for pattern in patterns:
-        component = pattern.split("/")[2]
-        if component[-1] == "'":
-            component = component[:-1]
+        components = pattern.split("/")
+        # At least m/purpose/coin_type, and no empty component.
+        if len(components) < 3 or not all(c.rstrip("'") for c in components):
+            raise DataError(f"Invalid path pattern: {pattern}")
         try:
-            coin_type = int(component)
+            coin_type = int(components[2].rstrip("'"))
+            schema = paths.PathSchema.parse(pattern, coin_type)
         except ValueError:
-            raise DataError(f"Invalid coin type in path pattern: {pattern}")
+            raise DataError(f"Invalid path pattern: {pattern}")
 
         coin_types.add(coin_type)
-        schemas.append(paths.PathSchema.parse(pattern, coin_type).copy())
+        schemas.append(schema.copy())
 
     slip44_id = coin_types.pop() if len(coin_types) == 1 else None
     return schemas, slip44_id
