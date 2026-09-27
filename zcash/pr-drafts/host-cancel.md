@@ -16,8 +16,8 @@ The Core half was reverted by hand (`cancel-series-core-half-reverted.diff`),
 since `git apply -R` no longer applies at the tip. The series carries the
 macOS build fix `15de3664a6` as a commit; not needed on Linux.
 
-Branch: https://github.com/bawolf/trezor-firmware/tree/extapp/host-cancel @ `4a5a41f4c3`
-(two commits on `extapp/sdk-progress-api` @ `65166b3176`)
+Branch: https://github.com/bawolf/trezor-firmware/tree/extapp/host-cancel @ `856f1d72c7`
+(two commits on `extapp/sdk-progress-api` @ `ba03520ba7`)
 
 ---
 
@@ -26,8 +26,8 @@ If the host sends `Cancel` while Core waits for its answer to an app's
 ends its progress screen during the next request, Core finds no screen and
 stops the app until the next `ExtAppLoad`.
 
-- `e6a32ccc0a` fix(core): let an extapp end a progress screen that is already gone
-- `4a5a41f4c3` fix(sdk): forget the progress screen when the host abandons a request
+- `d42ae69a5c` fix(core): let an extapp end a progress screen that is already gone
+- `856f1d72c7` fix(sdk): forget the progress screen when the host abandons a request
 
 **Reproduce.** We have seen this only with an out-of-tree app: the Zcash app
 on github.com/bawolf/trezor-firmware `zcash/extapp-series`, which shows a

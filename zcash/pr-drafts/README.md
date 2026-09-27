@@ -37,8 +37,8 @@ sdk-wip draft is a note for the branch owner, not a PR.
 | [typed-hash-entitlement](typed-hash-entitlement.md) | `extapp/typed-hash-entitlement` @ `23599d27b6` | sdk-wip | note: security bug fix | bieleluk; matejcik | run-coin-types (built on it; same test file) | standalone end to end (scratch Tron app gets an Ethereum signature before, refused after); 4 unit tests after, full Core unit suite passes |
 | [sdk-allocator-heap](sdk-allocator-heap.md) | `extapp/sdk-allocator-heap` @ `5f235435ed` | sdk-wip | note: bug fix | bieleluk | — (trivial manifest conflict with ipc-buffer-size) | standalone, deterministic (xtask size report); Ethereum subset: 3 allocator panics before, none after |
 | [emulator-declared-heap](emulator-declared-heap.md) | `extapp/emulator-declared-heap` @ `d502e1ed4d` | sdk-wip | note: feature (+ sample fix) | cepetr (loader); bieleluk | sdk-allocator-heap | standalone (Ethereum suite at declared heaps) |
-| [sdk-progress-api](sdk-progress-api.md) | `extapp/sdk-progress-api` @ `65166b3176` | sdk-wip | note: 2 bug fixes + feature | bieleluk; vojczejk (overlaps his modui progress) | — | standalone (Ethereum subset 0 → 8 of 15); SDK test after |
-| [host-cancel](host-cancel.md) | `extapp/host-cancel` @ `4a5a41f4c3` | sdk-wip | note: partial bug fix | bieleluk | sdk-progress-api (SDK half) | only an out-of-tree app's device test, on the series (stopped before, alive after); no platform test |
+| [sdk-progress-api](sdk-progress-api.md) | `extapp/sdk-progress-api` @ `ba03520ba7` | sdk-wip | note: 2 bug fixes + feature | bieleluk; vojczejk (overlaps his modui progress) | — | standalone (Ethereum subset 0 → 8 of 15); SDK test after |
+| [host-cancel](host-cancel.md) | `extapp/host-cancel` @ `856f1d72c7` | sdk-wip | note: partial bug fix | bieleluk | sdk-progress-api (SDK half) | only an out-of-tree app's device test, on the series (stopped before, alive after); no platform test |
 | [bridge-validate-untrusted-input](bridge-validate-untrusted-input.md) | `extapp/bridge-validate-untrusted-input` @ `fc12e1b57b` | sdk-wip | note: bug fix (+ SDK API) | bieleluk; matejcik (`core/embed/rust`) | — | test fails (and Core fatal) before, passes after |
 | [bridge-raise-not-rsod](bridge-raise-not-rsod.md) | `extapp/bridge-raise-not-rsod` @ `5ae2052a08` | sdk-wip | note: bug fix | matejcik; bieleluk | bridge-validate-untrusted-input | test fails (Core fatal) before, passes after |
 | [ipc-buffer-size](ipc-buffer-size.md) | `extapp/ipc-buffer-size` @ `d0bd374a22` | sdk-wip | note: feature + bug fix | bieleluk (his `0be72a42dd` on stabby) | — (trivial manifest conflict with the heap branches) | commit 2 standalone (2 KiB inbox: app left waiting before, stopped after); xtask tests |
@@ -70,6 +70,28 @@ cherry-picked onto `extapp/run-coin-types`.
   `fix/extapp-progress-variant-id` by `extapp/bridge-validate-untrusted-input`.
 - run-coin-types commit 2 was reworded (`4640bbee69` → `7b126357ca`, same tree), and
   typed-hash-entitlement was rebased onto it (`cdafac07e0` → `23599d27b6`, same tree).
+
+- sdk-progress-api commit 1 was reformatted with rustfmt (one call wrapped; `65166b3176` →
+  `ba03520ba7`), and host-cancel was rebased onto it (`4a5a41f4c3` → `856f1d72c7`). The fork's
+  CI format check caught it. Receipts from before the reformat still apply: only whitespace
+  changed.
+
+## CI on the fork's review PRs
+
+The review PRs on `bawolf/trezor-firmware` (#2–#16) run Trezor's own GitHub workflows. Most red
+checks there are inherited from `bieleluk/sdk-wip` itself: Trezor's PR #7516, at the same base
+commit `4cd93ff4d8`, fails the same jobs. They are:
+- Build firmware (T3W1, universal, normal): `prodtest_nfc_backup.c` signedness errors;
+- Python test: a trezorlib dataclass `TypeError` ("non-default argument 'code_size'");
+- Rust dependencies check: `cargo vet` is missing `thiserror`;
+- Style check: pyright;
+- Changelog check;
+- the device-test matrix.
+
+For each PR the set of failing checks was compared with #7516's (2026-09-26). The only one that
+was ours was the extapp format check on sdk-progress-api, now fixed. `modular-xtask / Format
+check` also fails on the base (`postbuild.rs`). #16 is based on `main` and must be judged on its
+own.
 
 ## Suggested order
 

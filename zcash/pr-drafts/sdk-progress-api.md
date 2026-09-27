@@ -7,7 +7,7 @@ exists only on the draft SDK branches. `ui::Progress` overlaps vojczejk's
 Kind: two bug fixes and a feature.
 Reproduction status: standalone (a subset of the Ethereum sample's tests), plus
 an SDK unit test after the fix.
-Rerun 2026-09-26 on sdk-wip and on the pushed tip `65166b3176` (T3W1 non-frozen
+Rerun 2026-09-26 on sdk-wip and on the pushed tip `ba03520ba7` (T3W1 non-frozen
 `--apps` emulator and Ethereum app built at each): receipts
 `pr-drafts-rerun/logs/progress-subset-{base,tip}.log`,
 `signtx-error-{base,progress-tip}.log`, `progress-tip-sdk.log`. Local macOS
@@ -15,7 +15,7 @@ build fix only (`15de3664a6` cherry-picked for the emulator app); not needed on
 Linux. "As Core's Ethereum app does": its `_get_progress_indicator`
 (`core/src/apps/ethereum/helpers.py`) creates the screen with the indicator.
 
-Branch: https://github.com/bawolf/trezor-firmware/tree/extapp/sdk-progress-api @ `65166b3176`
+Branch: https://github.com/bawolf/trezor-firmware/tree/extapp/sdk-progress-api @ `ba03520ba7`
 (three commits on `bieleluk/sdk-wip` @ `4cd93ff4d8`)
 
 ---
@@ -24,9 +24,9 @@ Core stops an app that reports or ends a progress screen it never initialized,
 and the Ethereum sample did exactly that, so its staking and access-list
 signing tests failed with the app stopped.
 
-- `9ef5174775` fix(extapp): show the ethereum data progress before reporting it
-- `2ac810dbb5` fix(sdk): track whether a progress screen is shown
-- `65166b3176` feat(sdk): add ui::Progress with a keep-alive
+- `13a088d67f` fix(extapp): show the ethereum data progress before reporting it
+- `93f4b2483d` fix(sdk): track whether a progress screen is shown
+- `ba03520ba7` feat(sdk): add ui::Progress with a keep-alive
 
 **Reproduce.** From `sdk/apps/ethereum`, app built with
 `xtask modular build -p ethereum -m t3w1 --lang en -d -e`, T3W1 `--apps` emulator:
