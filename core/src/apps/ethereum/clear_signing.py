@@ -33,7 +33,9 @@ if TYPE_CHECKING:
     # into our internal representation.
     # TODO: Revisit simplifying this.
     Value = int | bytes | bool | str | None | list["Value"]
-    TupleValue = tuple[Value, ...]
+    # a tuple field may itself be a tuple or an array, so its elements are
+    # the full `AnyValue`, not just leaf `Value`s
+    TupleValue = tuple["AnyValue", ...]
     ListValue = list[TupleValue]
     AnyValue = Value | TupleValue | list["AnyValue"]
 
@@ -196,9 +198,6 @@ def parse_string(raw_data: memoryview) -> Value:
     return bytes(raw_data).decode("utf-8")
 
 
-DYNAMIC_DATA_PARSERS = [parse_bytes, parse_string]
-
-
 def _get_parser(t: int, is_dynamic: bool) -> Parser:
     """Get a parser for a type we received over the wire protocol.
     `is_dynamic` selects whether the type is being used in a dynamic
@@ -258,15 +257,6 @@ def _get_parser(t: int, is_dynamic: bool) -> Parser:
         return make_fixed_bytes_parser(8)
     elif t == T.ABI_BYTES4:
         return make_fixed_bytes_parser(4)
-    raise InvalidFormatDefinition
-
-
-def _get_leaf_parser(info: EthereumABIValueInfo) -> Parser:
-    """Get a parser for a leaf (atomic or dynamic) value. Raises for nested structures."""
-    if info.atomic is not None:
-        return _get_parser(info.atomic, is_dynamic=False)
-    elif info.dynamic is not None:
-        return _get_parser(info.dynamic, is_dynamic=True)
     raise InvalidFormatDefinition
 
 
@@ -335,11 +325,13 @@ class TokenAmountFormatter(FieldFormatter):
         const_token_address: bytes | None = None,
         native_currency_address: list[bytes] | None = None,
         threshold: int | None = None,
+        threshold_message: str | None = None,
     ) -> None:
         self.token_path = token_path
         self.const_token_address = const_token_address
         self.native_currency_address = native_currency_address
         self.threshold = threshold
+        self.threshold_message = threshold_message
 
     async def format(
         self,
@@ -369,10 +361,15 @@ class TokenAmountFormatter(FieldFormatter):
         else:
             raise InvalidFormatDefinition
 
+        # TODO: Dead code. We don't pull this externally but we should.
         if self.native_currency_address is not None:
             if token_address in self.native_currency_address:
                 if self.threshold is not None and amount > self.threshold:
-                    return AboveThreshold(TR.words__unlimited), None, None
+                    return (
+                        AboveThreshold(self.threshold_message or TR.words__unlimited),
+                        None,
+                        None,
+                    )
                 else:
                     return (
                         format_ethereum_amount(amount, None, defs.network),
@@ -392,7 +389,11 @@ class TokenAmountFormatter(FieldFormatter):
                     token = received_definitions.get_token(token_address)
 
         if self.threshold is not None and amount > self.threshold:
-            return AboveThreshold(TR.words__unlimited), token, token_address
+            return (
+                AboveThreshold(self.threshold_message or TR.words__unlimited),
+                token,
+                token_address,
+            )
         else:
             return (
                 format_ethereum_amount(amount, token, defs.network),
@@ -652,8 +653,7 @@ class ABIValue:
             return DynamicLeaf(_get_parser(info.dynamic, is_dynamic=True))
         elif info.tuple is not None:
             return Tuple(
-                tuple(_get_leaf_parser(f) for f in info.tuple.fields),
-                info.tuple.is_dynamic,
+                tuple(_get_leaf_value(f) for f in info.tuple.fields),
             )
         elif info.array is not None:
             element = info.array
@@ -662,17 +662,12 @@ class ABIValue:
             elif element.dynamic is not None:
                 return Array(DynamicLeaf(_get_parser(element.dynamic, is_dynamic=True)))
             elif element.tuple is not None:
-                fields = tuple(_get_leaf_parser(f) for f in element.tuple.fields)
+                fields = tuple(_get_leaf_value(f) for f in element.tuple.fields)
                 # A non-array (leaf) struct/tuple is dynamic if any of its fields is dynamic.
                 # E.g. of dynamic members: bytes, string, uint256[], bytes[], bytes[][] etc.
                 # An array (this outer structure) is always* dynamic regardless of its fields.
                 # (*Unless it's of fixed length, which generally don't exist.)
-                return Array(
-                    Tuple(
-                        fields,
-                        is_dynamic=any(p in DYNAMIC_DATA_PARSERS for p in fields),
-                    )
-                )
+                return Array(Tuple(fields))
             elif element.array is not None:
                 inner = element.array
                 if inner.atomic is not None:
@@ -712,6 +707,15 @@ def _read_dynamic_data(raw_data: memoryview, pointer: int) -> memoryview:
     return raw_data[body_start : body_start + length]
 
 
+def _get_leaf_value(info: EthereumABIValueInfo) -> ABIValue:
+    """Build a leaf (atomic or dynamic) node. Raises for nested structures."""
+    if info.atomic is not None:
+        return Atomic(_get_parser(info.atomic, is_dynamic=False))
+    elif info.dynamic is not None:
+        return DynamicLeaf(_get_parser(info.dynamic, is_dynamic=True))
+    raise InvalidFormatDefinition
+
+
 class DynamicLeaf(ABIValue):
     """`strings` or `bytes`. Their body is a
     one-word byte length followed by that many bytes of data."""
@@ -727,9 +731,7 @@ class DynamicLeaf(ABIValue):
 
 class Tuple(ABIValue):
     """Tuples (or Structs - the same thing as far as the ABI is concerned)
-    contain multiple values of possibly different types. Only leaf fields
-    (atomic types, `bytes`, `string`) are supported here i.e. no more nesting; the dynamic
-    fields are the ones whose parser is in DYNAMIC_DATA_PARSERS.
+    contain multiple values of possibly different types.
 
     A tuple is a dynamic type iff at least one of its fields is dynamic.
     Its body is the concatenation of its fields' heads: a static field is
@@ -738,35 +740,26 @@ class Tuple(ABIValue):
     therefore just its field values back to back - no length prefix and no
     offset words anywhere."""
 
-    def __init__(self, fields: tuple[Parser, ...], is_dynamic: bool) -> None:
+    def __init__(self, fields: tuple[ABIValue, ...]) -> None:
         if not fields:
-            # Zero-field structs do not exist in Solidity. Rejecting them here
-            # also guarantees head_size >= _EVM_WORD_SIZE for every type: a
-            # static tuple with head_size == 0 inside an Array would defeat
-            # the heads bounds pre-check (array_length * 0) and let an
-            # attacker-controlled length word drive an unbounded parse loop.
             raise InvalidFormatDefinition
         self.fields = fields
-        self.is_dynamic = is_dynamic
-        self.fields_size = len(fields) * _EVM_WORD_SIZE
-        if not is_dynamic:
-            # a static tuple is encoded in place, so its head is its whole body
+        # `head_size` is already the head *span* of any node: one word for
+        # dynamic types, the full in-place size for static ones.
+        self.fields_size = sum(f.head_size for f in fields)
+        self.is_dynamic = any(f.is_dynamic for f in fields)
+        if not self.is_dynamic:
             self.head_size = self.fields_size
 
     def parse_body(self, raw_data: memoryview, pos: int) -> AnyValue:
         if pos + self.fields_size > len(raw_data):
             raise OutOfBounds
-
-        value: list[Value] = [None] * len(self.fields)
-
-        for i, parser in enumerate(self.fields):
-            field_head_pos = pos + (i * _EVM_WORD_SIZE)
-            raw_field = raw_data[field_head_pos : field_head_pos + _EVM_WORD_SIZE]
-            if parser not in DYNAMIC_DATA_PARSERS:
-                value[i] = parser(raw_field)
-            else:
-                field_pointer = pos + int.from_bytes(raw_field, "big")
-                value[i] = parser(_read_dynamic_data(raw_data, field_pointer))
+        value: list[AnyValue] = []
+        head_offset = pos
+        for field in self.fields:
+            data, consumed = field.parse(raw_data, head_offset, pos)
+            value.append(data)
+            head_offset += consumed
         return tuple(value)
 
 
@@ -864,6 +857,12 @@ class FieldDefinition:
                 )
             if info.threshold is not None:
                 formatter_params["threshold"] = int.from_bytes(info.threshold, "big")
+            if info.threshold_message is not None:
+                formatter_params["threshold_message"] = info.threshold_message
+            if info.native_currency_address:
+                formatter_params["native_currency_address"] = [
+                    bytes(addr) for addr in info.native_currency_address
+                ]
             formatter = TokenAmountFormatter(**formatter_params)
         elif fmt_type == FT.FORMATTER_UNIT:
             formatter_params = {}

@@ -4,14 +4,17 @@ use super::super::component::{
     Frame, Header, PromptScreen, SwipeContent, VerticalMenu, VerticalMenuChoiceMsg,
 };
 use super::super::theme;
-use super::util::{dummy_page, ShowInfoParams};
+use super::util::{dummy_page, ShowInfoScreen};
 use crate::micropython::Error;
 use crate::strutil::TString;
 use crate::translations::TR;
 use crate::ui::component::swipe_detect::SwipeSettings;
+use crate::ui::component::text::paragraphs::{
+    Paragraph, ParagraphSource, ParagraphVecLong, VecExt,
+};
 use crate::ui::component::ComponentExt;
 use crate::ui::flow::base::{Decision, DecisionBuilder as _};
-use crate::ui::flow::{FlowController, FlowMsg, SwipeFlow};
+use crate::ui::flow::{FlowController, FlowMsg, SwipeFlow, SwipePage};
 use crate::ui::geometry::Direction;
 
 const MENU_ITEM_CANCEL: usize = 0;
@@ -58,22 +61,46 @@ impl FlowController for ConfirmSummary {
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 pub fn new_confirm_summary(
-    summary_params: ShowInfoParams,
-    account_params: Option<ShowInfoParams>,
+    title: TString<'static>,
+    amount: Option<TString<'static>>,
+    amount_label: Option<TString<'static>>,
+    fee: TString<'static>,
+    fee_label: TString<'static>,
+    account_info: Option<ShowInfoScreen>,
     account_title: Option<TString<'static>>,
-    extra_params: Option<ShowInfoParams>,
+    extra_info: Option<ShowInfoScreen>,
     extra_title: Option<TString<'static>>,
     verb_cancel: Option<TString<'static>>,
     can_go_back: bool,
 ) -> Result<SwipeFlow, Error> {
     // Summary
-    let mut content_summary = summary_params.with_flow_menu(true);
-    if can_go_back {
-        content_summary = content_summary.with_swipe_down();
+    let mut summary_paragraphs = ParagraphVecLong::new();
+    if let (Some(amount_label), Some(amount)) = (amount_label, amount) {
+        summary_paragraphs.add(Paragraph::new(&theme::TEXT_SUB_GREY, amount_label).no_break());
+        summary_paragraphs.add(Paragraph::new(&theme::TEXT_MONO_GREY_LIGHT, amount));
+        summary_paragraphs.add(Paragraph::new::<TString<'static>>(
+            &theme::TEXT_SUB_GREY,
+            " ".into(),
+        ));
     }
-    let content_summary = content_summary
-        .into_layout()?
+    summary_paragraphs.add(Paragraph::new(&theme::TEXT_SUB_GREY, fee_label).no_break());
+    summary_paragraphs.add(Paragraph::new(&theme::TEXT_MONO_GREY_LIGHT, fee));
+
+    let mut summary_frame = Frame::with_header(
+        Header::left_aligned(title).with_menu_button(),
+        SwipeContent::new(SwipePage::vertical(summary_paragraphs.into_paragraphs())),
+    )
+    .with_footer(TR::instructions__tap_to_continue.into(), None)
+    .with_swipe(Direction::Up, SwipeSettings::Default)
+    .with_flow_menu();
+    if can_go_back {
+        summary_frame = summary_frame.with_swipe(Direction::Down, SwipeSettings::Default);
+    }
+    let content_summary = summary_frame
+        .with_vertical_pages()
+        .map_to_button_msg()
         // Summary(1) + Hold(1)
         .with_pages(|summary_pages| summary_pages + 1);
 
@@ -87,26 +114,17 @@ pub fn new_confirm_summary(
     .with_swipe(Direction::Down, SwipeSettings::Default)
     .map(super::util::map_to_confirm);
 
-    // ExtraInfo
-    let content_extra = extra_params
-        .map(|params| params.into_layout())
-        .transpose()?;
-    // AccountInfo
-    let content_account = account_params
-        .map(|params| params.into_layout())
-        .transpose()?;
-
     // Menu with provided info and cancel
     let mut menu = VerticalMenu::empty();
     let mut menu_items = Vec::<usize, 3>::new();
-    if content_extra.is_some() {
+    if extra_info.is_some() {
         menu = menu.item(
             theme::ICON_CHEVRON_RIGHT,
             extra_title.unwrap_or(TR::buttons__more_info.into()),
         );
         unwrap!(menu_items.push(MENU_ITEM_EXTRA_INFO));
     }
-    if content_account.is_some() {
+    if account_info.is_some() {
         menu = menu.item(
             theme::ICON_CHEVRON_RIGHT,
             account_title.unwrap_or(TR::address_details__account_info.into()),
@@ -138,12 +156,12 @@ pub fn new_confirm_summary(
     res.add_page(&ConfirmSummary::Summary, content_summary)?
         .add_page(&ConfirmSummary::Hold, content_hold)?
         .add_page(&ConfirmSummary::Menu, content_menu)?;
-    if let Some(content_extra) = content_extra {
+    if let Some(content_extra) = extra_info {
         res.add_page(&ConfirmSummary::ExtraInfo, content_extra)?;
     } else {
         res.add_page(&ConfirmSummary::ExtraInfo, dummy_page())?;
     };
-    if let Some(content_account) = content_account {
+    if let Some(content_account) = account_info {
         res.add_page(&ConfirmSummary::AccountInfo, content_account)?;
     } else {
         res.add_page(&ConfirmSummary::AccountInfo, dummy_page())?;

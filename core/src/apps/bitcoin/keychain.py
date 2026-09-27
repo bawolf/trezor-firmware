@@ -7,7 +7,7 @@ from trezor.messages import AuthorizeCoinJoin, SignMessage
 from apps.common.paths import PATTERN_BIP44, PATTERN_CASA, PathSchema, unharden
 
 from . import authorization
-from .common import BIP32_WALLET_DEPTH, BITCOIN_NAMES
+from .common import BITCOIN_NAMES
 
 if TYPE_CHECKING:
     from collections.abc import Awaitable, Callable, Iterable
@@ -93,6 +93,69 @@ SLIP44_BITCOIN = const(0)
 SLIP44_TESTNET = const(1)
 
 
+def _get_patterns_for_script_type(
+    coin: coininfo.CoinInfo,
+    script_type: InputScriptType,
+    multisig: bool,
+    include_fw_signing: bool = False,
+) -> set[str]:
+    patterns: set[str] = set()
+    add = patterns.add  # local_cache_attribute
+    slip44 = coin.slip44  # local_cache_attribute
+
+    if script_type == InputScriptType.SPENDADDRESS and not multisig:
+        add(PATTERN_BIP44)
+        if slip44 == SLIP44_BITCOIN:
+            add(PATTERN_GREENADDRESS_A)
+            add(PATTERN_GREENADDRESS_B)
+
+        if include_fw_signing:
+            add(PATTERN_SLIP26_T1_FW)
+    elif (
+        script_type in (InputScriptType.SPENDADDRESS, InputScriptType.SPENDMULTISIG)
+        and multisig
+    ):
+        add(PATTERN_BIP48_RAW)
+        if slip44 == SLIP44_BITCOIN or (
+            coin.fork_id is not None and slip44 != SLIP44_TESTNET
+        ):
+            add(PATTERN_BIP45)
+        if slip44 == SLIP44_BITCOIN:
+            add(PATTERN_GREENADDRESS_A)
+            add(PATTERN_GREENADDRESS_B)
+        if coin.coin_name in BITCOIN_NAMES:
+            add(PATTERN_UNCHAINED_HARDENED)
+            add(PATTERN_UNCHAINED_UNHARDENED)
+
+    elif coin.segwit and script_type == InputScriptType.SPENDP2SHWITNESS:
+        add(PATTERN_BIP49)
+        add(PATTERN_CASA)
+        if multisig:
+            add(PATTERN_BIP48_P2SHSEGWIT)
+        if slip44 == SLIP44_BITCOIN:
+            add(PATTERN_GREENADDRESS_A)
+            add(PATTERN_GREENADDRESS_B)
+        if coin.coin_name in BITCOIN_NAMES:
+            add(PATTERN_CASA_UNHARDENED)
+
+    elif coin.segwit and script_type == InputScriptType.SPENDWITNESS:
+        add(PATTERN_BIP84)
+        if multisig:
+            add(PATTERN_BIP48_SEGWIT)
+        if slip44 == SLIP44_BITCOIN:
+            add(PATTERN_GREENADDRESS_A)
+            add(PATTERN_GREENADDRESS_B)
+        if coin.coin_name in BITCOIN_NAMES and multisig:
+            add(PATTERN_UNCHAINED_HARDENED)
+            add(PATTERN_UNCHAINED_UNHARDENED)
+
+    elif coin.taproot and script_type == InputScriptType.SPENDTAPROOT:
+        add(PATTERN_BIP86)
+        add(PATTERN_SLIP25_TAPROOT)
+
+    return patterns
+
+
 def validate_path_against_script_type(
     coin: coininfo.CoinInfo,
     msg: MsgWithAddressScriptType | None = None,
@@ -100,10 +163,6 @@ def validate_path_against_script_type(
     script_type: InputScriptType | None = None,
     multisig: bool = False,
 ) -> bool:
-    patterns = []
-    append = patterns.append  # local_cache_attribute
-    slip44 = coin.slip44  # local_cache_attribute
-
     if msg is not None:
         assert address_n is None and script_type is None
         address_n = msg.address_n
@@ -113,63 +172,88 @@ def validate_path_against_script_type(
     else:
         assert address_n is not None and script_type is not None
 
-    if script_type == InputScriptType.SPENDADDRESS and not multisig:
-        append(PATTERN_BIP44)
-        if slip44 == SLIP44_BITCOIN:
-            append(PATTERN_GREENADDRESS_A)
-            append(PATTERN_GREENADDRESS_B)
+    patterns = _get_patterns_for_script_type(
+        coin, script_type, multisig, include_fw_signing=SignMessage.is_type_of(msg)
+    )
 
-        if SignMessage.is_type_of(msg):
-            append(PATTERN_SLIP26_T1_FW)
-    elif (
-        script_type in (InputScriptType.SPENDADDRESS, InputScriptType.SPENDMULTISIG)
-        and multisig
-    ):
-        append(PATTERN_BIP48_RAW)
-        if slip44 == SLIP44_BITCOIN or (
-            coin.fork_id is not None and slip44 != SLIP44_TESTNET
-        ):
-            append(PATTERN_BIP45)
-        if slip44 == SLIP44_BITCOIN:
-            append(PATTERN_GREENADDRESS_A)
-            append(PATTERN_GREENADDRESS_B)
-        if coin.coin_name in BITCOIN_NAMES:
-            append(PATTERN_UNCHAINED_HARDENED)
-            append(PATTERN_UNCHAINED_UNHARDENED)
-
-    elif coin.segwit and script_type == InputScriptType.SPENDP2SHWITNESS:
-        append(PATTERN_BIP49)
-        append(PATTERN_CASA)
-        if multisig:
-            append(PATTERN_BIP48_P2SHSEGWIT)
-        if slip44 == SLIP44_BITCOIN:
-            append(PATTERN_GREENADDRESS_A)
-            append(PATTERN_GREENADDRESS_B)
-        if coin.coin_name in BITCOIN_NAMES:
-            append(PATTERN_CASA_UNHARDENED)
-
-    elif coin.segwit and script_type == InputScriptType.SPENDWITNESS:
-        append(PATTERN_BIP84)
-        if multisig:
-            append(PATTERN_BIP48_SEGWIT)
-        if slip44 == SLIP44_BITCOIN:
-            append(PATTERN_GREENADDRESS_A)
-            append(PATTERN_GREENADDRESS_B)
-        if coin.coin_name in BITCOIN_NAMES and multisig:
-            append(PATTERN_UNCHAINED_HARDENED)
-            append(PATTERN_UNCHAINED_UNHARDENED)
-
-    elif coin.taproot and script_type == InputScriptType.SPENDTAPROOT:
-        append(PATTERN_BIP86)
-        append(PATTERN_SLIP25_TAPROOT)
+    if SignMessage.is_type_of(msg):
+        patterns |= _get_patterns_for_script_type(coin, script_type, multisig=True)
+        # Export points of every script type, since signing hosts may send
+        # none. Removes a warning.
+        patterns |= _sign_message_export_patterns(coin)
 
     return any(
         PathSchema.parse(pattern, coin.slip44).match(address_n) for pattern in patterns
     )
 
 
+def _xpub_export_patterns(
+    coin: coininfo.CoinInfo,
+    script_type: InputScriptType,
+) -> set[str]:
+    """Prefixes of the supported patterns at which an xpub may be exported.
+
+    A prefix ending at the deepest hardened level, or at the account level
+    where that is deeper.
+    """
+    patterns = _get_patterns_for_script_type(coin, script_type, multisig=False)
+    patterns |= _get_patterns_for_script_type(coin, script_type, multisig=True)
+
+    export_patterns: set[str] = set()
+    for pattern in patterns:
+        export_patterns.update(_pattern_export_points(pattern))
+
+    return export_patterns
+
+
+def _pattern_export_points(pattern: str) -> list[str]:
+    components = pattern.split("/")[1:]
+
+    deepest_hardened = 0
+    account = 0
+    for i, component in enumerate(components):
+        # No pattern here uses a wildcard; "*'" would read as hardened.
+        if component.endswith("'"):
+            deepest_hardened = i + 1
+        if component in ("account", "account'"):
+            account = i + 1
+
+    if deepest_hardened == 0:
+        return []
+
+    prefixes = ["m/" + "/".join(components[:deepest_hardened])]
+    if account > deepest_hardened:
+        prefixes.append("m/" + "/".join(components[:account]))
+
+    return prefixes
+
+
+def _sign_message_export_patterns(coin: coininfo.CoinInfo) -> set[str]:
+    """Export points of every script type sign_message() can sign with."""
+    patterns: set[str] = set()
+    for script_type in (
+        InputScriptType.SPENDADDRESS,
+        InputScriptType.SPENDP2SHWITNESS,
+        InputScriptType.SPENDWITNESS,
+    ):
+        patterns.update(_xpub_export_patterns(coin, script_type))
+
+    return patterns
+
+
+def validate_xpub_path_against_script_type(
+    coin: coininfo.CoinInfo,
+    address_n: Bip32Path,
+    script_type: InputScriptType,
+) -> bool:
+    return any(
+        PathSchema.parse(pattern, coin.slip44).match(address_n)
+        for pattern in _xpub_export_patterns(coin, script_type)
+    )
+
+
 def _get_schemas_for_coin(
-    coin: coininfo.CoinInfo, unlock_schemas: Iterable[PathSchema] = ()
+    coin: coininfo.CoinInfo, extra_schemas: Iterable[PathSchema] = ()
 ) -> Iterable[PathSchema]:
     import gc
 
@@ -223,7 +307,7 @@ def _get_schemas_for_coin(
         patterns.append(PATTERN_BIP86)
 
     schemas = get_schemas_from_patterns(patterns, coin)
-    schemas.extend(unlock_schemas)
+    schemas.extend(extra_schemas)
 
     gc.collect()
     return [schema.copy() for schema in schemas]
@@ -264,11 +348,11 @@ def _get_coin_by_name(coin_name: str | None) -> coininfo.CoinInfo:
 
 async def _get_keychain_for_coin(
     coin: coininfo.CoinInfo,
-    unlock_schemas: Iterable[PathSchema] = (),
+    extra_schemas: Iterable[PathSchema] = (),
 ) -> Keychain:
     from apps.common.keychain import get_keychain
 
-    schemas = _get_schemas_for_coin(coin, unlock_schemas)
+    schemas = _get_schemas_for_coin(coin, extra_schemas)
     slip21_namespaces = [[b"SLIP-0019"], [b"SLIP-0024"]]
     keychain = await get_keychain(coin.curve_name, schemas, slip21_namespaces)
     return keychain
@@ -319,8 +403,15 @@ def with_keychain(func: HandlerWithCoinInfo[MsgOut]) -> Handler[MsgIn, MsgOut]:
         auth_msg: MessageType | None = None,
     ) -> MsgOut:
         coin = _get_coin_by_name(msg.coin_name)
-        unlock_schemas = _get_unlock_schemas(msg, auth_msg, coin)
-        keychain = await _get_keychain_for_coin(coin, unlock_schemas)
+        extra_schemas = _get_unlock_schemas(msg, auth_msg, coin)
+        if SignMessage.is_type_of(msg):
+            # Only the export points need granting; leaf patterns are already
+            # in _get_schemas_for_coin(), and no Bitcoin-path aliases for forks.
+            extra_schemas += [
+                PathSchema.parse(pattern, coin.slip44)
+                for pattern in _sign_message_export_patterns(coin)
+            ]
+        keychain = await _get_keychain_for_coin(coin, extra_schemas)
         if AuthorizeCoinJoin.is_type_of(auth_msg):
             auth_obj = authorization.from_cached_message(auth_msg)
             return await func(msg, keychain, coin, auth_obj)
@@ -336,19 +427,19 @@ class AccountType:
         self,
         account_name: str,
         pattern: str,
-        script_type: InputScriptType,
+        script_types: tuple[InputScriptType, ...],
         require_segwit: bool,
         require_bech32: bool,
         require_taproot: bool,
-        account_level: bool = False,
+        require_bitcoin: bool = False,
     ) -> None:
         self.account_name = account_name
         self.pattern = pattern
-        self.script_type = script_type
+        self.script_types = script_types
         self.require_segwit = require_segwit
         self.require_bech32 = require_bech32
         self.require_taproot = require_taproot
-        self.account_level = account_level
+        self.require_bitcoin = require_bitcoin
 
     def get_name(
         self,
@@ -356,30 +447,35 @@ class AccountType:
         address_n: Bip32Path,
         script_type: InputScriptType | None,
         show_account_str: bool,
+        export_point: bool,
     ) -> str | None:
-        pattern = self.pattern
-        if self.account_level:
-            # Discard the last two parts of the pattern. For bitcoin these generally are `change`
-            # and `address_index`. The result can be used to match XPUB paths.
-            pattern = "/".join(pattern.split("/")[:-BIP32_WALLET_DEPTH])
+        if export_point:
+            patterns = _pattern_export_points(self.pattern)
+        else:
+            patterns = [self.pattern]
 
         if (
-            (script_type is not None and script_type != self.script_type)
-            or not PathSchema.parse(pattern, coin.slip44).match(address_n)
+            (script_type is not None and script_type not in self.script_types)
+            or not any(
+                PathSchema.parse(pattern, coin.slip44).match(address_n)
+                for pattern in patterns
+            )
             or (not coin.segwit and self.require_segwit)
             or (not coin.bech32_prefix and self.require_bech32)
             or (not coin.taproot and self.require_taproot)
+            or (coin.slip44 != SLIP44_BITCOIN and self.require_bitcoin)
         ):
             return None
 
         name = self.account_name
         if show_account_str:
             name = f"{self.account_name} account"
-        account_pos = pattern.find("/account'")
+        account_pos = self.pattern.find("/account")
         if account_pos >= 0:
-            i = pattern.count("/", 0, account_pos)
-            account_number = unharden(address_n[i]) + 1
-            name += f" #{account_number}"
+            i = self.pattern.count("/", 0, account_pos)
+            # An export point can be shallower than the account level.
+            if i < len(address_n):
+                name += f" #{unharden(address_n[i]) + 1}"
 
         return name
 
@@ -388,68 +484,154 @@ def address_n_to_name(
     coin: coininfo.CoinInfo,
     address_n: Bip32Path,
     script_type: InputScriptType | None = None,
-    account_level: bool = False,
+    export_point: bool = False,
     show_account_str: bool = False,
 ) -> str | None:
     ACCOUNT_TYPES = (
         AccountType(
             "Legacy",
             PATTERN_BIP44,
-            InputScriptType.SPENDADDRESS,
+            (InputScriptType.SPENDADDRESS,),
             require_segwit=True,
             require_bech32=False,
             require_taproot=False,
-            account_level=account_level,
         ),
         AccountType(
             "",
             PATTERN_BIP44,
-            InputScriptType.SPENDADDRESS,
+            (InputScriptType.SPENDADDRESS,),
             require_segwit=False,
             require_bech32=False,
             require_taproot=False,
-            account_level=account_level,
         ),
         AccountType(
             "L. SegWit",
             PATTERN_BIP49,
-            InputScriptType.SPENDP2SHWITNESS,
+            (InputScriptType.SPENDP2SHWITNESS,),
             require_segwit=True,
             require_bech32=False,
             require_taproot=False,
-            account_level=account_level,
         ),
         AccountType(
             "SegWit",
             PATTERN_BIP84,
-            InputScriptType.SPENDWITNESS,
+            (InputScriptType.SPENDWITNESS,),
             require_segwit=True,
             require_bech32=True,
             require_taproot=False,
-            account_level=account_level,
         ),
         AccountType(
             "Taproot",
             PATTERN_BIP86,
-            InputScriptType.SPENDTAPROOT,
+            (InputScriptType.SPENDTAPROOT,),
             require_segwit=False,
             require_bech32=True,
             require_taproot=True,
-            account_level=account_level,
         ),
         AccountType(
             "Coinjoin",
             PATTERN_SLIP25_TAPROOT,
-            InputScriptType.SPENDTAPROOT,
+            (InputScriptType.SPENDTAPROOT,),
             require_segwit=False,
             require_bech32=True,
             require_taproot=True,
-            account_level=account_level,
+        ),
+        AccountType(
+            "BIP 48 multisig",
+            PATTERN_BIP48_RAW,
+            (InputScriptType.SPENDADDRESS, InputScriptType.SPENDMULTISIG),
+            require_segwit=False,
+            require_bech32=False,
+            require_taproot=False,
+        ),
+        AccountType(
+            "BIP 48 multisig",
+            PATTERN_BIP48_P2SHSEGWIT,
+            (InputScriptType.SPENDP2SHWITNESS,),
+            require_segwit=True,
+            require_bech32=False,
+            require_taproot=False,
+        ),
+        AccountType(
+            "BIP 48 multisig",
+            PATTERN_BIP48_SEGWIT,
+            (InputScriptType.SPENDWITNESS,),
+            require_segwit=True,
+            require_bech32=True,
+            require_taproot=False,
+        ),
+        AccountType(
+            "BIP 45 multisig",
+            PATTERN_BIP45,
+            (InputScriptType.SPENDADDRESS, InputScriptType.SPENDMULTISIG),
+            require_segwit=False,
+            require_bech32=False,
+            require_taproot=False,
+        ),
+        # GreenAddress subaccounts, offered for Bitcoin only. PATTERN_GREENADDRESS_A
+        # is unhardened throughout and so has no export point at all.
+        AccountType(
+            "GreenAddress",
+            PATTERN_GREENADDRESS_B,
+            (
+                InputScriptType.SPENDADDRESS,
+                InputScriptType.SPENDMULTISIG,
+                InputScriptType.SPENDP2SHWITNESS,
+                InputScriptType.SPENDWITNESS,
+            ),
+            require_segwit=False,
+            require_bech32=False,
+            require_taproot=False,
+            require_bitcoin=True,
+        ),
+        AccountType(
+            "Casa",
+            PATTERN_CASA,
+            (InputScriptType.SPENDP2SHWITNESS,),
+            require_segwit=True,
+            require_bech32=False,
+            require_taproot=False,
+        ),
+        # Unhardened throughout, so it has no export point and is named only
+        # at its leaves.
+        AccountType(
+            "Casa",
+            PATTERN_CASA_UNHARDENED,
+            (InputScriptType.SPENDP2SHWITNESS,),
+            require_segwit=True,
+            require_bech32=False,
+            require_taproot=False,
+        ),
+        AccountType(
+            "Unchained",
+            PATTERN_UNCHAINED_HARDENED,
+            (
+                InputScriptType.SPENDADDRESS,
+                InputScriptType.SPENDMULTISIG,
+                InputScriptType.SPENDWITNESS,
+            ),
+            require_segwit=False,
+            require_bech32=False,
+            require_taproot=False,
+        ),
+        AccountType(
+            "Unchained",
+            PATTERN_UNCHAINED_UNHARDENED,
+            (
+                InputScriptType.SPENDADDRESS,
+                InputScriptType.SPENDMULTISIG,
+                InputScriptType.SPENDWITNESS,
+            ),
+            require_segwit=False,
+            require_bech32=False,
+            require_taproot=False,
         ),
     )
 
     for account in ACCOUNT_TYPES:
-        name = account.get_name(coin, address_n, script_type, show_account_str)
+        name = account.get_name(
+            coin, address_n, script_type, show_account_str, export_point
+        )
         if name:
             return name
 
@@ -460,12 +642,15 @@ def address_n_to_name_or_unknown(
     coin: coininfo.CoinInfo,
     address_n: Bip32Path,
     script_type: InputScriptType | None = None,
-    account_level: bool = False,
-    show_account_str: bool = False,
+    allow_export_point: bool = False,
 ) -> str:
     from trezor import TR
 
     account_name = address_n_to_name(coin, address_n, script_type)
+    if account_name is None and allow_export_point:
+        account_name = address_n_to_name(
+            coin, address_n, script_type, export_point=True
+        )
     if account_name is None:
         return TR.bitcoin__unknown_path
     elif account_name == "":

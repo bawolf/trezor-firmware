@@ -1,7 +1,5 @@
-use heapless::Vec;
-
 use super::super::component::{
-    Frame, Header, PromptMsg, SwipeContent, VerticalMenu, VerticalMenuChoiceMsg,
+    Frame, Header, MoreInfoScreen, PromptMsg, SwipeContent, VerticalMenu, VerticalMenuChoiceMsg,
 };
 use super::super::{flow, theme};
 use super::{
@@ -287,154 +285,26 @@ impl ConfirmValue {
     }
 }
 
-pub struct ShowInfoParams {
+pub type ShowInfoScreen = MoreInfoScreen<ParagraphVecLong<'static>>;
+
+/// Simple read-only screen showing a list of key-value pairs with a close
+/// button. Paginates automatically via action bar buttons when the content
+/// does not fit on a single page.
+#[inline(never)]
+pub fn show_info_screen(
     title: TString<'static>,
-    subtitle: Option<TString<'static>>,
-    menu_button: bool,
-    cancel_button: bool,
-    footer_instruction: Option<TString<'static>>,
-    footer_description: Option<TString<'static>>,
-    swipe_up: bool,
-    swipe_down: bool,
-    items: Vec<(TString<'static>, TString<'static>), 4>,
-    flow_menu: bool,
-}
-
-impl ShowInfoParams {
-    pub const fn new(title: TString<'static>) -> Self {
-        Self {
-            title,
-            subtitle: None,
-            menu_button: false,
-            cancel_button: false,
-            footer_instruction: None,
-            footer_description: None,
-            swipe_up: false,
-            swipe_down: false,
-            items: Vec::new(),
-            flow_menu: false,
-        }
-    }
-
-    pub fn add(mut self, key: TString<'static>, value: TString<'static>) -> Option<Self> {
-        if self.items.push((key, value)).is_ok() {
-            Some(self)
-        } else {
-            None
-        }
-    }
-
-    pub fn is_empty(&self) -> bool {
-        self.items.is_empty()
-    }
-
-    #[inline(never)]
-    pub const fn with_subtitle(mut self, subtitle: Option<TString<'static>>) -> Self {
-        self.subtitle = subtitle;
-        self
-    }
-
-    #[inline(never)]
-    pub const fn with_menu_button(mut self) -> Self {
-        self.menu_button = true;
-        self
-    }
-
-    #[inline(never)]
-    pub const fn with_cancel_button(mut self) -> Self {
-        self.cancel_button = true;
-        self
-    }
-
-    #[inline(never)]
-    pub const fn with_footer(
-        mut self,
-        instruction: TString<'static>,
-        description: Option<TString<'static>>,
-    ) -> Self {
-        self.footer_instruction = Some(instruction);
-        self.footer_description = description;
-        self
-    }
-
-    pub const fn with_swipeup_footer(self, description: Option<TString<'static>>) -> Self {
-        self.with_footer(
-            TString::from_translation(TR::instructions__tap_to_continue),
-            description,
-        )
-        .with_swipe_up()
-    }
-
-    pub const fn with_swipe_up(mut self) -> Self {
-        self.swipe_up = true;
-        self
-    }
-
-    pub const fn with_swipe_down(mut self) -> Self {
-        self.swipe_down = true;
-        self
-    }
-
-    pub const fn with_flow_menu(mut self, flow_menu: bool) -> Self {
-        self.flow_menu = flow_menu;
-        self
-    }
-
-    #[inline(never)]
-    pub fn into_layout(
-        self,
-    ) -> Result<impl Component<Msg = FlowMsg> + Swipable + MaybeTrace, Error> {
-        let mut paragraphs = ParagraphVecLong::new();
-        let mut first: bool = true;
-        for item in self.items {
-            // FIXME: padding:
-            if !first {
-                paragraphs.add(Paragraph::new::<TString<'static>>(
-                    &theme::TEXT_SUB_GREY,
-                    " ".into(),
-                ));
-            }
-            first = false;
-            paragraphs.add(Paragraph::new(&theme::TEXT_SUB_GREY, item.0).no_break());
-            paragraphs.add(Paragraph::new(&theme::TEXT_MONO_GREY_LIGHT, item.1));
-        }
-
-        let mut header = Header::left_aligned(self.title);
-        if let Some(subtitle) = self.subtitle {
-            header = header.with_subtitle(subtitle);
-        }
-        if self.cancel_button {
-            header = header.with_cancel_button()
-        } else if self.menu_button {
-            header = header.with_menu_button()
-        }
-
-        let mut frame = Frame::with_header(
-            header,
-            SwipeContent::new(SwipePage::vertical(paragraphs.into_paragraphs())),
+    items: impl IntoIterator<Item = (TString<'static>, TString<'static>)>,
+) -> ShowInfoScreen {
+    let mut paragraphs = ParagraphVecLong::new();
+    for (key, value) in items {
+        paragraphs.add(Paragraph::new(&theme::TEXT_SUB_GREY, key).no_break());
+        paragraphs.add(
+            Paragraph::new(&theme::TEXT_MONO_GREY_LIGHT, value)
+                .with_bottom_padding(theme::PROPS_SPACING),
         );
-        if self.cancel_button {
-            frame = frame.with_swipe(Direction::Right, SwipeSettings::Immediate);
-        }
-        if let Some(instruction) = self.footer_instruction {
-            frame = frame.with_footer(instruction, self.footer_description);
-        }
-        if self.flow_menu {
-            frame = frame.with_flow_menu();
-        }
-
-        if self.swipe_up {
-            frame = frame.with_swipe(Direction::Up, SwipeSettings::Default);
-        }
-
-        if self.swipe_down {
-            frame = frame.with_swipe(Direction::Down, SwipeSettings::Default);
-        }
-
-        frame = frame.with_vertical_pages();
-
-        Ok(frame.map_to_button_msg())
     }
+
+    MoreInfoScreen::new(title, paragraphs.into_paragraphs())
 }
 
 pub fn map_to_confirm(msg: PromptMsg) -> Option<FlowMsg> {
