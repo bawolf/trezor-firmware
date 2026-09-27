@@ -3,9 +3,13 @@
 Status: draft, not sent. Send as an issue on trezor/trezor-firmware or as an
 email to jan.setina@satoshilabs.com and jan.matejek@satoshilabs.com, the two
 contacts in Hannsek's reply on #6770 (a Kaspa proposal, closed not planned).
-Fill in the video link before sending. The device run was an earlier build
-(firmware `0245f15fd0`, app bundle `extapp-07a27d1d76`); the series itself
-has run only on emulators.
+Fill in the video link before sending. Device runs so far:
+- On 2026-09-27, the series plus the demo-only commits (`7a438a4399`, bundle `extapp-7a438a4399`) ran on
+  the Safe 7 under Trezor Suite, from the private Suite branch: add account, receive, and a
+  testnet send (txid `689147f2…`, block 4,401,482).
+- An earlier build ran with trezorlib on 2026-09-26.
+
+The Suite side is T-RSL, so it is offered privately, not linked publicly.
 
 ---
 
@@ -15,8 +19,10 @@ Hi,
 
 We built a shielded Zcash app on the extapp SDK from `bieleluk/sdk-wip`
 (#7516). It shows Orchard unified addresses, exports a viewing key and signs
-PCZTs that spend from the Ironwood pool. It runs on T3W1 and T3T1 emulators,
-and an earlier build of it ran on a T3W1 development device. Video: <link>
+PCZTs that spend from the Ironwood pool. It runs on T3W1 and T3T1 emulators and
+on a T3W1 development device, where we also drove it from Trezor Suite: we built the
+Suite side on the ExtApp loading in #32700, in a private checkout. A shielded testnet
+send, signed on the device, was mined in block 4,401,482. Video: <link>
 
 #6962 puts Zcash after the modularization, and Hannsek's reply on #6770
 offers the modularization alpha to third-party contributors. So we are asking
@@ -43,6 +49,10 @@ Questions:
    not, what would you prefer?
 3. Is a Zcash app something you would review in this form at all, or should it
    stay out of tree until the SDK is released?
+
+The Suite changes (Connect methods over ExtApp, and a desktop shielded account)
+are in a private repository, because of the Suite licence. We can give you access
+if that is useful.
 
 We can split, rebase or rework any of it. Nothing is urgent.
 
