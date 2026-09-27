@@ -121,3 +121,17 @@ both. Trezor may assign its own id at admission.
     Heap peak 57,452 B (16,284 B spare); longest silence 198 ms; 393 IPC messages.
   - Core's 1 s IPC watchdog is unchanged, and no tables are precomputed. The worst IPC silence
     in the session was 286 ms.
+- **2026-09-27, Safe 7, firmware `7a438a4399` (`zcash/extapp-demo-v2`, flashed this session;
+  fingerprint `e496e5f1…`), Trezor Suite desktop (private `zcash/shielded-suite` @ `b30116b5614`),
+  public Zcash testnet.** The first shielded send from Trezor Suite with a physical Trezor:
+  - **Add a Shielded account.** Pairing, the "Spending key" hold-to-confirm consent, the
+    viewing-key export, and the address #0 check `utest16gxxqp2n…g63xcxc` all happened on the
+    device. The scan from Ironwood activation found 0.09515 TAZ.
+  - **Receive.** "Show on Trezor" matched on the device.
+  - **Send.** 0.01 TAZ to the test seed's account 1, with the recipient, amount and total
+    reviewed and held to sign on the device. Txid
+    `689147f283afc2448d3932d359755bbbf3c977fb33fb8561ca0d2972297f50d7`, mined at height
+    **4,401,482**. The balance went from 0.09515 to 0.08505 TAZ (0.01 plus the 0.0001 fee).
+  - **Suite bugs found:** the receive address overflows its card; a dead "Connect" button for
+    Zcash Testnet under Debug → Backends; a stale emulator wallet in the shared dev profile
+    ("Passphrase is incorrect"). List: the author's `ca/work/suite-shielded/SAFE7-SESSION-BUGS.md`.
