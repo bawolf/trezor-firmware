@@ -76,6 +76,21 @@ cherry-picked onto `extapp/run-coin-types`.
   CI format check caught it. Receipts from before the reformat still apply: only whitespace
   changed.
 
+## Daily sync
+
+From 2026-09-26 a daily job (launchd `com.bawolf.trezor-daily-sync`, 06:17; script and
+reports in the author's `…/ca/work/daily-sync/`) keeps the fork current:
+- the fork's `main` gets upstream `main` merged in;
+- `extapp/zcash-ua-decode-short-payload` and `zcash/ironwood-upstream-v2` are rebased onto
+  upstream `main`;
+- every sdk-wip branch is rebased when `bieleluk/sdk-wip` moves, in dependency order;
+- the private Suite branches are rebased onto `develop`.
+
+It pushes only clean rebases and reports conflicts instead. The shas quoted in these drafts are
+therefore the ones the evidence ran on. Link branches by name. On 2026-09-26 the UA fix moved
+`935383396b` → `d4ee82c0dc` and v2 moved `7864a22444` → `3e4018eacc` (both clean). v2 was not
+re-gated after its rebase.
+
 ## CI on the fork's review PRs
 
 The review PRs on `bawolf/trezor-firmware` (#2–#16) run Trezor's own GitHub workflows. Most red
