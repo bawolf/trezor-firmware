@@ -5,7 +5,7 @@ more, since the app now lives in the `sdk/apps` workspace. If it is ever sent,
 it is a note for the owner of `bieleluk/sdk-wip` (#7516) or `cepetr/apptool`,
 which is reworking this tool, not a PR.
 Commit 1 is independent and could go alone as a one-line fix; it is in our
-integrated series as `5c203f7a42`.
+integrated series as `6a68f89229`.
 Reproduction status: none needed for commit 1 (an error message); commit 2,
 modular-xtask tests only.
 Rerun 2026-09-26: modular-xtask tests at the pushed tip `e3593e829c` and at

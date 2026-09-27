@@ -47,14 +47,14 @@ sdk-wip draft is a note for the branch owner, not a PR.
 | [xtask-production-rejects-debug](xtask-production-rejects-debug.md) | `extapp/xtask-production-rejects-debug` @ `ef50fa6a04` | sdk-wip (or `cepetr/apptool`) | note: bug fix | cepetr; bieleluk | — | build command accepted before, refused after; unit test after |
 | [xtask-own-workspace](xtask-own-workspace.md) | `extapp/xtask-own-workspace` @ `e3593e829c` | — | reserve, **not proposed** (commit 1 could go alone) | cepetr | — | none |
 | [zcash-ua-decode-short-payload](zcash-ua-decode-short-payload.md) | `extapp/zcash-ua-decode-short-payload` @ `935383396b` | **`main`** (code on `main`) | **PR**: bug fix | obrusvit (CODEOWNERS `*`) or matejcik | an issue first (`Fixes #N`) | 2 tests fail before, pass after |
-| [key-service](key-service.md) | `zcash/extapp-series` @ `cbce6b97e2`: `f8a8261663`, `5f7e86b229`, `5620cc3c57` | sdk-wip, after design agreement | design proposal (feature) | bieleluk, matejcik; product | bridge-validate, bridge-raise, run-coin-types (in the series) | n/a (15 Core unit tests; end to end via the app) |
-| [zcash-app](zcash-app.md) | `zcash/extapp-series` @ `cbce6b97e2`: `1a9708f824`, `ead470546a`, `bc13c3a72d`, `cbce6b97e2` | sdk-wip, after product agreement | feature proposal | bieleluk; product (Hannsek) | the whole platform part of the series, key service included | n/a (77 passed, 1 xfailed on T3W1 and T3T1 emulators) |
+| [key-service](key-service.md) | `zcash/extapp-series` @ `c74600c911`: `8bd8923160`, `3b178fdebd`, `f9aace94f8` | sdk-wip, after design agreement | design proposal (feature) | bieleluk, matejcik; product | bridge-validate, bridge-raise, run-coin-types (in the series) | n/a (15 Core unit tests; end to end via the app) |
+| [zcash-app](zcash-app.md) | `zcash/extapp-series` @ `c74600c911`: `1f22828ea3`, `c040431244`, `407da85e06`, `c74600c911` | sdk-wip, after product agreement | feature proposal | bieleluk; product (Hannsek) | the whole platform part of the series, key service included | n/a (77 passed, 1 xfailed on T3W1 and T3T1 emulators) |
 
 Also here: [00-introduction](00-introduction.md) (first contact) and
 [DEMO](DEMO.md) (reproducing the demo from a clean clone).
 
 The integrated series is
-https://github.com/bawolf/trezor-firmware/tree/zcash/extapp-series @ `cbce6b97e2`.
+https://github.com/bawolf/trezor-firmware/tree/zcash/extapp-series @ `c74600c911`.
 Its commits carry the same changed lines and messages as the branches, except
 `emulator-declared-heap` (the series also covers the local macOS loader).
 `extapp/typed-hash-entitlement` is the series commit `b77222b9ae`
@@ -107,6 +107,12 @@ For each PR the set of failing checks was compared with #7516's (2026-09-26). Th
 was ours was the extapp format check on sdk-progress-api, now fixed. `modular-xtask / Format
 check` also fails on the base (`postbuild.rs`). #16 is based on `main` and must be judged on its
 own.
+
+- 2026-09-27: the series and the demo were reformatted the same way (one call in
+  `sdk/apps/ethereum/src/helpers.rs`; `cbce6b97e2` → `c74600c911`, `7a438a4399` → `a93365d0c0`).
+  The Safe 7 bundle `extapp-7a438a4399` and the first Suite send from a Safe 7 (block 4,401,482)
+  were built at the old demo commit, kept as tag `archive/extapp-safe7-suite-send-7a438a4399`.
+  The firmware and app sources are unchanged.
 
 ## Suggested order
 

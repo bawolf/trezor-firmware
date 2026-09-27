@@ -5,17 +5,17 @@ only on a development device.
 
 ## Branches
 
-- **`zcash/extapp-series` @ `cbce6b97e2`**: what we propose. It is
+- **`zcash/extapp-series` @ `c74600c911`**: what we propose. It is
   `bieleluk/sdk-wip` @ `4cd93ff4d8`, plus two local commits that are not
   proposed (`15de3664a6` builds and packs emulator apps on macOS;
   `1f71e245e4` updates the Ethereum sample's test definitions to trezorlib's
   magic/version split), plus 30 commits: 23 platform fixes and features, the
   3 key-service commits, 3 app commits and 1 CI commit.
-- **`zcash/extapp-demo-v2` @ `7a438a4399`**: the series plus five demo-only
+- **`zcash/extapp-demo-v2` @ `a93365d0c0`**: the series plus five demo-only
   commits, never proposed: `e88f2a9e6f` and `906d99cbac` (development devices
   only: accept the dev app root key; verify app root packets in the kernel for
   a device running a released secmon), two debug-build diagnostics commits,
-  and `7a438a4399` (`xtask modular build --features`).
+  and `a93365d0c0` (`xtask modular build --features`).
 
 ## Setup
 
@@ -76,7 +76,7 @@ cd core/tests && MICROPYTHON='../build-xtask/artifacts/T3W1/firmware-emu -X heap
 ```
 
 The Ethereum sample passes 95 of its 336 device tests on the series (run at
-`2839206d35`, which differs from `cbce6b97e2` only in a Zcash test file), 81 on
+`2839206d35`, which differs from `c74600c911` only in a Zcash test file), 81 on
 sdk-wip plus our test-definition fix `1f71e245e4`, and 59 on sdk-wip with
 only the macOS build fix,
 where most signing tests stop at a `TypeError` in the tests' definition

@@ -8,9 +8,9 @@ the Core half applies to sdk-wip alone.
 Reproduction status: observed only with a device test of an out-of-tree app
 that streams data under a progress screen; no platform-level test, and no run
 on this branch's tip, which cannot host that app.
-Rerun 2026-09-26 on `zcash/extapp-series` @ `cbce6b97e2` (T3W1 non-frozen
+Rerun 2026-09-26 on `zcash/extapp-series` @ `c74600c911` (T3W1 non-frozen
 `--apps` emulator and Zcash app built there), with the series' twins of these
-commits (`6efe8a111d` Core, `6d574b5bf3` SDK) reverted as uncommitted changes:
+commits (`70a4506073` Core, `681beb9a33` SDK) reverted as uncommitted changes:
 `pr-drafts-rerun/logs/cancel-series-{both,core-only,sdk-only,neither}.log`.
 The Core half was reverted by hand (`cancel-series-core-half-reverted.diff`),
 since `git apply -R` no longer applies at the tip. The series carries the

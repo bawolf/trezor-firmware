@@ -8,17 +8,17 @@ third-party contributors). Based on the draft SDK
 whole platform part of our series, including the key service
 (`key-service.md`), which needs design agreement first.
 Kind: feature. Reproduction status: not applicable.
-Evidence (not rerun on 2026-09-26): device tests with the `cbce6b97e2` tree
+Evidence (not rerun on 2026-09-26): device tests with the `c74600c911` tree
 on emulator firmware built at `0d9fe9512a`, which differs only in the app's
 tests and UI fixtures (checked with `--ui=test`); unit, signer and signer-tests runs at
-`2839206d35`, which differs from `cbce6b97e2` only in a Zcash test file
+`2839206d35`, which differs from `c74600c911` only in a Zcash test file
 (`shaping/fixround/logs/`).
 
-Branch: https://github.com/bawolf/trezor-firmware/tree/zcash/extapp-series @ `cbce6b97e2`, commits:
-- `1a9708f824` feat(extapp): add zcash signer crate
-- `ead470546a` feat(extapp): add zcash app with address and viewing key
-- `bc13c3a72d` feat(extapp): sign PCZTs in the zcash app
-- `cbce6b97e2` ci(sdk): test the zcash app and its signer
+Branch: https://github.com/bawolf/trezor-firmware/tree/zcash/extapp-series @ `c74600c911`, commits:
+- `1f22828ea3` feat(extapp): add zcash signer crate
+- `c040431244` feat(extapp): add zcash app with address and viewing key
+- `407da85e06` feat(extapp): sign PCZTs in the zcash app
+- `c74600c911` ci(sdk): test the zcash app and its signer
 
 ---
 

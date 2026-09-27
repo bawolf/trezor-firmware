@@ -10,15 +10,15 @@ of the platform fixes. They extend the crypto bridge lines that
 change, and the app's two networks need `extapp/run-coin-types`.
 Kind: feature. Reproduction status: not applicable.
 Evidence (not rerun on 2026-09-26): Core unit tests at `2839206d35`, which
-differs from `cbce6b97e2` only in a Zcash test file; device tests with the
-`cbce6b97e2` tree on emulator firmware built at `0d9fe9512a`, which differs
+differs from `c74600c911` only in a Zcash test file; device tests with the
+`c74600c911` tree on emulator firmware built at `0d9fe9512a`, which differs
 only in the Zcash app's tests and UI fixtures (`shaping/fixround/logs/U-unit-final.log`,
 `D-zcash-{t3w1,t3t1}-ui-cbce.log`).
 
-Branch: https://github.com/bawolf/trezor-firmware/tree/zcash/extapp-series @ `cbce6b97e2`, commits:
-- `f8a8261663` feat(sdk): check that reply types fit the device IPC alignment
-- `5f7e86b229` feat(sdk): add crypto::get_zip32_orchard_account
-- `5620cc3c57` feat(core): derive ZIP-32 Orchard account keys for extapps
+Branch: https://github.com/bawolf/trezor-firmware/tree/zcash/extapp-series @ `c74600c911`, commits:
+- `8bd8923160` feat(sdk): check that reply types fit the device IPC alignment
+- `3b178fdebd` feat(sdk): add crypto::get_zip32_orchard_account
+- `f9aace94f8` feat(core): derive ZIP-32 Orchard account keys for extapps
 
 ---
 

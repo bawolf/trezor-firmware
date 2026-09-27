@@ -11,7 +11,7 @@ of sdk-wip and of the pushed tip `fc12e1b57b`, each built at its tree
 (`bridge-validate-tip-sdk.log`); flash with `--apps --bootloader-devel` at
 both (`build-hw-{T3T1,T3W1}-{sdkwip,validate}.log`). No local changes. The
 `cargo vet` count is from the series at `2839206d35`, which differs from
-`cbce6b97e2` only in a Zcash test file; not rerun.
+`c74600c911` only in a Zcash test file; not rerun.
 
 Branch: https://github.com/bawolf/trezor-firmware/tree/extapp/bridge-validate-untrusted-input @ `fc12e1b57b`
 (two commits on `bieleluk/sdk-wip` @ `4cd93ff4d8`)
