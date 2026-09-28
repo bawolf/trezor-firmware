@@ -135,3 +135,17 @@ both. Trezor may assign its own id at admission.
   - **Suite bugs found:** the receive address overflows its card; a dead "Connect" button for
     Zcash Testnet under Debug → Backends; a stale emulator wallet in the shared dev profile
     ("Passphrase is incorrect"). List: the author's `ca/work/suite-shielded/SAFE7-SESSION-BUGS.md`.
+- **2026-09-28, Safe 7, same firmware (`7a438a4399`), Suite `zcash/shielded-suite` @ `6fbaef2c0a4`**
+  (the Safe 7 session fixes, security fixes and hardened engine), with a fresh Suite profile.
+  - **Account:** added with the full scan (about 18 minutes).
+  - **Receive:** Show on Trezor, compared on the device.
+  - **Send:** 0.01 TAZ, txid `4d7df1ab8aec2227d8fe4269878292dd79a36e14d54694c28c1b9090d24d4420`,
+    mined at **4,411,118**. Plan to broadcast took 49 s: signing 23 s, proving 25 s on a loaded
+    Mac.
+  - **An earlier attempt expired** before broadcast: proving took 66 s with the machine
+    overloaded (load average about 40), and testnet produced 40 blocks in about 2.3 minutes. The
+    first attempt also hit a USB "device disconnected" with THP decode errors under the same load.
+  - **Follow-ups:**
+    - prepare the proving key ahead of time;
+    - re-plan when Review is clicked;
+    - investigate the disconnect.
