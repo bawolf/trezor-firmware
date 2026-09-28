@@ -1,5 +1,5 @@
 use heapless::String;
-use qrcodegen_no_heap::{QrCode, QrCodeEcc, Version};
+use qrcodegen_no_heap::{DataTooLong, QrCode, QrCodeEcc, Version};
 
 use super::paginated::SinglePage;
 use crate::ui::component::{Component, Event, EventCtx, Never};
@@ -45,11 +45,34 @@ impl Qr {
             s.push_str(indata)?;
         }
 
-        Ok(Self {
+        let qr = Self {
             text: s,
             border: 0,
             area: Rect::zero(),
-        })
+        };
+        // Refuse text that `render` could not encode.
+        let mut outbuffer = [0u8; QR_MAX_VERSION.buffer_len()];
+        let mut tempbuffer = [0u8; QR_MAX_VERSION.buffer_len()];
+        qr.encode(&mut outbuffer, &mut tempbuffer)
+            .map_err(|_| UIError::Capacity)?;
+        Ok(qr)
+    }
+
+    fn encode<'a>(
+        &self,
+        outbuffer: &'a mut [u8],
+        tempbuffer: &mut [u8],
+    ) -> Result<QrCode<'a>, DataTooLong> {
+        QrCode::encode_text(
+            self.text.as_ref(),
+            tempbuffer,
+            outbuffer,
+            QrCodeEcc::Medium,
+            Version::MIN,
+            QR_MAX_VERSION,
+            None,
+            true,
+        )
     }
 
     pub fn with_border(mut self, border: i16) -> Self {
@@ -88,17 +111,7 @@ impl Component for Qr {
         let mut outbuffer = [0u8; QR_MAX_VERSION.buffer_len()];
         let mut tempbuffer = [0u8; QR_MAX_VERSION.buffer_len()];
 
-        let qr = QrCode::encode_text(
-            self.text.as_ref(),
-            &mut tempbuffer,
-            &mut outbuffer,
-            QrCodeEcc::Medium,
-            Version::MIN,
-            QR_MAX_VERSION,
-            None,
-            true,
-        );
-        let qr = unwrap!(qr);
+        let qr = unwrap!(self.encode(&mut outbuffer, &mut tempbuffer));
 
         let scale = (self.area.width().min(self.area.height()) - self.border) / (qr.size() as i16);
         let side = scale * qr.size() as i16;
