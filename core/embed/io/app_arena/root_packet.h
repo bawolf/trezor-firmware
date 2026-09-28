@@ -77,3 +77,28 @@ typedef struct {
  */
 ts_t root_packet_verify(const void* data, size_t size,
                         root_packet_auth_t** out);
+
+// Development devices only: a kernel without a secure monitor verifies the
+// ML-DSA-44 signatures itself, in the APP_ROOT_UPDATE syscall on its 8K
+// handler stack, which cannot hold mldsa-native's verification (24,784 B at
+// worst with MLD_CONFIG_REDUCE_RAM). It verifies on a temporary stack in the
+// app arena instead, which is idle while it holds no image.
+#if defined(SECURE_MODE) && !defined(TREZOR_EMULATOR)
+#ifdef PRODUCTION
+#error "Verifying root packets on the app arena is for dev devices only"
+#endif
+#define ROOT_PACKET_VERIFY_ON_ARENA_STACK
+
+/**
+ * @brief Verifies an ML-DSA-44 signature of `digest` like `mldsa44_verify`,
+ * on a stack in the app arena.
+ *
+ * Must be called in handler mode (from a syscall).
+ *
+ * @return TS_OK if the verification ran (`valid` holds its result),
+ *         TS_EBUSY if the arena holds an image, otherwise an error code.
+ */
+ts_t app_arena_mldsa44_verify(const mldsa44_signature_t* sig,
+                              const sha256_digest_t* digest,
+                              const mldsa44_public_key_t* pk, secbool* valid);
+#endif

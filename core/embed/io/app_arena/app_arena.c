@@ -39,6 +39,11 @@
 #include <stdlib.h>
 
 #include "app_loader.h"
+#include "root_packet.h"
+
+#ifdef ROOT_PACKET_VERIFY_ON_ARENA_STACK
+#include <trezor_bsp.h>
+#endif
 
 // Maximum number of application images that can be loaded in the arena
 // at the same time. If more images are needed, this can be increased
@@ -546,6 +551,106 @@ ts_t app_arena_clear_event(void) {
 cleanup:
   TSH_RETURN;
 }
+
+#ifdef ROOT_PACKET_VERIFY_ON_ARENA_STACK
+
+// Calls `fn(arg)` with MSP moved to the stack [`limit`, `top`) and returns on
+// the original stack. Runs in handler mode, where SP is MSP. MSPLIM is zeroed
+// around each switch, so the stack pointer is never below its limit.
+static __attribute__((naked, noinline, no_stack_protector)) void call_on_stack(
+    void* arg, void (*fn)(void*), uintptr_t top, uintptr_t limit) {
+  __asm__ volatile(
+      "PUSH    {R4, R5, R6, LR}   \n"
+      "MRS     R4, MSP            \n"  // Save the kernel stack
+      "MRS     R5, MSPLIM         \n"  // and its limit
+      "MOV     R6, #0             \n"
+      "MSR     MSPLIM, R6         \n"
+      "MSR     MSP, R2            \n"  // Switch to [limit, top)
+      "MSR     MSPLIM, R3         \n"
+      "BLX     R1                 \n"  // fn(arg)
+      "MOV     R6, #0             \n"
+      "MSR     MSPLIM, R6         \n"
+      "MSR     MSP, R4            \n"  // Back to the kernel stack
+      "MSR     MSPLIM, R5         \n"
+      "POP     {R4, R5, R6, PC}   \n");
+}
+
+// Verification in the arena, at its start; the stack is above it
+typedef struct {
+  mldsa44_signature_t sig;
+  sha256_digest_t digest;
+  const mldsa44_public_key_t* pk;
+  secbool valid;
+  ts_t status;
+} arena_verify_t;
+
+static void arena_verify(void* arg) {
+  arena_verify_t* v = (arena_verify_t*)arg;
+  v->status =
+      mldsa44_verify(&v->sig, &v->digest, sizeof(v->digest), v->pk, &v->valid);
+}
+
+ts_t app_arena_mldsa44_verify(const mldsa44_signature_t* sig,
+                              const sha256_digest_t* digest,
+                              const mldsa44_public_key_t* pk, secbool* valid) {
+  TSH_DECLARE;
+
+  app_arena_t* arena = &g_app_arena;
+
+  TSH_CHECK_ARG(valid != NULL);
+  *valid = secfalse;
+
+  TSH_CHECK_ARG(sig != NULL);
+  TSH_CHECK_ARG(digest != NULL);
+  TSH_CHECK_ARG(pk != NULL);
+  TSH_CHECK(arena->initialized, TS_ENOINIT);
+  // An image takes the whole arena; without one, nothing uses it
+  TSH_CHECK(arena->mem_used == 0, TS_EBUSY);
+  TSH_CHECK(__get_IPSR() != 0, TS_EINVAL);
+
+  const applet_layout_t layout = {
+      .data1 = {.start = (uintptr_t)arena->mem_ptr, .size = arena->mem_size},
+  };
+
+  arena_verify_t* v = (arena_verify_t*)arena->mem_ptr;
+
+  // The caller's memory and the arena are not mapped at the same time,
+  // so the signature is copied through a buffer on the kernel stack.
+  for (size_t offset = 0; offset < sizeof(v->sig); offset += 256) {
+    uint8_t temp[256];
+    size_t size = MIN(sizeof(v->sig) - offset, sizeof(temp));
+    memcpy(temp, (const uint8_t*)sig + offset, size);
+    mpu_set_active_applet(&layout, false);
+    memcpy((uint8_t*)&v->sig + offset, temp, size);
+    app_arena_restore_mpu();
+  }
+
+  mpu_set_active_applet(&layout, false);
+
+  // `digest` and `pk` are in kernel RAM and flash, mapped throughout
+  v->digest = *digest;
+  v->pk = pk;
+  v->valid = secfalse;
+  v->status = TS_EINVAL;
+
+  uintptr_t limit = ALIGN_UP((uintptr_t)(v + 1), 8);
+  uintptr_t top = ALIGN_DOWN((uintptr_t)arena->mem_ptr + arena->mem_size, 8);
+  call_on_stack(v, arena_verify, top, limit);
+
+  ts_t status = v->status;
+  secbool result = v->valid;
+
+  memset(arena->mem_ptr, 0, arena->mem_size);
+  app_arena_restore_mpu();
+
+  TSH_CHECK_OK(status);
+  *valid = result;
+
+cleanup:
+  TSH_RETURN;
+}
+
+#endif  // ROOT_PACKET_VERIFY_ON_ARENA_STACK
 
 #ifdef TREZOR_EMULATOR
 ts_t app_get_heap(void** heap_ptr, size_t* heap_size) {

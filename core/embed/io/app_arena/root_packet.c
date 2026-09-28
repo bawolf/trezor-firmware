@@ -297,9 +297,14 @@ ts_t root_packet_verify(const void* data, size_t size,
     TSH_CHECK(key_idx < ARRAY_LENGTH(ROOT_PACKET_KEYS), TS_EBADMSG);
 
     secbool valid = secfalse;
+#ifdef ROOT_PACKET_VERIFY_ON_ARENA_STACK
+    status = app_arena_mldsa44_verify(&unauth->signature[sig_idx], &auth_hash,
+                                      ROOT_PACKET_KEYS[key_idx], &valid);
+#else
     status =
         mldsa44_verify(&unauth->signature[sig_idx], &auth_hash,
                        sizeof(auth_hash), ROOT_PACKET_KEYS[key_idx], &valid);
+#endif
     TSH_CHECK_OK(status);
     TSH_CHECK(valid == sectrue, TS_EBADMSG);
 
