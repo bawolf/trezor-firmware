@@ -51,7 +51,9 @@ SECTIONS {
   } >FLASH AT>FLASH
 
   .stack : ALIGN(8) {
-    . += 8K; /* Overflow causes UsageFault */
+    /* A model's memory.ld may set a larger KERNEL_STACK_SIZE (development
+       T3T1: in-kernel ML-DSA-44 verification) */
+    . += DEFINED(KERNEL_STACK_SIZE) ? KERNEL_STACK_SIZE : 8K; /* Overflow causes UsageFault */
   } >MAIN_RAM
 
   .data : ALIGN(4) {

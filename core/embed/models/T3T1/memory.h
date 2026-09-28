@@ -77,11 +77,21 @@
 #define BOOTARGS_START 0x3002FF00
 #define BOOTARGS_SIZE 0x100
 
-#define MAIN_RAM_START 0x30030000
-#define MAIN_RAM_SIZE (28 * 1024)
+// Development devices only: the kernel verifies app root packets with
+// ML-DSA-44 on its own stack, 24,992 B at worst (MLD_CONFIG_REDUCE_RAM), which
+// the usual 8K kernel stack cannot hold. MAIN_RAM takes 24K from the start of
+// AUX2 for a 36K kernel stack; the coreapp heap shrinks by as much.
+#ifdef PRODUCTION
+#error "This T3T1 RAM layout is for development devices only"
+#endif
 
-#define AUX2_RAM_START 0x30037000
-#define AUX2_RAM_SIZE (204 * 1024)
+#define MAIN_RAM_START 0x30030000
+#define MAIN_RAM_SIZE (52 * 1024)
+
+#define KERNEL_STACK_SIZE (36 * 1024)
+
+#define AUX2_RAM_START 0x3003D000
+#define AUX2_RAM_SIZE (180 * 1024)
 
 #define APP_ARENA_RAM_START (0x3006A000)
 #define APP_ARENA_RAM_SIZE (231 * 1024)
