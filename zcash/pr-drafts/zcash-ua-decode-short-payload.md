@@ -13,6 +13,8 @@ Rerun 2026-09-26 on a T3W1 non-frozen emulator built at `main` @ `8760d111b6`
 
 Branch: https://github.com/bawolf/trezor-firmware/tree/extapp/zcash-ua-decode-short-payload @ `935383396b`
 
+Issue opened 2026-09-28: https://github.com/trezor/trezor-firmware/issues/7985 . Open the PR once a maintainer responds, per the PR template.
+
 ---
 
 `unified_addresses.decode()` let two malformed inputs through to the wrong
@@ -22,7 +24,7 @@ data with nonzero leftover bits made `convertbits()` raise a `ValueError`. On
 the transparent `SignTx` output path both reached the host as an unexpected
 failure instead of a `DataError`.
 
-Fixes #N
+Fixes #7985
 
 **Reproduce.** On a non-frozen emulator of `main`, with this branch's test
 file (tracebacks trimmed to the last frames):
