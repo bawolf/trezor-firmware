@@ -1,9 +1,14 @@
 # flake8: noqa: F403,F405
 from common import *  # isort:skip
 
+import ustruct
+from mock import patch
 from storage import cache_common
+from storage.cache import get_sessionless_cache
+from trezor import io, loop
 from trezor.crypto import bip39
 from trezor.crypto.curve import secp256k1
+from trezor.messages import ExtAppMessage
 from trezor.wire import DataError, context
 
 from apps.common.keychain import get_keychain
@@ -13,6 +18,7 @@ if not utils.USE_THP:
     from storage import cache_codec
 
 if utils.USE_APP_LOADING:
+    from apps.extapp import run as extapp_run
     from apps.extapp.run import _get_public_key, _get_xpub, _path_schemas
 
 if utils.USE_APP_LOADING and not utils.BITCOIN_ONLY:
@@ -140,6 +146,70 @@ class TestExtappPublicKeys(_TestCaseWithSeed):
             await_result(_get_xpub("secp256k1", schemas, _ETHEREUM_PATH, _XPUB_MAGIC))
         with self.assertRaises(DataError):
             await_result(_get_public_key("secp256k1", schemas, _ETHEREUM_PATH, True))
+
+
+_WIRE_END = 2  # run.py's _SERVICE_WIRE_END, a const() and so not importable
+
+
+class _Message:
+    def __init__(self, service: int, data: bytes) -> None:
+        self.fn = service << 16
+        self.data = data
+
+
+class _Slot:
+    """Stands in for `app`, `io` and `loop` in run.py: one running app, which
+    answers every request with b"reply". `inbox` holds its messages to Core."""
+
+    Timeout = loop.Timeout
+
+    def __init__(self, inbox: list[_Message]) -> None:
+        self.inbox = inbox
+        # Read here, not in the class body: only builds with IPC have it.
+        self.IPC2_EVENT = io.IPC2_EVENT
+        self.POLL_READ = io.POLL_READ
+
+    def image_by_handle(self, handle: int) -> "_Slot":
+        return self
+
+    def allowed_curves(self) -> list[str]:
+        return ["secp256k1"]
+
+    def allowed_paths(self) -> list[str]:
+        return [_ETHEREUM_PATTERN]
+
+    def is_running(self) -> bool:
+        return True
+
+    def task_id(self) -> int:
+        return 2
+
+    def ipc_send(self, task_id: int, fn: int, data: bytes) -> None:
+        self.inbox.append(_Message(_WIRE_END, b"reply"))
+
+    async def wait(self, iface: int, timeout_ms: int) -> _Message:
+        if not self.inbox:
+            raise loop.Timeout
+        return self.inbox.pop(0)
+
+
+@unittest.skipUnless(utils.USE_APP_LOADING, "app loading")
+class TestExtappRun(unittest.TestCase):
+    def tearDown(self):
+        get_sessionless_cache().delete(cache_common.APP_EXTAPP_IDS)
+
+    def test_drops_message_sent_before_the_request(self):
+        # e.g. left in the slot by an earlier instance
+        slot = _Slot([_Message(_WIRE_END, b"stale")])
+        instance_id = 1
+        get_sessionless_cache().set(
+            cache_common.APP_EXTAPP_IDS, ustruct.pack("<II", 0, instance_id)
+        )
+        request = ExtAppMessage(instance_id=instance_id, message_id=0, data=b"")
+        with patch(extapp_run, "app", slot), patch(extapp_run, "io", slot):
+            with patch(extapp_run, "loop", slot):
+                response = await_result(extapp_run.run(request))
+        self.assertEqual(response.data, b"reply")
 
 
 if __name__ == "__main__":

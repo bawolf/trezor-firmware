@@ -124,6 +124,14 @@ async def run(request: ExtAppMessage) -> ExtAppResponse:
 
     task_id = image.task_id()
 
+    # Drop what the app slot sent outside a request (e.g. an earlier instance's
+    # last messages); it would otherwise be taken for a reply to this one.
+    try:
+        while True:
+            await loop.wait(io.IPC2_EVENT | io.POLL_READ, timeout_ms=0)
+    except loop.Timeout:
+        pass
+
     try:
         if __debug__:
             log.debug(__name__, f"Sending wire start IPC message: {request.message_id}")
