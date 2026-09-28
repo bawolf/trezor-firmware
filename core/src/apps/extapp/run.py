@@ -194,10 +194,7 @@ async def run(request: ExtAppMessage) -> ExtAppResponse:
                                 __name__,
                                 f"Getting xpub for path: {address_n}, xpub_magic: {xpub_magic}",
                             )
-                        keychain = await get_keychain(
-                            curve, [paths.AlwaysMatchingSchema]
-                        )
-                        result = await _get_xpub(address_n, keychain, xpub_magic)
+                        result = await _get_xpub(curve, schemas, address_n, xpub_magic)
                     except Exception:
                         if __debug__:
                             log.error(__name__, "Failed to get xpub")
@@ -211,20 +208,12 @@ async def run(request: ExtAppMessage) -> ExtAppResponse:
                         if __debug__:
                             log.debug(
                                 __name__,
-                                "Deriving keychain",
-                            )
-                        keychain = await get_keychain(
-                            curve, [paths.AlwaysMatchingSchema]
-                        )
-                        if __debug__:
-                            log.debug(
-                                __name__,
                                 f"Getting public key bytes for path: {address_n} compressed={compressed}",
                             )
                         result = [
                             0,
                             await _get_public_key(
-                                address_n, compressed, keychain, curve
+                                curve, schemas, address_n, compressed
                             ),
                         ]
                         if __debug__:
@@ -468,8 +457,9 @@ async def run(request: ExtAppMessage) -> ExtAppResponse:
             die(RuntimeError("Unknown IPC function"))
 
 
-async def _get_xpub(address_n: list[int], keychain: Keychain, xpub_magic: int) -> str:
-    from apps.common import paths
+async def _get_xpub(
+    curve: str, schemas: list[paths.PathSchema], address_n: list[int], xpub_magic: int
+) -> str:
     from apps.common.keychain import ForbiddenKeyPath
 
     if address_n and address_n[0] == paths.SLIP25_PURPOSE:
@@ -477,15 +467,19 @@ async def _get_xpub(address_n: list[int], keychain: Keychain, xpub_magic: int) -
         log.error(__name__, "Forbidden key path: SLIP25 purpose detected")
         raise ForbiddenKeyPath()
 
+    keychain = await get_keychain(curve, schemas)
+    await paths.validate_path(keychain, address_n)
     node = keychain.derive(address_n)
     node_xpub = node.serialize_public(xpub_magic)
     return node_xpub
 
 
 async def _get_public_key(
-    address_n: list[int], compressed: bool, keychain: Keychain, curve_name: str
+    curve_name: str,
+    schemas: list[paths.PathSchema],
+    address_n: list[int],
+    compressed: bool,
 ) -> bytes:
-    from apps.common import paths
     from apps.common.keychain import ForbiddenKeyPath
 
     if address_n and address_n[0] == paths.SLIP25_PURPOSE:
@@ -494,6 +488,8 @@ async def _get_public_key(
         raise ForbiddenKeyPath()
 
     log.debug(__name__, f"Deriving keychain for path: {address_n}")
+    keychain = await get_keychain(curve_name, schemas)
+    await paths.validate_path(keychain, address_n)
     node = keychain.derive(address_n)
 
     if curve_name == "secp256k1":
