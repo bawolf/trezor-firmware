@@ -13,7 +13,7 @@ if not utils.USE_THP:
     from storage import cache_codec
 
 if utils.USE_APP_LOADING:
-    from apps.extapp.run import _path_schemas
+    from apps.extapp.run import _get_public_key, _get_xpub, _path_schemas
 
 if utils.USE_APP_LOADING and not utils.BITCOIN_ONLY:
     from apps.extapp.run import _sign_typed_hash
@@ -65,8 +65,7 @@ _TRON_PATTERN = "m/44'/195'/account'/change/address_index/**"
 _ETHEREUM_PATH = [H_(44), H_(60), H_(0), 0, 0]
 
 
-@unittest.skipUnless(utils.USE_APP_LOADING and not utils.BITCOIN_ONLY, "app loading")
-class TestExtappSignTypedHash(TestCaseWithContext):
+class _TestCaseWithSeed(TestCaseWithContext):
     def setUp(self):
         seed = bip39.seed(" ".join(["all"] * 12), "")
         if utils.USE_THP:
@@ -75,6 +74,9 @@ class TestExtappSignTypedHash(TestCaseWithContext):
             cache_codec.start_session()
             cache_codec.get_active_session().set(cache_common.APP_COMMON_SEED, seed)
 
+
+@unittest.skipUnless(utils.USE_APP_LOADING and not utils.BITCOIN_ONLY, "app loading")
+class TestExtappSignTypedHash(_TestCaseWithSeed):
     def sign(self, curve, pattern, coin_type, address_n, chain_id):
         schemas = [PathSchema.parse(pattern, coin_type)]
         return await_result(
@@ -111,6 +113,33 @@ class TestExtappSignTypedHash(TestCaseWithContext):
         for chain_id in (None, 1):
             with self.assertRaises(ValueError):
                 self.sign("ed25519", _ETHEREUM_PATTERN, 60, _ETHEREUM_PATH, chain_id)
+
+
+_XPUB_MAGIC = 0x0488_B21E
+
+
+@unittest.skipUnless(utils.USE_APP_LOADING, "app loading")
+class TestExtappPublicKeys(_TestCaseWithSeed):
+    def test_declared_path(self):
+        schemas = [PathSchema.parse(_ETHEREUM_PATTERN, 60)]
+        node = await_result(
+            get_keychain("secp256k1", [PathSchema.parse("m/**", 0)])
+        ).derive(_ETHEREUM_PATH)
+        xpub = await_result(
+            _get_xpub("secp256k1", schemas, _ETHEREUM_PATH, _XPUB_MAGIC)
+        )
+        self.assertEqual(xpub, node.serialize_public(_XPUB_MAGIC))
+        public_key = await_result(
+            _get_public_key("secp256k1", schemas, _ETHEREUM_PATH, True)
+        )
+        self.assertEqual(public_key, node.public_key())
+
+    def test_undeclared_path(self):
+        schemas = [PathSchema.parse(_TRON_PATTERN, 195)]
+        with self.assertRaises(DataError):
+            await_result(_get_xpub("secp256k1", schemas, _ETHEREUM_PATH, _XPUB_MAGIC))
+        with self.assertRaises(DataError):
+            await_result(_get_public_key("secp256k1", schemas, _ETHEREUM_PATH, True))
 
 
 if __name__ == "__main__":
