@@ -149,3 +149,16 @@ both. Trezor may assign its own id at admission.
     - prepare the proving key ahead of time;
     - re-plan when Review is clicked;
     - investigate the disconnect.
+- **2026-09-28, Safe 5 (T3T1), first extapp attempt: firmware `e770909ae8`** (the demo plus a
+  dev-only commit giving the kernel a 36K stack for ML-DSA by taking 24 KB from Core's heap:
+  118,512 → 94,000 B). Bootloader 2.1.10 (unlocked), and the seed was kept.
+  - **Load:** the app loaded (4.4 s) with the in-kernel root-packet check. The first load
+    attempt failed with `DataError: Failed to decode message`.
+  - **Requests:** every app request failed with `UnexpectedMessage` (app heap peak about 2–3 KB).
+  - **Core crash:** a plain `btc get-address` gave the red screen **"internal error mm @
+    0x3001c5f8"** (MicroPython memory manager), repeated on every boot.
+  - **Cause, under investigation:** the Core heap reduction or the memory overlap from the
+    dev-only kernel-stack commit.
+  - **Restored** to `dcc602fd48` (fingerprint `7ec6109c…`) from the bootloader: revision,
+    label and seed intact; `btc get-address m/84h/1h/0h/0/0` = `tb1q6rz28…pvkl`.
+  - A fix that keeps Core's heap is being built. Log: `session-logs/2026-09-28-safe5-extapp-diag.log`.
