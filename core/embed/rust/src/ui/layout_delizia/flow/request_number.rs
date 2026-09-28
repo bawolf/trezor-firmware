@@ -65,8 +65,8 @@ pub fn new_request_number(
     };
 
     let number_input_dialog = NumberInputDialog::new(
-        min_count as u16,
-        max_count as u16,
+        min_count.try_into()?,
+        max_count.try_into()?,
         count as u16,
         description,
     )?;

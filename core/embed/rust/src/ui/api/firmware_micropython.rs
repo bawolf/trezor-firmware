@@ -1483,18 +1483,24 @@ extern "C" fn new_process_ipc_message(n_args: usize, args: *const Obj, kwargs: *
                 None => Obj::const_none(),
             },
         ),
-        Archived::<TrezorUiEnum>::RequestNumber(m) => wrap(
-            ModelUI::request_number(
-                tstr(&m.title)?,
-                m.initial.into(),
-                m.min.into(),
-                m.max.into(),
-                Some(tstr(&m.content)?),
-                Some(|_| TString::empty()),
-            )?,
-            m.br_code.to_native(),
-            None,
-        )?,
+        Archived::<TrezorUiEnum>::RequestNumber(m) => {
+            let (initial, min, max) = (m.initial.to_native(), m.min.to_native(), m.max.to_native());
+            if !(min..=max).contains(&initial) {
+                return Err(Error::ValueError(c"Invalid number range"));
+            }
+            wrap(
+                ModelUI::request_number(
+                    tstr(&m.title)?,
+                    initial,
+                    min,
+                    max,
+                    Some(tstr(&m.content)?),
+                    Some(|_| TString::empty()),
+                )?,
+                m.br_code.to_native(),
+                None,
+            )?
+        }
         Archived::<TrezorUiEnum>::ConfirmProperties(m) => wrap(
             ModelUI::confirm_properties(
                 tstr(&m.title)?,
