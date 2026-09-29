@@ -25,6 +25,8 @@ pub trait WireEncode<T> {
 
 /// Sends a successful response over the wire.
 pub fn wire_respond_raw(response_msg: i32, response_bytes: &[u8]) -> Result<()> {
+    // A response ends any progress screen the app left open.
+    crate::ui::end_progress().c()?;
     let id: u16 = response_msg
         .try_into()
         .map_err(|_| Error::InvalidMessage)
@@ -38,6 +40,8 @@ pub fn wire_respond_raw(response_msg: i32, response_bytes: &[u8]) -> Result<()> 
 
 /// Sends an error response over the wire.
 pub fn wire_error_raw(e: &Error) -> Result<()> {
+    // An error ends any progress screen too, and is reported even if that fails.
+    let _ = crate::ui::end_progress();
     crate::error!("{}", e);
     get_wire_or_die()
         .wire_error(e.code(), e.message().into())

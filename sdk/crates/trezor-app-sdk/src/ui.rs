@@ -11,7 +11,9 @@ pub use crate::traits::ui::{
     ShowWarning, StrExt, TrezorUiResult,
 };
 
-use crate::app_runtime2::get_ui_or_die;
+use core::sync::atomic::{AtomicBool, Ordering};
+
+use crate::app_runtime2::{get_ui_or_die, systick_ms};
 use crate::traits::ui::{UiV1Dyn as _, opt_bytes};
 use crate::{Error, IntoAppResult, Result};
 
@@ -384,9 +386,16 @@ pub fn show_address<'a>(show_address: ShowAddress<'a>) -> UiResult {
         .into_app_result()
 }
 
+/// Whether Core shows a progress screen for the current request. Core stops an
+/// app that updates or ends progress it never initialized, so `update_progress`
+/// and `end_progress` check this first.
+static PROGRESS_SHOWN: AtomicBool = AtomicBool::new(false);
+
 /// Starts a progress indicator, with an optional `description`/`title` and
 /// whether it's `indeterminate` (no known end point) or `danger`ous (drawn
-/// in a warning style).
+/// in a warning style). Replaces one already shown.
+///
+/// Prefer [`Progress`], which also ends the screen on every return path.
 pub fn init_progress<'a>(
     description: Option<&'a str>,
     title: Option<&'a str>,
@@ -395,17 +404,115 @@ pub fn init_progress<'a>(
 ) -> Result<()> {
     get_ui_or_die()
         .init_progress(opt_bytes(description), opt_bytes(title), indeterminate, danger)
-        .into_app_result()
+        .into_app_result()?;
+    PROGRESS_SHOWN.store(true, Ordering::Relaxed);
+    Ok(())
 }
 
 /// Updates the current progress indicator's `description` and `value` (0-1000).
+///
+/// Fails with [`Error::DataError`], without contacting Core, if no progress
+/// indicator is shown ([`init_progress`] was not called, or it ended).
 pub fn update_progress<'a>(description: Option<&'a str>, value: u32) -> Result<()> {
+    if !PROGRESS_SHOWN.load(Ordering::Relaxed) {
+        return Err(Error::DataError("Progress not initialized"));
+    }
     get_ui_or_die()
         .update_progress(opt_bytes(description), value)
         .into_app_result()
 }
 
-/// Ends the current progress indicator.
+/// Ends the current progress indicator. Does nothing if none is shown.
 pub fn end_progress() -> Result<()> {
+    if !PROGRESS_SHOWN.swap(false, Ordering::Relaxed) {
+        return Ok(());
+    }
     get_ui_or_die().end_progress().into_app_result()
+}
+
+/// A progress screen for the duration of a long computation, ended when
+/// dropped.
+///
+/// Call [`Progress::keep_alive`] from the computation's inner loop to stay
+/// within Core's 1 s limit ("Long computations" in `sdk/doc/development.md`).
+///
+/// ## Example
+///
+/// ```no_run
+/// use trezor_app_sdk::ui::Progress;
+/// # fn step(_: u32) {}
+/// let mut progress = Progress::show(None, None, true)?;
+/// for i in 0..1000 {
+///     step(i);
+///     progress.keep_alive()?;
+/// }
+/// drop(progress); // or let it go out of scope
+/// # Ok::<(), trezor_app_sdk::Error>(())
+/// ```
+#[must_use = "the progress screen ends when this is dropped"]
+pub struct Progress {
+    value: u32,
+    reported_at_ms: u32,
+}
+
+impl Progress {
+    /// Shortest interval between two reports sent by [`Progress::keep_alive`].
+    pub const KEEP_ALIVE_MS: u32 = 100;
+
+    /// Shows a progress screen at value 0; the arguments are those of
+    /// [`init_progress`].
+    pub fn show(
+        description: Option<&str>,
+        title: Option<&str>,
+        indeterminate: bool,
+    ) -> Result<Self> {
+        init_progress(description, title, indeterminate, false)?;
+        Ok(Self {
+            value: 0,
+            reported_at_ms: systick_ms(),
+        })
+    }
+
+    /// Sets the progress bar to `value` (0..=1000).
+    pub fn report(&mut self, value: u32) -> Result<()> {
+        update_progress(None, value)?;
+        self.value = value;
+        self.reported_at_ms = systick_ms();
+        Ok(())
+    }
+
+    /// Repeats the last reported value if [`Progress::KEEP_ALIVE_MS`] has
+    /// passed since it, so an indeterminate screen can use it without ever
+    /// calling [`Progress::report`].
+    pub fn keep_alive(&mut self) -> Result<()> {
+        let elapsed = systick_ms().wrapping_sub(self.reported_at_ms);
+        if elapsed >= Self::KEEP_ALIVE_MS {
+            self.report(self.value)?;
+        }
+        Ok(())
+    }
+}
+
+impl Drop for Progress {
+    fn drop(&mut self) {
+        // `end_progress` has already cleared the local state; a failed End
+        // leaves only Core's screen, which the next screen replaces.
+        let _ = end_progress();
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Without a progress screen, updates fail and ends do nothing, both
+    /// without contacting Core.
+    #[test]
+    fn progress_without_a_screen() {
+        assert!(matches!(
+            update_progress(None, 500),
+            Err(Error::DataError("Progress not initialized"))
+        ));
+        assert!(end_progress().is_ok());
+    }
 }
