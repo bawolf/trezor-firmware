@@ -9,7 +9,7 @@
 
 use crate::alloc_types::Vec;
 use crate::app_runtime2::get_wire_or_die;
-use crate::traits::wire::WireV1Dyn as _;
+use crate::traits::wire::{WireError, WireV1Dyn as _};
 use crate::util::Timeout;
 use crate::{Error, IntoAppResult, Result, ResultExt, debug};
 
@@ -63,7 +63,16 @@ pub fn wire_error_raw(e: &Error) -> Result<()> {
 pub fn wire_request_raw(req_bytes: &[u8], id: u16) -> Result<(u16, Vec<u8>)> {
     let result = get_wire_or_die()
         .wire_request(id, req_bytes.into(), Timeout::max().as_ms())
-        .into_app_result()
+        .into_result()
+        .inspect_err(|e| {
+            // Core answers only with the reply, so another service means the
+            // host abandoned this request for a new one, and Core's progress
+            // screen went with it.
+            if matches!(e, WireError::UnexpectedService) {
+                crate::ui::forget_progress();
+            }
+        })
+        .map_err(Error::from)
         .c()?;
     Ok((result.id, result.data.as_ref().to_vec()))
 }
