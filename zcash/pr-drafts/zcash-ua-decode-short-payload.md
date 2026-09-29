@@ -15,6 +15,8 @@ Branch: https://github.com/bawolf/trezor-firmware/tree/extapp/zcash-ua-decode-sh
 
 Issue opened 2026-09-28: https://github.com/trezor/trezor-firmware/issues/7985 . Open the PR once a maintainer responds, per the PR template.
 
+2026-09-29: M1nd3r (assigned) said LGTM on #7985 and asked for a PR, with two changes: drop the comment lines, and assert the error messages as in his c0ea6009bf. Both applied. **PR opened: https://github.com/trezor/trezor-firmware/pull/7993** (branch `zcash-ua-decode-malformed` @ `52fb6aa471`, `[no changelog]` as in his version; frozen from the daily sync).
+
 ---
 
 `unified_addresses.decode()` let two malformed inputs through to the wrong
