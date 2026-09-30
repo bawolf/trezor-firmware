@@ -162,3 +162,11 @@ owner before posting it anywhere.
 - Also for the owners: the IPC inbox design (static vs. stabby's heap inbox),
   `ui::Progress` vs. vojczejk's modui progress, the RNG in `trezor_api_v1_t`
   vs. a v2, and the protocol change a complete host-cancel fix needs.
+
+## Upstream contributions on `main` (user rule, 2026-09-29: only user-reachable bugs now)
+
+| Item | Issue | PR | Branch | Status |
+|---|---|---|---|---|
+| Malformed Zcash UA → wrong error on SignTx | #7985 | #7993 | `zcash-ua-decode-malformed` (frozen) | Maintainer M1nd3r: "desired"; in review |
+| xtask memory report drops long-named sections (T3T1 AUX1_RAM under-reported by 28 KB) | #7997 | not yet (issue first) | `xtask-memusage-long-sections` @ `67128660b9` | Waiting on maintainers |
+| ZIP-244 S.2 hasher (latent: no current caller) | held | held | `zcash-transparent-sig-digest` @ `87307f671d` | Held for the Zcash conversation |
