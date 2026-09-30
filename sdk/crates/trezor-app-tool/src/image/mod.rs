@@ -138,6 +138,7 @@ pub fn convert_elf_to_bin(
         elf.format()
     );
 
+    let heap_size = metadata::heap_size(package)?;
     let (target_arch, code, data_size) = match elf.architecture() {
         object::Architecture::Arm => {
             let arm_binary = armv8m::Armv8mBinary::from_object_file(&elf, package)?;
@@ -148,7 +149,7 @@ pub fn convert_elf_to_bin(
                 arm_binary.ram_size(),
             )
         }
-        object::Architecture::X86_64 => (TargetArch::LinuxX86_64, raw_elf, 0),
+        object::Architecture::X86_64 => (TargetArch::LinuxX86_64, raw_elf, heap_size),
         object::Architecture::Aarch64 => (TargetArch::MacosAarch64, raw_elf, 0),
         arch => anyhow::bail!("Unsupported architecture: {:?}", arch),
     };
@@ -157,7 +158,6 @@ pub fn convert_elf_to_bin(
     // manifest that asks for an inbox larger than the heap it reserved can
     // never start. Catch it here rather than at load time on the device.
     let ipc_buffer_size = metadata::ipc_buffer_size(package)?;
-    let heap_size = metadata::heap_size(package)?;
     ensure!(
         ipc_buffer_size <= heap_size,
         "IPC buffer size ({ipc_buffer_size} B) exceeds the app's heap size \
