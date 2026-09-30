@@ -54,5 +54,17 @@ class TestExtappRequests(unittest.TestCase):
                 trezorui_api.process_ipc_message(data=data)
 
 
+@unittest.skipUnless(utils.USE_APP_LOADING, "app loading")
+class TestExtappReplies(unittest.TestCase):
+    def test_reply_callback_failure_is_raised(self):
+        def app_gone(data: bytes) -> None:
+            raise RuntimeError
+
+        with self.assertRaises(RuntimeError):
+            trezorcrypto_api.send_crypto_result(result=True, ipc_cb=app_gone)
+        with self.assertRaises(RuntimeError):
+            trezorui_api.send_ui_result(result=trezorui_api.CONFIRMED, ipc_cb=app_gone)
+
+
 if __name__ == "__main__":
     unittest.main()
