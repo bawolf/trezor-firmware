@@ -200,7 +200,8 @@ fn parse_output_sections(content: &str) -> Result<Vec<OutputSection>> {
     // This section contains a lot of other information,
     // but we only care about lines that start with '.'
 
-    for line in content.lines() {
+    let mut lines = content.lines().peekable();
+    while let Some(line) = lines.next() {
         let trimmed = line.trim_start();
 
         if !in_map {
@@ -218,6 +219,12 @@ fn parse_output_sections(content: &str) -> Result<Vec<OutputSection>> {
         let Some(name) = parts.next() else {
             continue;
         };
+        // GNU ld puts the address and size of a long-named section on the next line.
+        if parts.clone().next().is_none()
+            && let Some(next) = lines.next_if(|next| next.trim_start().starts_with("0x"))
+        {
+            parts = next.split_whitespace();
+        }
         let Some(address) = parts.next() else {
             continue;
         };
@@ -375,6 +382,42 @@ Linker script and memory map
 
         assert_eq!(used_bytes_for_region(flash, &sections), 0x1a0);
         assert_eq!(used_bytes_for_region(ram, &sections), 0x60);
+    }
+
+    #[test]
+    fn counts_section_with_long_name() {
+        // GNU ld moves the address and size of a section whose name has 15 or
+        // more characters to the next line. A section without contents has
+        // neither.
+        let map = r#"
+Memory Configuration
+
+Name             Origin             Length             Attributes
+FLASH            0x08000000         0x00010000         xr
+RAM              0x20000000         0x00002000         rw
+*default*        0x00000000         0xffffffff
+
+Linker script and memory map
+
+.flash
+ *(.secmon)
+
+.flash          0x08000000       0x100
+.no_dma_buffers
+                0x20000000        0x40
+"#;
+
+        let regions = parse_memory_regions(map).expect("memory regions should parse");
+        let sections = parse_output_sections(map).expect("sections should parse");
+
+        let flash = regions
+            .iter()
+            .find(|region| region.name == "FLASH")
+            .unwrap();
+        let ram = regions.iter().find(|region| region.name == "RAM").unwrap();
+
+        assert_eq!(used_bytes_for_region(flash, &sections), 0x100);
+        assert_eq!(used_bytes_for_region(ram, &sections), 0x40);
     }
 
     #[test]
