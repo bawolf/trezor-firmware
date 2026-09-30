@@ -143,6 +143,34 @@ class TestZcashSigHasher(unittest.TestCase):
             computed_sighash = hasher.signature_digest(txi, txi.script_pubkey)
             self.assertEqual(computed_sighash, expected_sighash)
 
+    def test_zcash_hasher_without_transparent_inputs(self):
+        # the expected sighash was computed using librustzcash
+        # (zcash_primitives 0.30.1, `signature_hash` with `SignableInput::Shielded`)
+        tx = SignTx(
+            coin_name="Zcash",
+            version=5,
+            version_group_id=648488714,
+            branch_id=3268858036,
+            lock_time=2591264634,
+            expiry=36466477,
+            inputs_count=0,
+            outputs_count=1,
+        )
+        output = PrevOutput(
+            amount=865034086766210,
+            script_pubkey=bytes.fromhex(
+                "76a9140d06a745f44ab023752cb5b406ed8985e18130ab88ac"
+            ),
+        )
+        expected_sighash = bytes.fromhex(
+            "9bd397d5ad064c54a637bad7312b0747c7cbc5ae7883f20885d5790cabd28356"
+        )
+
+        hasher = ZcashHasher(tx)
+        hasher.add_output(output, output.script_pubkey)
+
+        self.assertEqual(hasher.signature_digest(None, None), expected_sighash)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -172,9 +172,11 @@ class TransparentHasher:
         self.outputs = blake_hash_writer_32(b"ZTxIdOutputsHash")
 
         self.empty = True  # inputs_amount + outputs_amount == 0
+        self.no_inputs = True
 
     def add_input(self, txi: TxInput, script_pubkey: bytes) -> None:
         self.empty = False
+        self.no_inputs = False
 
         write_prevout(self.prevouts, txi)
         write_uint64(self.amounts, txi.amount)
@@ -214,7 +216,7 @@ class TransparentHasher:
         """
         from apps.bitcoin.common import SigHashType
 
-        if self.empty:
+        if self.no_inputs:
             assert txi is None
             assert script_pubkey is None
             return self.digest()
