@@ -53,6 +53,7 @@ pub mod crypto;
 pub mod ui {
     pub use crate::structs::{
         Property, Slice, StrExt, StrSlice, TrezorProgressEnum, TrezorUiEnum, TrezorUiResult,
+        access_progress_request, access_ui_request,
     };
 }
 
