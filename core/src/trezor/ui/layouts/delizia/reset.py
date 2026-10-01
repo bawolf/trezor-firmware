@@ -89,24 +89,50 @@ async def select_word(
     return words[result]
 
 
+async def _go_back() -> ui.UiResult:
+    return trezorui_api.BACK
+
+
 async def slip39_show_checklist(
     step: int,
     advanced: bool,
     count: int | None = None,
     threshold: int | None = None,
-) -> None:
+    back_button: bool = False,
+) -> ui.UiResult:
+    from trezor.ui.layouts.menu import Menu, MenuLeaf, show_menu
+
     items = _slip_39_checklist_items(step, advanced, count, threshold)
     with trezorui_api.show_checklist(
         title=TR.reset__title_shamir_backup,
         button=TR.buttons__continue,
         active=step,
         items=items,
+        back_button=back_button,
     ) as layout:
-        result = await interact(
-            layout, "slip39_checklist", ButtonRequestType.ResetDevice
-        )
-    if result != CONFIRMED:
-        raise ActionCancelled
+        br_name_once: str | None = "slip39_checklist"
+        while True:
+            result = await interact(
+                layout,
+                br_name_once,
+                ButtonRequestType.ResetDevice,
+                raise_on_cancel=None,
+            )
+            br_name_once = None  # ButtonRequest should be sent only once
+
+            if result is CONFIRMED:
+                return result
+
+            if result is trezorui_api.INFO:
+                # shows the menu with the "go back" option
+                menu_result = await show_menu(
+                    Menu([MenuLeaf(TR.buttons__go_back, _go_back)])
+                )
+                if menu_result is not None:
+                    return menu_result.value  # BACK
+            else:
+                # not reachable from the UI, only via debuglink
+                raise ActionCancelled
 
 
 def _slip_39_checklist_items(
@@ -151,8 +177,8 @@ async def _prompt_number(
     min_count: int,
     max_count: int,
     br_name: str,
-) -> int:
-    from trezor.ui.layouts.menu import Menu, leaf_from_layout, show_menu
+) -> int | ui.UiResult:
+    from trezor.ui.layouts.menu import Menu, MenuLeaf, leaf_from_layout, show_menu
 
     with trezorui_api.request_number(
         title=title,
@@ -172,7 +198,8 @@ async def _prompt_number(
             br_name_once = None  # ButtonRequest should be sent only once
 
             if result is trezorui_api.CANCELLED:
-                raise ActionCancelled  # user cancelled request number prompt
+                # not reachable from the UI, only via debuglink
+                raise ActionCancelled
 
             if __debug__ and not isinstance(result, tuple):
                 # sent by debuglink. debuglink does not change the number of
@@ -185,27 +212,36 @@ async def _prompt_number(
                 return value
 
             if status is trezorui_api.INFO:
-                # shows the menu with the "more info" screen
-                leaf = leaf_from_layout(
-                    TR.buttons__more_info,
-                    lambda: trezorui_api.show_info_with_cancel(
-                        title="",
-                        items=[("", info(value), False)],
+                # shows the menu with "more info" and "go back" options
+                leaves = [
+                    leaf_from_layout(
+                        TR.buttons__more_info,
+                        lambda: trezorui_api.show_info_with_cancel(
+                            title="",
+                            items=[("", info(value), False)],
+                        ),
                     ),
-                )
-                await show_menu(Menu([leaf]))
+                    MenuLeaf(TR.buttons__go_back, _go_back),
+                ]
+                menu_result = await show_menu(Menu(leaves))
+                if menu_result is not None:
+                    return menu_result.value  # BACK
             else:
                 raise RuntimeError
 
 
 def slip39_prompt_threshold(
-    num_of_shares: int, group_id: int | None = None
-) -> Awaitable[int]:
-    count = num_of_shares // 2 + 1
+    num_of_shares: int, group_id: int | None = None, init_value: int | None = None
+) -> Awaitable[int | ui.UiResult]:
     # min value of share threshold is 2 unless the number of shares is 1
     # number of shares 1 is possible in advanced slip39
     min_count = min(2, num_of_shares)
     max_count = num_of_shares
+    if init_value is not None:
+        # returning to the prompt with a previously entered value
+        count = max(min_count, min(init_value, max_count))
+    else:
+        count = num_of_shares // 2 + 1
 
     description = (
         TR.reset__select_threshold
@@ -234,11 +270,15 @@ def slip39_prompt_threshold(
 
 
 async def slip39_prompt_number_of_shares(
-    num_words: int, group_id: int | None = None
-) -> int:
-    count = 5
+    num_words: int, group_id: int | None = None, init_value: int | None = None
+) -> int | ui.UiResult:
     min_count = 1
     max_count = 16
+    if init_value is not None:
+        # returning to the prompt with a previously entered value
+        count = max(min_count, min(init_value, max_count))
+    else:
+        count = 5
 
     description = (
         TR.reset__num_of_shares_how_many
@@ -264,10 +304,16 @@ async def slip39_prompt_number_of_shares(
     )
 
 
-async def slip39_advanced_prompt_number_of_groups() -> int:
-    count = 5
+async def slip39_advanced_prompt_number_of_groups(
+    init_value: int | None = None,
+) -> int | ui.UiResult:
     min_count = 2
     max_count = 16
+    if init_value is not None:
+        # returning to the prompt with a previously entered value
+        count = max(min_count, min(init_value, max_count))
+    else:
+        count = 5
     description = TR.reset__group_description
     info = TR.reset__group_info
 
@@ -282,10 +328,16 @@ async def slip39_advanced_prompt_number_of_groups() -> int:
     )
 
 
-async def slip39_advanced_prompt_group_threshold(num_of_groups: int) -> int:
-    count = num_of_groups // 2 + 1
+async def slip39_advanced_prompt_group_threshold(
+    num_of_groups: int, init_value: int | None = None
+) -> int | ui.UiResult:
     min_count = 1
     max_count = num_of_groups
+    if init_value is not None:
+        # returning to the prompt with a previously entered value
+        count = max(min_count, min(init_value, max_count))
+    else:
+        count = num_of_groups // 2 + 1
     description = TR.reset__required_number_of_groups
     info = TR.reset__advanced_group_threshold_info
 

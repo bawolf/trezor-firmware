@@ -1301,7 +1301,6 @@ static void _librust_qstrs(void) {
   MP_QSTR_ethereum__eip_712_empty_domain;
   MP_QSTR_ethereum__gas_limit;
   MP_QSTR_ethereum__gas_price;
-  MP_QSTR_ethereum__interaction_contract;
   MP_QSTR_ethereum__max_gas_price;
   MP_QSTR_ethereum__name_and_version;
   MP_QSTR_ethereum__new_contract;
@@ -1351,6 +1350,7 @@ static void _librust_qstrs(void) {
   MP_QSTR_ethereum__vault_claim_intro;
   MP_QSTR_ethereum__vault_claim_to;
   MP_QSTR_ethereum__vault_deposit_intro;
+  MP_QSTR_ethereum__vault_owner_address;
   MP_QSTR_ethereum__vault_redeem_intro;
   MP_QSTR_ethereum__vault_redeem_to;
   MP_QSTR_ethereum__vault_withdraw_intro;

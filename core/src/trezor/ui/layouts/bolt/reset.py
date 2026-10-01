@@ -3,6 +3,7 @@ from typing import TYPE_CHECKING
 import trezorui_api
 from trezor import TR
 from trezor.enums import ButtonRequestType
+from trezor.wire import ActionCancelled
 
 from ..common import interact, raise_if_not_confirmed
 
@@ -77,7 +78,8 @@ async def slip39_show_checklist(
     advanced: bool,
     count: int | None = None,
     threshold: int | None = None,
-) -> None:
+    back_button: bool = False,
+) -> trezorui_api.UiResult:
     items = (
         (
             TR.reset__slip39_checklist_set_num_shares,
@@ -97,10 +99,9 @@ async def slip39_show_checklist(
         button=TR.buttons__continue,
         active=step,
         items=items,
+        back_button=back_button,
     ) as layout:
-        return await raise_if_not_confirmed(
-            layout, "slip39_checklist", ButtonRequestType.ResetDevice
-        )
+        return await interact(layout, "slip39_checklist", ButtonRequestType.ResetDevice)
 
 
 async def _prompt_number(
@@ -111,7 +112,9 @@ async def _prompt_number(
     min_count: int,
     max_count: int,
     br_name: str,
-) -> int:
+) -> int | trezorui_api.UiResult:
+    from trezor.ui.layouts.menu import Menu, leaf_from_layout, show_menu
+
     with trezorui_api.request_number(
         title=title,
         count=count,
@@ -127,33 +130,50 @@ async def _prompt_number(
                 ButtonRequestType.ResetDevice,
                 raise_on_cancel=None,
             )
-            if __debug__:
-                if not isinstance(result, tuple):
-                    # DebugLink currently can't send number of shares and it doesn't
-                    # change the counter either so just use the initial value.
-                    result = result, count
+
+            if result is trezorui_api.CANCELLED:
+                # not reachable from the UI, only via debuglink
+                raise ActionCancelled
+
+            if __debug__ and not isinstance(result, tuple):
+                # sent by debuglink. debuglink does not change the number of
+                # shares anyway so use the initial one
+                result = (result, count)
             status, value = result
 
-            if status == CONFIRMED:
+            if status is CONFIRMED:
                 assert isinstance(value, int)
                 return value
 
-            with trezorui_api.show_simple(
-                title=None,
-                text=info(value),
-                button=TR.buttons__ok_i_understand,
-            ) as layout:
-                await interact(layout, None, raise_on_cancel=None)
+            if status is trezorui_api.BACK:
+                return trezorui_api.BACK
+
+            if status is trezorui_api.INFO:
+                # shows the menu with the "more info" screen
+                leaf = leaf_from_layout(
+                    TR.buttons__more_info,
+                    lambda: trezorui_api.show_info_with_cancel(
+                        title=title,
+                        items=[("", info(value), False)],
+                    ),
+                )
+                await show_menu(Menu([leaf]))
+            else:
+                raise RuntimeError
 
 
 def slip39_prompt_threshold(
-    num_of_shares: int, group_id: int | None = None
-) -> Awaitable[int]:
-    count = num_of_shares // 2 + 1
+    num_of_shares: int, group_id: int | None = None, init_value: int | None = None
+) -> Awaitable[int | trezorui_api.UiResult]:
     # min value of share threshold is 2 unless the number of shares is 1
     # number of shares 1 is possible in advanced slip39
     min_count = min(2, num_of_shares)
     max_count = num_of_shares
+    if init_value is not None:
+        # returning to the prompt with a previously entered value
+        count = max(min_count, min(init_value, max_count))
+    else:
+        count = num_of_shares // 2 + 1
 
     def description(count: int) -> str:
         if group_id is None:
@@ -203,11 +223,15 @@ def slip39_prompt_threshold(
 
 
 def slip39_prompt_number_of_shares(
-    num_words: int, group_id: int | None = None
-) -> Awaitable[int]:
-    count = 5
+    num_words: int, group_id: int | None = None, init_value: int | None = None
+) -> Awaitable[int | trezorui_api.UiResult]:
     min_count = 1
     max_count = 16
+    if init_value is not None:
+        # returning to the prompt with a previously entered value
+        count = max(min_count, min(init_value, max_count))
+    else:
+        count = 5
 
     def description(i: int) -> str:
         if group_id is None:
@@ -238,10 +262,16 @@ def slip39_prompt_number_of_shares(
     )
 
 
-def slip39_advanced_prompt_number_of_groups() -> Awaitable[int]:
-    count = 5
+def slip39_advanced_prompt_number_of_groups(
+    init_value: int | None = None,
+) -> Awaitable[int | trezorui_api.UiResult]:
     min_count = 2
     max_count = 16
+    if init_value is not None:
+        # returning to the prompt with a previously entered value
+        count = max(min_count, min(init_value, max_count))
+    else:
+        count = 5
     description = TR.reset__group_description
     info = TR.reset__group_info
 
@@ -256,10 +286,16 @@ def slip39_advanced_prompt_number_of_groups() -> Awaitable[int]:
     )
 
 
-def slip39_advanced_prompt_group_threshold(num_of_groups: int) -> Awaitable[int]:
-    count = num_of_groups // 2 + 1
+def slip39_advanced_prompt_group_threshold(
+    num_of_groups: int, init_value: int | None = None
+) -> Awaitable[int | trezorui_api.UiResult]:
     min_count = 1
     max_count = num_of_groups
+    if init_value is not None:
+        # returning to the prompt with a previously entered value
+        count = max(min_count, min(init_value, max_count))
+    else:
+        count = num_of_groups // 2 + 1
     description = TR.reset__required_number_of_groups
     info = TR.reset__advanced_group_threshold_info
 

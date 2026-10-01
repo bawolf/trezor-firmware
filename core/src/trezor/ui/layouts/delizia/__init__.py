@@ -1093,9 +1093,7 @@ if not utils.BITCOIN_ONLY:
                 br_name="confirm_output",
                 br_code=br_code,
                 subtitle=(
-                    TR.words__recipient
-                    if is_send
-                    else TR.ethereum__interaction_contract
+                    TR.words__recipient if is_send else TR.ethereum__contract_address
                 ),
                 chunkify=chunkify if recipient else False,
                 cancel_text=TR.buttons__cancel,
@@ -1248,31 +1246,91 @@ if not utils.BITCOIN_ONLY:
         )
 
     async def confirm_ethereum_clear_signing(
-        recipient_str: str,
+        contract_name: str,
         intent: str,
         properties: list[StrPropertyType],
         maximum_fee: str,
+        contract_address: str,
+        chain_info: StrPropertyType,
         amount: str | None = None,
+        account: str | None = None,
+        account_path: str | None = None,
     ) -> None:
-        await confirm_action("confirm_contract", TR.words__provider, recipient_str)
-        await confirm_action("confirm_contract", TR.words__intent, intent)
-        if properties:
-            await confirm_properties(
-                "confirm_contract",
-                TR.ethereum__confirm_contract,
-                properties,
+        from trezor.ui.layouts.menu import Menu, cancel_leaf, confirm_with_menu
+
+        br_name = "ethereum/clear_signing"
+
+        account_properties: list[StrPropertyType] = []
+        if account_path:
+            assert account is not None
+            account_properties.append((TR.words__account, account, None))
+            account_properties.append(
+                (TR.address_details__derivation_path, account_path, None)
             )
+        contract_properties: list[StrPropertyType] = [
+            (TR.words__address, contract_address, None),
+            chain_info,
+        ]
+
+        def _menu() -> Menu[None]:
+            menu_items: list[MenuLeaf[None]] = [cancel_leaf(TR.buttons__cancel)]
+            if account_properties:
+                menu_items.append(
+                    create_info_menu_leaf(
+                        TR.address_details__account_info,
+                        account_properties,
+                        TR.address_details__account_info,
+                    )
+                )
+            menu_items.append(
+                create_info_menu_leaf(
+                    TR.ethereum__contract_address,
+                    contract_properties,
+                    TR.ethereum__contract_address,
+                )
+            )
+            return Menu(menu_items)
+
+        for screen, title, value in (
+            ("provider", TR.ethereum__contract_address, contract_name),
+            ("intent", TR.words__intent, intent),
+        ):
+            with trezorui_api.confirm_action(
+                title=title,
+                action=value,
+                description=None,
+                prompt_title=title,
+                external_menu=True,
+            ) as layout:
+                await confirm_with_menu(
+                    layout, _menu(), f"{br_name}/{screen}", BR_CODE_OTHER
+                )
+
+        if properties:
+            with trezorui_api.confirm_properties(
+                title=TR.ethereum__confirm_contract,
+                subtitle=None,
+                items=properties,
+                hold=False,
+                external_menu=True,
+            ) as layout:
+                await confirm_with_menu(
+                    layout, _menu(), br_name, ButtonRequestType.ConfirmOutput
+                )
+
         with trezorui_api.confirm_summary(
             amount=amount,
             amount_label=TR.words__amount if amount is not None else None,
             fee=maximum_fee,
             fee_label=TR.send__maximum_fee,
-            extra_items=None,
-            extra_title=None,
+            account_items=account_properties or None,
+            account_title=TR.address_details__account_info,
+            extra_items=contract_properties,
+            extra_title=TR.ethereum__contract_address,
         ) as layout:
             await raise_if_not_confirmed(
                 layout,
-                br_name="confirm_ethereum_tx",
+                br_name=f"{br_name}/summary",
             )
 
     async def confirm_ethereum_staking_tx(
@@ -1339,6 +1397,10 @@ if not utils.BITCOIN_ONLY:
         br_name: str = "ethereum/vault",
         br_code: ButtonRequestType = ButtonRequestType.SignTx,
         extra_data: str | None = None,
+        receiver_address: str | None = None,
+        owner_address: str | None = None,
+        chunkify: bool = True,
+        vault_is_address: bool = False,
     ) -> None:
         from trezor.ui.layouts.menu import Menu, cancel_leaf, interact_with_menu
 
@@ -1373,7 +1435,8 @@ if not utils.BITCOIN_ONLY:
             with trezorui_api.confirm_value(
                 title=title,
                 value=vault_str,
-                is_data=False,
+                is_data=vault_is_address,
+                chunkify=chunkify and vault_is_address,
                 description=verb,
                 verb="",
             ) as layout:
@@ -1401,6 +1464,46 @@ if not utils.BITCOIN_ONLY:
                 )
 
         steps = [_step1, _step2, _step3]
+
+        if receiver_address is not None:
+
+            async def _step3a() -> trezorui_api.UiResult:
+                with trezorui_api.confirm_value(
+                    title=title,
+                    value=receiver_address,
+                    description=TR.words__recipient,
+                    is_data=True,
+                    verb=TR.buttons__continue,
+                    chunkify=chunkify,
+                ) as layout:
+                    return await interact_with_menu(
+                        layout,
+                        Menu(menu_items),
+                        f"{br_name}/receiver_address",
+                        br_code,
+                    )
+
+            steps.append(_step3a)
+
+        if owner_address is not None:
+
+            async def _step3b() -> trezorui_api.UiResult:
+                with trezorui_api.confirm_value(
+                    title=title,
+                    value=owner_address,
+                    description=TR.ethereum__vault_owner_address,
+                    is_data=True,
+                    verb=TR.buttons__continue,
+                    chunkify=chunkify,
+                ) as layout:
+                    return await interact_with_menu(
+                        layout,
+                        Menu(menu_items),
+                        f"{br_name}/owner_address",
+                        br_code,
+                    )
+
+            steps.append(_step3b)
 
         if extra_data is not None:
 

@@ -2717,6 +2717,713 @@ class InputFlowSlip39AdvancedBackup(InputFlowBase):
         self.debug.press_yes()
 
 
+class InputFlowSlip39BasicBackupBackNavigation(InputFlowBase):
+    """Going back and forth in the SLIP39 basic backup creation, changing the
+    number of shares and the threshold."""
+
+    def __init__(
+        self,
+        client: Client | DebugSession,
+        method: messages.BackupMethod = messages.BackupMethod.Display,
+    ):
+        super().__init__(client)
+        self.mnemonics: list[str] = []
+        self.method = method
+
+    def input_flow_bolt(self) -> BRGeneratorType:
+        assert self.method in (
+            messages.BackupMethod.Display,
+            messages.BackupMethod.N1W1,
+        )
+        if self.method is messages.BackupMethod.Display:
+            assert (yield).name == "backup_intro"
+            self.debug.press_yes()
+
+        # checklist: set number of shares (no going back from the first step)
+        assert (yield).name == "slip39_checklist"
+        self.debug.press_yes()
+
+        # number of shares prompt: change the default 5 to 3
+        assert (yield).name == "slip39_shares"
+        layout = self.debug.read_layout()
+        assert layout.find_unique_value_by_key("value", None, only_type=int) == 5
+        self.debug.click(self.debug.screen_buttons.number_input_minus())
+        self.debug.click(self.debug.screen_buttons.number_input_minus())
+        self.debug.click(self.debug.screen_buttons.ok())
+
+        # checklist: set threshold -- go back via the up arrow
+        assert (yield).name == "slip39_checklist"
+        self.debug.click(self.debug.screen_buttons.cancel())
+
+        # number of shares prompt: the previously entered value is preselected
+        assert (yield).name == "slip39_shares"
+        layout = self.debug.read_layout()
+        assert layout.find_unique_value_by_key("value", None, only_type=int) == 3
+        self.debug.click(self.debug.screen_buttons.ok())
+
+        # checklist: set threshold
+        assert (yield).name == "slip39_checklist"
+        self.debug.press_yes()
+
+        # threshold prompt: increase the default 2 to 3
+        assert (yield).name == "slip39_threshold"
+        layout = self.debug.read_layout()
+        assert layout.find_unique_value_by_key("value", None, only_type=int) == 2
+        self.debug.click(self.debug.screen_buttons.number_input_plus())
+        self.debug.click(self.debug.screen_buttons.ok())
+
+        # checklist: write down the shares -- go back via the up arrow
+        assert (yield).name == "slip39_checklist"
+        self.debug.click(self.debug.screen_buttons.cancel())
+
+        # threshold prompt: the previously entered value is preselected
+        assert (yield).name == "slip39_threshold"
+        layout = self.debug.read_layout()
+        assert layout.find_unique_value_by_key("value", None, only_type=int) == 3
+        self.debug.click(self.debug.screen_buttons.ok())
+
+        # checklist: write down the shares
+        assert (yield).name == "slip39_checklist"
+        self.debug.press_yes()
+
+        if self.method is messages.BackupMethod.Display:
+            assert (yield).name == "backup_warning"
+            self.debug.press_yes()
+
+        # Mnemonic phrases
+        self.mnemonics = yield from load_N_shares(self.debug, 3, self.method)
+
+    def input_flow_caesar(self) -> BRGeneratorType:
+        assert self.method is messages.BackupMethod.Display
+
+        yield  # Backup intro
+        self.debug.press_yes()
+
+        # checklist: set number of shares (no going back from the first step)
+        assert (yield).name == "slip39_checklist"
+        self.debug.press_yes()
+
+        # number of shares info
+        assert (yield).name == "slip39_shares"
+        self.debug.press_yes()
+
+        # number of shares carousel: navigate to the BACK item and select it
+        assert (yield).name == "slip39_shares"
+        for _ in range(5):  # initial value 5 -> 5 items to the left
+            self.debug.press_left()
+        self.debug.press_middle()
+
+        # checklist: set number of shares
+        assert (yield).name == "slip39_checklist"
+        self.debug.press_yes()
+
+        # number of shares info
+        assert (yield).name == "slip39_shares"
+        self.debug.press_yes()
+
+        # number of shares carousel: change the default 5 to 3
+        assert (yield).name == "slip39_shares"
+        self.debug.press_left()
+        self.debug.press_left()
+        self.debug.press_middle()
+
+        # checklist: set threshold
+        assert (yield).name == "slip39_checklist"
+        self.debug.press_yes()
+
+        # threshold info
+        assert (yield).name == "slip39_prompt_threshold"
+        self.debug.press_yes()
+
+        # threshold carousel: change the default 2 to 3
+        assert (yield).name == "slip39_threshold"
+        self.debug.press_right()
+        self.debug.press_middle()
+
+        # checklist: write down the shares -- go back via the up arrow
+        assert (yield).name == "slip39_checklist"
+        self.debug.press_left()
+
+        # threshold info
+        assert (yield).name == "slip39_prompt_threshold"
+        self.debug.press_yes()
+
+        # threshold carousel: the previously entered 3 is preselected
+        assert (yield).name == "slip39_threshold"
+        self.debug.press_middle()
+
+        # checklist: write down the shares
+        assert (yield).name == "slip39_checklist"
+        self.debug.press_yes()
+
+        yield  # Confirm show seeds
+        self.debug.press_yes()
+
+        # Mnemonic phrases
+        self.mnemonics = yield from load_N_shares(self.debug, 3, self.method)
+
+    def input_flow_delizia(self) -> BRGeneratorType:
+        assert self.method in (
+            messages.BackupMethod.Display,
+            messages.BackupMethod.N1W1,
+        )
+        if self.method is messages.BackupMethod.Display:
+            assert (yield).name == "backup_intro"
+            self.debug.press_yes()
+
+        # checklist: set number of shares (no going back from the first step)
+        assert (yield).name == "slip39_checklist"
+        self.debug.swipe_up()
+
+        # number of shares prompt: change the default 5 to 3
+        assert (yield).name == "slip39_shares"
+        layout = self.debug.read_layout()
+        assert layout.find_unique_value_by_key("value", None, only_type=int) == 5
+        self.debug.click(self.debug.screen_buttons.number_input_minus())
+        self.debug.click(self.debug.screen_buttons.number_input_minus())
+        self.debug.click(self.debug.screen_buttons.ok())
+
+        # checklist: set threshold -- go back via the "Go back" menu item
+        assert (yield).name == "slip39_checklist"
+        self.debug.click(self.debug.screen_buttons.menu())
+        layout = self.debug.read_layout()
+        assert "ScrolledVerticalMenu" in layout.all_components()
+        self.debug.button_actions.navigate_to_menu_item(0)
+
+        # number of shares prompt: the previously entered value is preselected
+        assert (yield).name == "slip39_shares"
+        layout = self.debug.read_layout()
+        assert layout.find_unique_value_by_key("value", None, only_type=int) == 3
+        self.debug.click(self.debug.screen_buttons.ok())
+
+        # checklist: set threshold
+        assert (yield).name == "slip39_checklist"
+        self.debug.swipe_up()
+
+        # threshold prompt: increase the default 2 to 3, then go back via the
+        # "Go back" menu item
+        assert (yield).name == "slip39_threshold"
+        layout = self.debug.read_layout()
+        assert layout.find_unique_value_by_key("value", None, only_type=int) == 2
+        self.debug.click(self.debug.screen_buttons.number_input_plus())
+        self.debug.click(self.debug.screen_buttons.menu())
+        layout = self.debug.read_layout()
+        assert "ScrolledVerticalMenu" in layout.all_components()
+        self.debug.button_actions.navigate_to_menu_item(1)
+
+        # checklist: set threshold
+        assert (yield).name == "slip39_checklist"
+        self.debug.swipe_up()
+
+        # threshold prompt: the default 2 is shown again, increase it to 3
+        assert (yield).name == "slip39_threshold"
+        layout = self.debug.read_layout()
+        assert layout.find_unique_value_by_key("value", None, only_type=int) == 2
+        self.debug.click(self.debug.screen_buttons.number_input_plus())
+        self.debug.click(self.debug.screen_buttons.ok())
+
+        # checklist: write down the shares -- go back via the "Go back" menu
+        # item
+        assert (yield).name == "slip39_checklist"
+        self.debug.click(self.debug.screen_buttons.menu())
+        layout = self.debug.read_layout()
+        assert "ScrolledVerticalMenu" in layout.all_components()
+        self.debug.button_actions.navigate_to_menu_item(0)
+
+        # threshold prompt: the previously entered value is preselected
+        assert (yield).name == "slip39_threshold"
+        layout = self.debug.read_layout()
+        assert layout.find_unique_value_by_key("value", None, only_type=int) == 3
+        self.debug.click(self.debug.screen_buttons.ok())
+
+        # checklist: write down the shares
+        assert (yield).name == "slip39_checklist"
+        self.debug.swipe_up()
+
+        if self.method is messages.BackupMethod.Display:
+            assert (yield).name == "backup_warning"
+            self.debug.press_yes()
+
+        # Mnemonic phrases
+        self.mnemonics = yield from load_N_shares(self.debug, 3, self.method)
+
+    def input_flow_eckhart(self) -> BRGeneratorType:
+        assert self.method in (
+            messages.BackupMethod.Display,
+            messages.BackupMethod.N1W1,
+        )
+        if self.method is messages.BackupMethod.Display:
+            assert (yield).name == "backup_intro"
+            self.debug.press_yes()
+
+        # checklist: set number of shares (no going back from the first step)
+        assert (yield).name == "slip39_checklist"
+        self.debug.press_yes()
+
+        # number of shares prompt: change the default 5 to 3
+        assert (yield).name == "slip39_shares"
+        layout = self.debug.read_layout()
+        assert layout.find_unique_value_by_key("value", None, only_type=int) == 5
+        self.debug.click(self.debug.screen_buttons.number_input_minus())
+        self.debug.click(self.debug.screen_buttons.number_input_minus())
+        self.debug.click(self.debug.screen_buttons.ok())
+
+        # checklist: set threshold -- go back from here
+        assert (yield).name == "slip39_checklist"
+        self.debug.click(self.debug.screen_buttons.cancel())
+
+        # number of shares prompt: the previously entered value is preselected
+        assert (yield).name == "slip39_shares"
+        layout = self.debug.read_layout()
+        assert layout.find_unique_value_by_key("value", None, only_type=int) == 3
+        self.debug.click(self.debug.screen_buttons.ok())
+
+        # checklist: set threshold
+        assert (yield).name == "slip39_checklist"
+        self.debug.press_yes()
+
+        # threshold prompt: increase the default 2 to 3
+        assert (yield).name == "slip39_threshold"
+        layout = self.debug.read_layout()
+        assert layout.find_unique_value_by_key("value", None, only_type=int) == 2
+        self.debug.click(self.debug.screen_buttons.number_input_plus())
+        self.debug.click(self.debug.screen_buttons.ok())
+
+        # checklist: write down the shares -- go back from here
+        assert (yield).name == "slip39_checklist"
+        self.debug.click(self.debug.screen_buttons.cancel())
+
+        # threshold prompt: the previously entered value is preselected
+        assert (yield).name == "slip39_threshold"
+        layout = self.debug.read_layout()
+        assert layout.find_unique_value_by_key("value", None, only_type=int) == 3
+        self.debug.click(self.debug.screen_buttons.ok())
+
+        # checklist: write down the shares
+        assert (yield).name == "slip39_checklist"
+        self.debug.press_yes()
+
+        if self.method is messages.BackupMethod.Display:
+            assert (yield).name == "backup_warning"
+            self.debug.press_yes()
+
+        # Mnemonic phrases
+        self.mnemonics = yield from load_N_shares(self.debug, 3, self.method)
+
+
+class InputFlowSlip39AdvancedBackupBackNavigation(InputFlowBase):
+    """Going back and forth in the SLIP39 advanced backup creation, changing
+    the group parameters. Only for Eckhart, which supports going back in this
+    flow."""
+
+    def __init__(
+        self,
+        client: Client | DebugSession,
+        method: messages.BackupMethod = messages.BackupMethod.Display,
+    ):
+        super().__init__(client)
+        self.mnemonics: list[list[str]] = []
+        self.method = method
+
+    def input_flow_bolt(self) -> BRGeneratorType:
+        assert self.method in (
+            messages.BackupMethod.Display,
+            messages.BackupMethod.N1W1,
+        )
+        if self.method is messages.BackupMethod.Display:
+            assert (yield).name == "backup_intro"
+            self.debug.press_yes()
+
+        # checklist: set number of groups (no going back from the first step)
+        assert (yield).name == "slip39_checklist"
+        self.debug.press_yes()
+
+        # number of groups prompt: change the default 5 to 2
+        assert (yield).name == "slip39_groups"
+        layout = self.debug.read_layout()
+        assert layout.find_unique_value_by_key("value", None, only_type=int) == 5
+        self.debug.click(self.debug.screen_buttons.number_input_minus())
+        self.debug.click(self.debug.screen_buttons.number_input_minus())
+        self.debug.click(self.debug.screen_buttons.number_input_minus())
+        self.debug.click(self.debug.screen_buttons.ok())
+
+        # checklist: set group threshold
+        assert (yield).name == "slip39_checklist"
+        self.debug.press_yes()
+
+        # group threshold prompt: keep the default 2
+        assert (yield).name == "slip39_group_threshold"
+        layout = self.debug.read_layout()
+        assert layout.find_unique_value_by_key("value", None, only_type=int) == 2
+        self.debug.click(self.debug.screen_buttons.ok())
+
+        # checklist: set sizes and thresholds of the groups
+        assert (yield).name == "slip39_checklist"
+        self.debug.press_yes()
+
+        # group 1 shares prompt: change the default 5 to 3
+        assert (yield).name == "slip39_shares"
+        self.debug.click(self.debug.screen_buttons.number_input_minus())
+        self.debug.click(self.debug.screen_buttons.number_input_minus())
+        self.debug.click(self.debug.screen_buttons.ok())
+
+        # group 1 threshold prompt: keep the default 2
+        assert (yield).name == "slip39_threshold"
+        self.debug.click(self.debug.screen_buttons.ok())
+
+        # group 2 shares prompt: keep the default 5 -- go back via the up arrow
+        assert (yield).name == "slip39_shares"
+        self.debug.click(self.debug.screen_buttons.cancel())
+
+        # group 1 threshold prompt: the previously entered value is preselected
+        assert (yield).name == "slip39_threshold"
+        layout = self.debug.read_layout()
+        assert layout.find_unique_value_by_key("value", None, only_type=int) == 2
+        self.debug.click(self.debug.screen_buttons.ok())
+
+        # group 2 shares prompt: keep the default 5
+        assert (yield).name == "slip39_shares"
+        self.debug.click(self.debug.screen_buttons.ok())
+
+        # group 2 threshold prompt: change the default 3 to 4 -- go back
+        assert (yield).name == "slip39_threshold"
+        layout = self.debug.read_layout()
+        assert layout.find_unique_value_by_key("value", None, only_type=int) == 3
+        self.debug.click(self.debug.screen_buttons.number_input_plus())
+        self.debug.click(self.debug.screen_buttons.cancel())
+
+        # group 2 shares prompt: the previously entered value is preselected
+        assert (yield).name == "slip39_shares"
+        layout = self.debug.read_layout()
+        assert layout.find_unique_value_by_key("value", None, only_type=int) == 5
+        self.debug.click(self.debug.screen_buttons.ok())
+
+        # group 2 threshold prompt: the default 3 is shown again -- keep it
+        assert (yield).name == "slip39_threshold"
+        layout = self.debug.read_layout()
+        assert layout.find_unique_value_by_key("value", None, only_type=int) == 3
+        self.debug.click(self.debug.screen_buttons.ok())
+
+        if self.method is messages.BackupMethod.Display:
+            assert (yield).name == "backup_warning"
+            self.debug.press_yes()
+
+        # Mnemonic phrases - show & confirm shares for all groups
+        # 2 groups: 2-of-3 and 3-of-5
+        self.mnemonics = yield from load_N_groups(
+            self.debug, [(2, 3), (3, 5)], self.method
+        )
+
+    def input_flow_caesar(self) -> BRGeneratorType:
+        assert self.method is messages.BackupMethod.Display
+
+        yield  # Backup intro
+        self.debug.press_yes()
+
+        # checklist: set number of groups (no going back from the first step)
+        assert (yield).name == "slip39_checklist"
+        self.debug.press_yes()
+
+        # number of groups carousel: change the default 5 to 2
+        assert (yield).name == "slip39_groups"
+        for _ in range(3):  # 5 -> 2
+            self.debug.press_left()
+        self.debug.press_middle()
+
+        # checklist: set group threshold
+        assert (yield).name == "slip39_checklist"
+        self.debug.press_yes()
+
+        # group threshold carousel: keep the default 2
+        assert (yield).name == "slip39_group_threshold"
+        self.debug.press_middle()
+
+        # checklist: set sizes and thresholds of the groups
+        assert (yield).name == "slip39_checklist"
+        self.debug.press_yes()
+
+        # group 1 shares info
+        assert (yield).name == "slip39_shares"
+        self.debug.press_yes()
+
+        # group 1 shares carousel: change the default 5 to 3
+        assert (yield).name == "slip39_shares"
+        self.debug.press_left()
+        self.debug.press_left()
+        self.debug.press_middle()
+
+        # group 1 threshold info
+        assert (yield).name == "slip39_prompt_threshold"
+        self.debug.press_yes()
+
+        # group 1 threshold carousel: keep the default 2
+        assert (yield).name == "slip39_threshold"
+        self.debug.press_middle()
+
+        # group 2 shares info
+        assert (yield).name == "slip39_shares"
+        self.debug.press_yes()
+
+        # group 2 shares carousel: navigate to the BACK item and select it
+        assert (yield).name == "slip39_shares"
+        for _ in range(5):  # initial value 5 -> 5 items to the left
+            self.debug.press_left()
+        self.debug.press_middle()
+
+        # group 1 threshold info (again, after going back)
+        assert (yield).name == "slip39_prompt_threshold"
+        self.debug.press_yes()
+
+        # group 1 threshold carousel: the previously entered 2 is preselected
+        assert (yield).name == "slip39_threshold"
+        self.debug.press_middle()
+
+        # group 2 shares info
+        assert (yield).name == "slip39_shares"
+        self.debug.press_yes()
+
+        # group 2 shares carousel: keep the default 5
+        assert (yield).name == "slip39_shares"
+        self.debug.press_middle()
+
+        # group 2 threshold info
+        assert (yield).name == "slip39_prompt_threshold"
+        self.debug.press_yes()
+
+        # group 2 threshold carousel: change the default 3 to 4, then navigate
+        # to the BACK item and select it
+        assert (yield).name == "slip39_threshold"
+        self.debug.press_right()  # 3 -> 4
+        for _ in range(3):  # 4 is the third item -> 3 items to the left
+            self.debug.press_left()
+        self.debug.press_middle()
+
+        # group 2 shares info
+        assert (yield).name == "slip39_shares"
+        self.debug.press_yes()
+
+        # group 2 shares carousel: the previously entered 5 is preselected
+        assert (yield).name == "slip39_shares"
+        self.debug.press_middle()
+
+        # group 2 threshold info
+        assert (yield).name == "slip39_prompt_threshold"
+        self.debug.press_yes()
+
+        # group 2 threshold carousel: the default 3 is shown again -- keep it
+        assert (yield).name == "slip39_threshold"
+        self.debug.press_middle()
+
+        yield  # Confirm show seeds
+        self.debug.press_yes()
+
+        # Mnemonic phrases - show & confirm shares for all groups
+        # 2 groups: 2-of-3 and 3-of-5
+        self.mnemonics = yield from load_N_groups(
+            self.debug, [(2, 3), (3, 5)], self.method
+        )
+
+    def input_flow_delizia(self) -> BRGeneratorType:
+        assert self.method in (
+            messages.BackupMethod.Display,
+            messages.BackupMethod.N1W1,
+        )
+        if self.method is messages.BackupMethod.Display:
+            assert (yield).name == "backup_intro"
+            self.debug.press_yes()
+
+        # checklist: set number of groups (no going back from the first step)
+        assert (yield).name == "slip39_checklist"
+        self.debug.swipe_up()
+
+        # number of groups prompt: change the default 5 to 2
+        assert (yield).name == "slip39_groups"
+        layout = self.debug.read_layout()
+        assert layout.find_unique_value_by_key("value", None, only_type=int) == 5
+        self.debug.click(self.debug.screen_buttons.number_input_minus())
+        self.debug.click(self.debug.screen_buttons.number_input_minus())
+        self.debug.click(self.debug.screen_buttons.number_input_minus())
+        self.debug.click(self.debug.screen_buttons.ok())
+
+        # checklist: set group threshold
+        assert (yield).name == "slip39_checklist"
+        self.debug.swipe_up()
+
+        # group threshold prompt: keep the default 2
+        assert (yield).name == "slip39_group_threshold"
+        layout = self.debug.read_layout()
+        assert layout.find_unique_value_by_key("value", None, only_type=int) == 2
+        self.debug.click(self.debug.screen_buttons.ok())
+
+        # checklist: set sizes and thresholds of the groups -- go back via the
+        # "Go back" menu item
+        assert (yield).name == "slip39_checklist"
+        self.debug.click(self.debug.screen_buttons.menu())
+        layout = self.debug.read_layout()
+        assert "ScrolledVerticalMenu" in layout.all_components()
+        self.debug.button_actions.navigate_to_menu_item(0)
+
+        # group threshold prompt: the previously entered value is preselected
+        assert (yield).name == "slip39_group_threshold"
+        layout = self.debug.read_layout()
+        assert layout.find_unique_value_by_key("value", None, only_type=int) == 2
+        self.debug.click(self.debug.screen_buttons.ok())
+
+        # checklist: set sizes and thresholds of the groups
+        assert (yield).name == "slip39_checklist"
+        self.debug.swipe_up()
+
+        # group 1 shares prompt: change the default 5 to 3
+        assert (yield).name == "slip39_shares"
+        self.debug.click(self.debug.screen_buttons.number_input_minus())
+        self.debug.click(self.debug.screen_buttons.number_input_minus())
+        self.debug.click(self.debug.screen_buttons.ok())
+
+        # group 1 threshold prompt: keep the default 2
+        assert (yield).name == "slip39_threshold"
+        self.debug.click(self.debug.screen_buttons.ok())
+
+        # group 2 shares prompt: keep the default 5 -- go back via the
+        # "Go back" menu item
+        assert (yield).name == "slip39_shares"
+        self.debug.click(self.debug.screen_buttons.menu())
+        layout = self.debug.read_layout()
+        assert "ScrolledVerticalMenu" in layout.all_components()
+        self.debug.button_actions.navigate_to_menu_item(1)
+
+        # group 1 threshold prompt: the previously entered value is preselected
+        assert (yield).name == "slip39_threshold"
+        layout = self.debug.read_layout()
+        assert layout.find_unique_value_by_key("value", None, only_type=int) == 2
+        self.debug.click(self.debug.screen_buttons.ok())
+
+        # group 2 shares prompt: keep the default 5
+        assert (yield).name == "slip39_shares"
+        self.debug.click(self.debug.screen_buttons.ok())
+
+        # group 2 threshold prompt: change the default 3 to 4, then go back
+        # via the "Go back" menu item
+        assert (yield).name == "slip39_threshold"
+        layout = self.debug.read_layout()
+        assert layout.find_unique_value_by_key("value", None, only_type=int) == 3
+        self.debug.click(self.debug.screen_buttons.number_input_plus())
+        self.debug.click(self.debug.screen_buttons.menu())
+        layout = self.debug.read_layout()
+        assert "ScrolledVerticalMenu" in layout.all_components()
+        self.debug.button_actions.navigate_to_menu_item(1)
+
+        # group 2 shares prompt: the previously entered value is preselected
+        assert (yield).name == "slip39_shares"
+        layout = self.debug.read_layout()
+        assert layout.find_unique_value_by_key("value", None, only_type=int) == 5
+        self.debug.click(self.debug.screen_buttons.ok())
+
+        # group 2 threshold prompt: the default 3 is shown again -- keep it
+        assert (yield).name == "slip39_threshold"
+        layout = self.debug.read_layout()
+        assert layout.find_unique_value_by_key("value", None, only_type=int) == 3
+        self.debug.click(self.debug.screen_buttons.ok())
+
+        if self.method is messages.BackupMethod.Display:
+            assert (yield).name == "backup_warning"
+            self.debug.press_yes()
+
+        # Mnemonic phrases - show & confirm shares for all groups
+        # 2 groups: 2-of-3 and 3-of-5
+        self.mnemonics = yield from load_N_groups(
+            self.debug, [(2, 3), (3, 5)], self.method
+        )
+
+    def input_flow_eckhart(self) -> BRGeneratorType:
+        assert self.method in (
+            messages.BackupMethod.Display,
+            messages.BackupMethod.N1W1,
+        )
+        if self.method is messages.BackupMethod.Display:
+            assert (yield).name == "backup_intro"
+            self.debug.press_yes()
+
+        # checklist: set number of groups (no going back from the first step)
+        assert (yield).name == "slip39_checklist"
+        self.debug.press_yes()
+
+        # number of groups prompt: change the default 5 to 2
+        assert (yield).name == "slip39_groups"
+        layout = self.debug.read_layout()
+        assert layout.find_unique_value_by_key("value", None, only_type=int) == 5
+        self.debug.click(self.debug.screen_buttons.number_input_minus())
+        self.debug.click(self.debug.screen_buttons.number_input_minus())
+        self.debug.click(self.debug.screen_buttons.number_input_minus())
+        self.debug.click(self.debug.screen_buttons.ok())
+
+        # checklist: set group threshold
+        assert (yield).name == "slip39_checklist"
+        self.debug.press_yes()
+
+        # group threshold prompt: keep the default 2
+        assert (yield).name == "slip39_group_threshold"
+        layout = self.debug.read_layout()
+        assert layout.find_unique_value_by_key("value", None, only_type=int) == 2
+        self.debug.click(self.debug.screen_buttons.ok())
+
+        # checklist: set sizes and thresholds of the groups
+        assert (yield).name == "slip39_checklist"
+        self.debug.press_yes()
+
+        # group 1 shares prompt: change the default 5 to 3
+        assert (yield).name == "slip39_shares"
+        self.debug.click(self.debug.screen_buttons.number_input_minus())
+        self.debug.click(self.debug.screen_buttons.number_input_minus())
+        self.debug.click(self.debug.screen_buttons.ok())
+
+        # group 1 threshold prompt: keep the default 2
+        assert (yield).name == "slip39_threshold"
+        self.debug.click(self.debug.screen_buttons.ok())
+
+        # group 2 shares prompt: keep the default 5 -- go back from here
+        assert (yield).name == "slip39_shares"
+        self.debug.click(self.debug.screen_buttons.cancel())
+
+        # group 1 threshold prompt: the previously entered value is preselected
+        assert (yield).name == "slip39_threshold"
+        layout = self.debug.read_layout()
+        assert layout.find_unique_value_by_key("value", None, only_type=int) == 2
+        self.debug.click(self.debug.screen_buttons.ok())
+
+        # group 2 shares prompt: keep the default 5
+        assert (yield).name == "slip39_shares"
+        self.debug.click(self.debug.screen_buttons.ok())
+
+        # group 2 threshold prompt: change the default 3 to 4 -- go back
+        assert (yield).name == "slip39_threshold"
+        layout = self.debug.read_layout()
+        assert layout.find_unique_value_by_key("value", None, only_type=int) == 3
+        self.debug.click(self.debug.screen_buttons.number_input_plus())
+        self.debug.click(self.debug.screen_buttons.cancel())
+
+        # group 2 shares prompt: the previously entered value is preselected
+        assert (yield).name == "slip39_shares"
+        layout = self.debug.read_layout()
+        assert layout.find_unique_value_by_key("value", None, only_type=int) == 5
+        self.debug.click(self.debug.screen_buttons.ok())
+
+        # group 2 threshold prompt: the default 3 is shown again -- keep it
+        assert (yield).name == "slip39_threshold"
+        layout = self.debug.read_layout()
+        assert layout.find_unique_value_by_key("value", None, only_type=int) == 3
+        self.debug.click(self.debug.screen_buttons.ok())
+
+        if self.method is messages.BackupMethod.Display:
+            assert (yield).name == "backup_warning"
+            self.debug.press_yes()
+
+        # Mnemonic phrases - show & confirm shares for all groups
+        # 2 groups: 2-of-3 and 3-of-5
+        self.mnemonics = yield from load_N_groups(
+            self.debug, [(2, 3), (3, 5)], self.method
+        )
+
+
 class InputFlowSlip39AdvancedResetRecovery(InputFlowBase):
     def __init__(
         self,
