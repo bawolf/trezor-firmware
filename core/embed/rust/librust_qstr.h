@@ -192,7 +192,6 @@ static void _librust_qstrs(void) {
   MP_QSTR_bitcoin__lot_of_change_outputs;
   MP_QSTR_bitcoin__multiple_accounts;
   MP_QSTR_bitcoin__new_fee_rate;
-  MP_QSTR_bitcoin__simple_send_of;
   MP_QSTR_bitcoin__ticket_amount;
   MP_QSTR_bitcoin__title_confirm_details;
   MP_QSTR_bitcoin__title_finalize_transaction;
@@ -204,7 +203,6 @@ static void _librust_qstrs(void) {
   MP_QSTR_bitcoin__title_purchase_ticket;
   MP_QSTR_bitcoin__title_update_transaction;
   MP_QSTR_bitcoin__unknown_path;
-  MP_QSTR_bitcoin__unknown_transaction;
   MP_QSTR_bitcoin__unusually_high_fee;
   MP_QSTR_bitcoin__unverified_external_inputs;
   MP_QSTR_bitcoin__valid_signature;
