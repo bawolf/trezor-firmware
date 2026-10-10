@@ -2,6 +2,7 @@ use xbuild::{CLibrary, Result, bail_unsupported};
 
 pub fn def_module(lib: &mut CLibrary) -> Result<()> {
     lib.add_include("task/inc");
+    lib.add_rust_bindings(add_rust_bindings)?;
 
     lib.add_sources(["task/pminfo.c", "task/system.c", "task/sysevent.c"]);
 
@@ -32,4 +33,19 @@ pub fn def_module(lib: &mut CLibrary) -> Result<()> {
     }
 
     Ok(())
+}
+
+fn add_rust_bindings(builder: bindgen::Builder) -> Result<bindgen::Builder> {
+    let builder = builder
+        // systask.h
+        .header("task/inc/sys/systask.h")
+        .allowlist_type("systask_id_t")
+        .allowlist_var("SYSTASK_MAX_TASKS")
+        // sysevent.h
+        .header("task/inc/sys/sysevent.h")
+        .allowlist_function("sysevents_poll")
+        .allowlist_type("syshandle_t")
+        .allowlist_type("sysevents_t")
+        .allowlist_type("syshandle_mask_t");
+    Ok(builder)
 }

@@ -23,97 +23,93 @@
 
 /// package: trezorio.__init__
 
-/// def ipc_send(remote: int, fn: int, data: AnyBytes) -> None:
+/// def ipc_send(
+///     remote: int,
+///     service: int,
+///     message_id: int,
+///     data: AnyBytes,
+/// ) -> None:
 ///     """
 ///     Sends an IPC message to the specified remote task.
 ///     """
-static mp_obj_t mod_trezorio_ipc_send(mp_obj_t remote_obj, mp_obj_t fn_obj,
-                                      mp_obj_t data_obj) {
+static mp_obj_t mod_trezorio_ipc_send(size_t n_args, const mp_obj_t* args) {
+  mp_obj_t remote_obj = args[0];
+  mp_obj_t service_obj = args[1];
+  mp_obj_t message_id_obj = args[2];
+  mp_obj_t data_obj = args[3];
+
   mp_buffer_info_t bufinfo = {0};
   mp_get_buffer_raise(data_obj, &bufinfo, MP_BUFFER_READ);
 
-  systask_id_t remote = (systask_id_t)mp_obj_get_int(remote_obj);
-  uint32_t fn = (uint32_t)mp_obj_get_int(fn_obj);
+  mp_int_t remote_int = mp_obj_get_int(remote_obj);
+  mp_int_t service = mp_obj_get_int(service_obj);
+  mp_int_t message_id = mp_obj_get_int(message_id_obj);
+  if (remote_int < 0 || remote_int >= SYSTASK_MAX_TASKS) {
+    mp_raise_ValueError(MP_ERROR_TEXT("Invalid remote task ID."));
+  }
+  systask_id_t remote = (systask_id_t)remote_int;
+  if (service < 0 || service > UINT16_MAX || message_id < 0 ||
+      message_id > UINT16_MAX) {
+    mp_raise_ValueError(MP_ERROR_TEXT("Invalid service or message ID."));
+  }
 
-  if (!ipc_send(remote, fn, bufinfo.buf, bufinfo.len)) {
+  if (!ipc_send(remote, service, message_id, bufinfo.buf, bufinfo.len)) {
     mp_raise_msg(&mp_type_RuntimeError,
                  MP_ERROR_TEXT("Failed to send IPC message."));
   }
   return mp_const_none;
 }
-static MP_DEFINE_CONST_FUN_OBJ_3(mod_trezorio_ipc_send_obj,
-                                 mod_trezorio_ipc_send);
+static MP_DEFINE_CONST_FUN_OBJ_VAR_BETWEEN(mod_trezorio_ipc_send_obj, 4, 4,
+                                           mod_trezorio_ipc_send);
 
-/// class IpcMessage:
+/// class IpcMessage(NamedTuple):
 ///     """
 ///     IPC message structure.
 ///     """
-typedef struct _mp_obj_IpcMessage_t {
-  mp_obj_base_t base;
-  ipc_message_t message;
-} mp_obj_IpcMessage_t;
+///     remote: int
+///     service: int
+///     message_id: int
+///     data: AnyBytes
 
-/// def fn(self) -> int:
-///     """
-///     Returns the function number.
-///     """
-static mp_obj_t mod_trezorio_IpcMessage_fn(mp_obj_t self) {
-  mp_obj_IpcMessage_t *o = MP_OBJ_TO_PTR(self);
-  return mp_obj_new_int_from_uint(o->message.fn);
+// Take ownership of `message`, allocate an `IpcMessage` object from it, and
+// ensure that the message is freed even in case of failure.
+static mp_obj_t mod_trezorio_ipc_message_move_to_obj(ipc_message_t* message) {
+  // Allocate message->size + 1 bytes, so that micropython can later insert a
+  // trailing null byte. It doesn't make sense for a bytes object but it's on
+  // the common str/bytes path.
+  char* data_bytes = m_new_maybe(char, message->size + 1);
+  if (data_bytes == NULL) {
+    ipc_message_free(message);
+    mp_raise_type(&mp_type_MemoryError);
+  }
+
+  // copy the message data to the allocated bytes
+  memcpy(data_bytes, message->data, message->size);
+
+  // create a vstr from the allocated bytes
+  vstr_t message_data = {
+      .alloc = message->size + 1,
+      .len = message->size,
+      .buf = data_bytes,
+      .fixed_buf = false,
+  };
+
+  // copy the message properties to local variables
+  systask_id_t remote = message->remote;
+  uint16_t service = message->service;
+  uint16_t message_id = message->message_id;
+
+  // free the message before continuing to possibly-raising code
+  ipc_message_free(message);
+
+  // construct the tuple
+  const mp_obj_t values[4] = {
+      MP_OBJ_NEW_SMALL_INT(remote),
+      MP_OBJ_NEW_SMALL_INT(service),
+      MP_OBJ_NEW_SMALL_INT(message_id),
+      mp_obj_new_bytes_from_vstr(&message_data),
+  };
+  static const qstr fields[4] = {MP_QSTR_remote, MP_QSTR_service,
+                                 MP_QSTR_message_id, MP_QSTR_data};
+  return mp_obj_new_attrtuple(fields, MP_ARRAY_SIZE(fields), values);
 }
-static MP_DEFINE_CONST_FUN_OBJ_1(mod_trezorio_IpcMessage_fn_obj,
-                                 mod_trezorio_IpcMessage_fn);
-
-/// def remote(self) -> int:
-///     """
-///     Returns the remote task ID.
-///     """
-static mp_obj_t mod_trezorio_IpcMessage_remote(mp_obj_t self) {
-  mp_obj_IpcMessage_t *o = MP_OBJ_TO_PTR(self);
-  return MP_OBJ_NEW_SMALL_INT(o->message.remote);
-}
-static MP_DEFINE_CONST_FUN_OBJ_1(mod_trezorio_IpcMessage_remote_obj,
-                                 mod_trezorio_IpcMessage_remote);
-
-/// def free(self) -> None:
-///     """
-///     Frees the IPC message resources.
-///     """
-static mp_obj_t mod_trezorio_IpcMessage_free(mp_obj_t self) {
-  mp_obj_IpcMessage_t *o = MP_OBJ_TO_PTR(self);
-
-  ipc_message_free(&o->message);
-  memset(&o->message, 0, sizeof(ipc_message_t));
-
-  return mp_const_none;
-}
-static MP_DEFINE_CONST_FUN_OBJ_1(mod_trezorio_IpcMessage_free_obj,
-                                 mod_trezorio_IpcMessage_free);
-
-/// def data(self) -> bytes:
-///     """
-///     Returns the IPC message data as bytes.
-///     """
-static mp_obj_t mod_trezorio_IpcMessage_data(mp_obj_t self) {
-  mp_obj_IpcMessage_t *o = MP_OBJ_TO_PTR(self);
-  return mp_obj_new_bytes(o->message.data, o->message.size);
-}
-
-static MP_DEFINE_CONST_FUN_OBJ_1(mod_trezorio_IpcMessage_data_obj,
-                                 mod_trezorio_IpcMessage_data);
-
-static const mp_rom_map_elem_t mod_trezorio_IpcMessage_locals_dict_table[] = {
-    {MP_ROM_QSTR(MP_QSTR_remote),
-     MP_ROM_PTR(&mod_trezorio_IpcMessage_remote_obj)},
-    {MP_ROM_QSTR(MP_QSTR_fn), MP_ROM_PTR(&mod_trezorio_IpcMessage_fn_obj)},
-    {MP_ROM_QSTR(MP_QSTR_data), MP_ROM_PTR(&mod_trezorio_IpcMessage_data_obj)},
-    {MP_ROM_QSTR(MP_QSTR_free), MP_ROM_PTR(&mod_trezorio_IpcMessage_free_obj)},
-};
-static MP_DEFINE_CONST_DICT(mod_trezorio_IpcMessage_locals_dict,
-                            mod_trezorio_IpcMessage_locals_dict_table);
-
-// clang-format off
-static MP_DEFINE_CONST_OBJ_TYPE(mod_trezorio_IpcMessage_type,
-  MP_QSTR_IpcMessage, MP_TYPE_FLAG_NONE,
-  locals_dict, &mod_trezorio_IpcMessage_locals_dict);
-// clang-format on

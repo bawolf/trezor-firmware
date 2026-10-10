@@ -3,37 +3,26 @@ from buffer_types import *
 
 
 # upymod/modtrezorio/modtrezorio-ipc.h
-def ipc_send(remote: int, fn: int, data: AnyBytes) -> None:
+def ipc_send(
+    remote: int,
+    service: int,
+    message_id: int,
+    data: AnyBytes,
+) -> None:
     """
     Sends an IPC message to the specified remote task.
     """
 
 
 # upymod/modtrezorio/modtrezorio-ipc.h
-class IpcMessage:
+class IpcMessage(NamedTuple):
     """
     IPC message structure.
     """
-
-    def fn(self) -> int:
-        """
-        Returns the function number.
-        """
-
-    def remote(self) -> int:
-        """
-        Returns the remote task ID.
-        """
-
-    def free(self) -> None:
-        """
-        Frees the IPC message resources.
-        """
-
-    def data(self) -> bytes:
-        """
-        Returns the IPC message data as bytes.
-        """
+    remote: int
+    service: int
+    message_id: int
+    data: AnyBytes
 
 
 # upymod/modtrezorio/modtrezorio-poll.h
