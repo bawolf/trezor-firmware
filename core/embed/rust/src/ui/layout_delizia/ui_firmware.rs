@@ -661,8 +661,8 @@ impl FirmwareUI for UIDelizia {
             Frame::with_header(
                 Header::left_aligned(title).with_menu_button(),
                 SwipeContent::new(NumberInputDialog::new(
-                    min_count as u16,
-                    max_count as u16,
+                    min_count.try_into()?,
+                    max_count.try_into()?,
                     count as u16,
                     description.unwrap(),
                 )?),
