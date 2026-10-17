@@ -5,6 +5,18 @@ pub fn def_module(lib: &mut CLibrary) -> Result<()> {
 
     lib.add_define("USE_DBG_CONSOLE", Some("1"));
 
+    if cfg!(feature = "log_max_error") {
+        lib.add_define("SYSLOG_DEFAULT_LOG_LEVEL", Some("LOG_LEVEL_ERR"));
+    } else if cfg!(feature = "log_max_warn") {
+        lib.add_define("SYSLOG_DEFAULT_LOG_LEVEL", Some("LOG_LEVEL_WARN"));
+    } else if cfg!(feature = "log_max_info") {
+        lib.add_define("SYSLOG_DEFAULT_LOG_LEVEL", Some("LOG_LEVEL_INF"));
+    } else if cfg!(feature = "log_max_debug") {
+        lib.add_define("SYSLOG_DEFAULT_LOG_LEVEL", Some("LOG_LEVEL_DBG"));
+    } else {
+        lib.add_define("SYSLOG_DEFAULT_LOG_LEVEL", Some("LOG_LEVEL_OFF"));
+    }
+
     lib.add_sources(["dbg/dbg_console.c", "dbg/syslog.c"]);
 
     lib.add_rust_bindings(add_rust_bindings)?;
@@ -58,11 +70,9 @@ fn def_system_view(lib: &mut CLibrary) {
 
 fn add_rust_bindings(builder: bindgen::Builder) -> Result<bindgen::Builder> {
     let builder = builder
-        .header("inc/sys/logging.h")
+        .allowlist_type("log_source_t")
         .header("dbg/inc/sys/syslog.h")
         .allowlist_function("syslog_start_record")
-        .allowlist_function("syslog_write_chunk")
-        .allowlist_type("log_source_t")
-        .allowlist_type("log_level_t");
+        .allowlist_function("syslog_write_chunk");
     Ok(builder)
 }

@@ -16,4 +16,10 @@ pub mod sysevent;
 #[cfg(feature = "dbg_console")]
 pub mod syslog;
 pub mod task;
+
+#[cfg(all(feature = "dbg_console", feature = "log_external"))]
+pub mod log_external;
+
+pub mod ulog;
+
 pub mod time;
