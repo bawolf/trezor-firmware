@@ -8,7 +8,7 @@
         {
           "id": 0,
           "name": "Create Account",
-          "is_multisig": false,
+          "trailing_references": false,
           "parameters": [
             {
               "name": "lamports",
@@ -59,7 +59,7 @@
         {
           "id": 1,
           "name": "Assign",
-          "is_multisig": false,
+          "trailing_references": false,
           "parameters": [
             {
               "name": "owner",
@@ -74,20 +74,18 @@
           "ui_properties": [
             {
               "account": "assigned_account",
-              "display_name": "Assign account",
-              "default_value_to_hide": "signer"
+              "display_name": "Assign account"
             },
             {
               "parameter": "owner",
-              "display_name": "Assign account to program",
-              "default_value_to_hide": "signer"
+              "display_name": "Assign account to program"
             }
           ]
         },
         {
           "id": 2,
           "name": "Transfer",
-          "is_multisig": true,
+          "trailing_references": true,
           "parameters": [
             {
               "name": "lamports",
@@ -119,7 +117,7 @@
         {
           "id": 3,
           "name": "Create Account With Seed",
-          "is_multisig": false,
+          "trailing_references": false,
           "parameters": [
             {
               "name": "base",
@@ -159,6 +157,11 @@
               "display_name": "Create account"
             },
             {
+              "parameter": "base",
+              "display_name": "Base account",
+              "default_value_to_hide": "signer"
+            },
+            {
               "parameter": "space",
               "display_name": "Data size",
               "default_value_to_hide": 0
@@ -181,7 +184,7 @@
         {
           "id": 4,
           "name": "Advance Nonce Account",
-          "is_multisig": false,
+          "trailing_references": false,
           "parameters": [],
           "references": [
             "nonce_account",
@@ -204,7 +207,7 @@
         {
           "id": 5,
           "name": "Withdraw Nonce Account",
-          "is_multisig": false,
+          "trailing_references": false,
           "parameters": [
             {
               "name": "lamports",
@@ -243,7 +246,7 @@
         {
           "id": 6,
           "name": "Initialize Nonce Account",
-          "is_multisig": false,
+          "trailing_references": false,
           "parameters": [
             {
               "name": "nonce_authority",
@@ -272,7 +275,7 @@
         {
           "id": 7,
           "name": "Authorize Nonce Account",
-          "is_multisig": false,
+          "trailing_references": false,
           "parameters": [
             {
               "name": "nonce_authority",
@@ -305,7 +308,7 @@
         {
           "id": 8,
           "name": "Allocate",
-          "is_multisig": false,
+          "trailing_references": false,
           "parameters": [
             {
               "name": "space",
@@ -332,7 +335,7 @@
         {
           "id": 9,
           "name": "Allocate With Seed",
-          "is_multisig": false,
+          "trailing_references": false,
           "parameters": [
             {
               "name": "base",
@@ -378,7 +381,7 @@
         {
           "id": 10,
           "name": "Assign With Seed",
-          "is_multisig": false,
+          "trailing_references": false,
           "parameters": [
             {
               "name": "base",
@@ -415,7 +418,7 @@
         {
           "id": 11,
           "name": "Transfer With Seed",
-          "is_multisig": false,
+          "trailing_references": false,
           "parameters": [
             {
               "name": "lamports",
@@ -457,7 +460,7 @@
         {
           "id": 12,
           "name": "Upgrade Nonce Account",
-          "is_multisig": false,
+          "trailing_references": false,
           "parameters": [],
           "references": [
             "nonce_account"
@@ -480,7 +483,7 @@
         {
           "id": 0,
           "name": "Initialize",
-          "is_multisig": false,
+          "trailing_references": false,
           "parameters": [
             {
               "name": "staker",
@@ -548,7 +551,7 @@
         {
           "id": 1,
           "name": "Authorize",
-          "is_multisig": false,
+          "trailing_references": false,
           "parameters": [
             {
               "name": "pubkey",
@@ -596,7 +599,7 @@
         {
           "id": 2,
           "name": "Delegate Stake",
-          "is_multisig": false,
+          "trailing_references": false,
           "parameters": [],
           "references": [
             "initialized_stake_account",
@@ -626,7 +629,7 @@
         {
           "id": 3,
           "name": "Split",
-          "is_multisig": false,
+          "trailing_references": false,
           "parameters": [
             {
               "name": "lamports",
@@ -663,7 +666,7 @@
         {
           "id": 4,
           "name": "Withdraw",
-          "is_multisig": false,
+          "trailing_references": false,
           "parameters": [
             {
               "name": "lamports",
@@ -703,7 +706,7 @@
         {
           "id": 5,
           "name": "Deactivate",
-          "is_multisig": false,
+          "trailing_references": false,
           "parameters": [],
           "references": [
             "delegated_stake_account",
@@ -726,7 +729,7 @@
         {
           "id": 6,
           "name": "Set Lockup",
-          "is_multisig": false,
+          "trailing_references": false,
           "parameters": [
             {
               "name": "unix_timestamp",
@@ -757,16 +760,17 @@
             {
               "parameter": "unix_timestamp",
               "display_name": "Time",
-              "default_value_to_hide": 0
+              "default_value_to_hide": "none"
             },
             {
               "parameter": "epoch",
               "display_name": "Epoch",
-              "default_value_to_hide": 0
+              "default_value_to_hide": "none"
             },
             {
               "parameter": "custodian",
-              "display_name": "New lockup authority"
+              "display_name": "New lockup authority",
+              "default_value_to_hide": "none"
             },
             {
               "account": "lockup_or_withdraw_authority",
@@ -778,7 +782,7 @@
         {
           "id": 7,
           "name": "Merge",
-          "is_multisig": false,
+          "trailing_references": false,
           "parameters": [],
           "references": [
             "destination_stake_account",
@@ -807,7 +811,7 @@
         {
           "id": 8,
           "name": "Authorize With Seed",
-          "is_multisig": false,
+          "trailing_references": false,
           "parameters": [
             {
               "name": "new_authorized_pubkey",
@@ -865,7 +869,7 @@
         {
           "id": 9,
           "name": "Initialize Checked",
-          "is_multisig": false,
+          "trailing_references": false,
           "parameters": [],
           "references": [
             "uninitialized_stake_account",
@@ -893,7 +897,7 @@
         {
           "id": 10,
           "name": "Authorize Checked",
-          "is_multisig": false,
+          "trailing_references": false,
           "parameters": [
             {
               "name": "stake_authorize",
@@ -938,7 +942,7 @@
         {
           "id": 11,
           "name": "Authorize Checked With Seed",
-          "is_multisig": false,
+          "trailing_references": false,
           "parameters": [
             {
               "name": "stake_authorize",
@@ -993,7 +997,7 @@
         {
           "id": 12,
           "name": "Set Lockup Checked",
-          "is_multisig": false,
+          "trailing_references": false,
           "parameters": [
             {
               "name": "unix_timestamp",
@@ -1020,12 +1024,12 @@
             {
               "parameter": "unix_timestamp",
               "display_name": "Time",
-              "default_value_to_hide": 0
+              "default_value_to_hide": "none"
             },
             {
               "parameter": "epoch",
               "display_name": "Epoch",
-              "default_value_to_hide": 0
+              "default_value_to_hide": "none"
             },
             {
               "account": "new_lockup_authority",
@@ -1049,7 +1053,7 @@
         {
           "id": 1,
           "name": "Request Heap Frame",
-          "is_multisig": false,
+          "trailing_references": false,
           "parameters": [
             {
               "name": "bytes",
@@ -1070,7 +1074,7 @@
           "id": 2,
           "name": "Set Compute Unit Limit",
           "is_ui_hidden": true,
-          "is_multisig": false,
+          "trailing_references": false,
           "parameters": [
             {
               "name": "units",
@@ -1091,7 +1095,7 @@
           "id": 3,
           "name": "Set Compute Unit Price",
           "is_ui_hidden": true,
-          "is_multisig": false,
+          "trailing_references": false,
           "parameters": [
             {
               "name": "lamports",
@@ -1118,7 +1122,7 @@
         {
           "id": 1,
           "name": "Initialize Account",
-          "is_multisig": false,
+          "trailing_references": false,
           "parameters": [],
           "references": [
             "account_to_initialize",
@@ -1145,7 +1149,7 @@
         {
           "id": 2,
           "name": "Initialize Multisig",
-          "is_multisig": true,
+          "trailing_references": true,
           "parameters": [
             {
               "name": "number_of_signers",
@@ -1155,10 +1159,9 @@
           ],
           "references": [
             "multisig_account",
-            "rent_sysvar",
-            "signer_accounts"
+            "rent_sysvar"
           ],
-          "references_required": 3,
+          "references_required": 2,
           "ui_properties": [
             {
               "account": "multisig_account",
@@ -1167,17 +1170,13 @@
             {
               "parameter": "number_of_signers",
               "display_name": "Threshold"
-            },
-            {
-              "account": "signer_accounts",
-              "display_name": "Signers"
             }
           ]
         },
         {
           "id": 3,
           "name": "Transfer",
-          "is_multisig": true,
+          "trailing_references": true,
           "is_deprecated_warning": "Warning: Instruction is deprecated. Token decimals unknown.",
           "parameters": [
             {
@@ -1215,7 +1214,7 @@
         {
           "id": 4,
           "name": "Approve",
-          "is_multisig": true,
+          "trailing_references": true,
           "is_deprecated_warning": "Warning: Instruction is deprecated. Token decimals unknown.",
           "parameters": [
             {
@@ -1253,7 +1252,7 @@
         {
           "id": 5,
           "name": "Revoke",
-          "is_multisig": true,
+          "trailing_references": true,
           "parameters": [],
           "references": [
             "source_account",
@@ -1263,7 +1262,7 @@
           "ui_properties": [
             {
               "account": "source_account",
-              "display_name": "Revoke delegate"
+              "display_name": "Revoke delegate for"
             },
             {
               "account": "owner",
@@ -1275,7 +1274,7 @@
         {
           "id": 6,
           "name": "Set Authority",
-          "is_multisig": true,
+          "trailing_references": true,
           "parameters": [
             {
               "name": "authority_type",
@@ -1317,7 +1316,7 @@
         {
           "id": 7,
           "name": "Mint To",
-          "is_multisig": true,
+          "trailing_references": true,
           "is_deprecated_warning": "Warning: Instruction is deprecated. Token decimals unknown.",
           "parameters": [
             {
@@ -1355,7 +1354,7 @@
         {
           "id": 8,
           "name": "Burn",
-          "is_multisig": true,
+          "trailing_references": true,
           "is_deprecated_warning": "Warning: Instruction is deprecated. Token decimals unknown.",
           "parameters": [
             {
@@ -1385,7 +1384,7 @@
             },
             {
               "account": "owner",
-              "display_name": "Mint authority",
+              "display_name": "Owner",
               "default_value_to_hide": "signer"
             }
           ]
@@ -1393,7 +1392,7 @@
         {
           "id": 9,
           "name": "Close Account",
-          "is_multisig": true,
+          "trailing_references": true,
           "parameters": [],
           "references": [
             "account_to_close",
@@ -1420,7 +1419,7 @@
         {
           "id": 10,
           "name": "Freeze Account",
-          "is_multisig": true,
+          "trailing_references": true,
           "parameters": [],
           "references": [
             "account_to_freeze",
@@ -1439,7 +1438,7 @@
             },
             {
               "account": "freeze_authority",
-              "display_name": "Owner",
+              "display_name": "Freeze authority",
               "default_value_to_hide": "signer"
             }
           ]
@@ -1447,7 +1446,7 @@
         {
           "id": 11,
           "name": "Thaw Account",
-          "is_multisig": true,
+          "trailing_references": true,
           "parameters": [],
           "references": [
             "account_to_freeze",
@@ -1466,7 +1465,7 @@
             },
             {
               "account": "freeze_authority",
-              "display_name": "Owner",
+              "display_name": "Freeze authority",
               "default_value_to_hide": "signer"
             }
           ]
@@ -1474,7 +1473,7 @@
         {
           "id": 12,
           "name": "Transfer Checked",
-          "is_multisig": true,
+          "trailing_references": true,
           "parameters": [
             {
               "name": "amount",
@@ -1525,7 +1524,7 @@
         {
           "id": 13,
           "name": "Approve Checked",
-          "is_multisig": true,
+          "trailing_references": true,
           "parameters": [
             {
               "name": "amount",
@@ -1576,7 +1575,7 @@
         {
           "id": 14,
           "name": "Mint to Checked",
-          "is_multisig": true,
+          "trailing_references": true,
           "parameters": [
             {
               "name": "amount",
@@ -1614,7 +1613,7 @@
             },
             {
               "account": "minting_authority",
-              "display_name": "Owner",
+              "display_name": "Mint authority",
               "default_value_to_hide": "signer"
             }
           ]
@@ -1622,7 +1621,7 @@
         {
           "id": 15,
           "name": "Burn Checked",
-          "is_multisig": true,
+          "trailing_references": true,
           "parameters": [
             {
               "name": "amount",
@@ -1668,7 +1667,7 @@
         {
           "id": 16,
           "name": "Initialize Account 2",
-          "is_multisig": false,
+          "trailing_references": false,
           "parameters": [
             {
               "name": "owner",
@@ -1700,7 +1699,7 @@
         {
           "id": 17,
           "name": "Sync Native",
-          "is_multisig": false,
+          "trailing_references": false,
           "parameters": [],
           "references": [
             "token_account"
@@ -1716,7 +1715,7 @@
         {
           "id": 18,
           "name": "Initialize Account 3",
-          "is_multisig": false,
+          "trailing_references": false,
           "parameters": [
             {
               "name": "owner",
@@ -1747,7 +1746,7 @@
         {
           "id": 22,
           "name": "Initialize Immutable Owner",
-          "is_multisig": false,
+          "trailing_references": false,
           "parameters": [],
           "references": [
             "account_to_initialize"
@@ -1770,7 +1769,7 @@
         {
           "id": 1,
           "name": "Initialize Account",
-          "is_multisig": false,
+          "trailing_references": false,
           "parameters": [],
           "references": [
             "account_to_initialize",
@@ -1797,7 +1796,7 @@
         {
           "id": 2,
           "name": "Initialize Multisig",
-          "is_multisig": true,
+          "trailing_references": true,
           "parameters": [
             {
               "name": "number_of_signers",
@@ -1807,10 +1806,9 @@
           ],
           "references": [
             "multisig_account",
-            "rent_sysvar",
-            "signer_accounts"
+            "rent_sysvar"
           ],
-          "references_required": 3,
+          "references_required": 2,
           "ui_properties": [
             {
               "account": "multisig_account",
@@ -1819,17 +1817,13 @@
             {
               "parameter": "number_of_signers",
               "display_name": "Threshold"
-            },
-            {
-              "account": "signer_accounts",
-              "display_name": "Signers"
             }
           ]
         },
         {
           "id": 3,
           "name": "Transfer",
-          "is_multisig": true,
+          "trailing_references": true,
           "is_deprecated_warning": "Warning: Instruction is deprecated. Token decimals unknown.",
           "parameters": [
             {
@@ -1867,7 +1861,7 @@
         {
           "id": 4,
           "name": "Approve",
-          "is_multisig": true,
+          "trailing_references": true,
           "is_deprecated_warning": "Warning: Instruction is deprecated. Token decimals unknown.",
           "parameters": [
             {
@@ -1905,7 +1899,7 @@
         {
           "id": 5,
           "name": "Revoke",
-          "is_multisig": true,
+          "trailing_references": true,
           "parameters": [],
           "references": [
             "source_account",
@@ -1915,7 +1909,7 @@
           "ui_properties": [
             {
               "account": "source_account",
-              "display_name": "Rewoke delegate"
+              "display_name": "Revoke delegate for"
             },
             {
               "account": "owner",
@@ -1927,7 +1921,7 @@
         {
           "id": 6,
           "name": "Set Authority",
-          "is_multisig": true,
+          "trailing_references": true,
           "parameters": [
             {
               "name": "authority_type",
@@ -1969,7 +1963,7 @@
         {
           "id": 7,
           "name": "Mint to",
-          "is_multisig": true,
+          "trailing_references": true,
           "is_deprecated_warning": "Warning: Instruction is deprecated. Token decimals unknown.",
           "parameters": [
             {
@@ -2007,7 +2001,7 @@
         {
           "id": 8,
           "name": "Burn",
-          "is_multisig": true,
+          "trailing_references": true,
           "is_deprecated_warning": "Warning: Instruction is deprecated. Token decimals unknown.",
           "parameters": [
             {
@@ -2037,7 +2031,7 @@
             },
             {
               "account": "owner",
-              "display_name": "Mint authority",
+              "display_name": "Owner",
               "default_value_to_hide": "signer"
             }
           ]
@@ -2045,7 +2039,7 @@
         {
           "id": 9,
           "name": "Close Account",
-          "is_multisig": true,
+          "trailing_references": true,
           "parameters": [],
           "references": [
             "account_to_close",
@@ -2072,7 +2066,7 @@
         {
           "id": 10,
           "name": "Freeze Account",
-          "is_multisig": true,
+          "trailing_references": true,
           "parameters": [],
           "references": [
             "account_to_freeze",
@@ -2091,7 +2085,7 @@
             },
             {
               "account": "freeze_authority",
-              "display_name": "Owner",
+              "display_name": "Freeze authority",
               "default_value_to_hide": "signer"
             }
           ]
@@ -2099,7 +2093,7 @@
         {
           "id": 11,
           "name": "Thaw Account",
-          "is_multisig": true,
+          "trailing_references": true,
           "parameters": [],
           "references": [
             "account_to_freeze",
@@ -2118,7 +2112,7 @@
             },
             {
               "account": "freeze_authority",
-              "display_name": "Owner",
+              "display_name": "Freeze authority",
               "default_value_to_hide": "signer"
             }
           ]
@@ -2126,7 +2120,8 @@
         {
           "id": 12,
           "name": "Transfer Checked",
-          "is_multisig": true,
+          "trailing_references": true,
+          "trailing_accounts_warning": "This transfer may invoke the token's transfer hook program. Additional restrictions or fees may apply.",
           "parameters": [
             {
               "name": "amount",
@@ -2177,7 +2172,7 @@
         {
           "id": 13,
           "name": "Approve Checked",
-          "is_multisig": true,
+          "trailing_references": true,
           "parameters": [
             {
               "name": "amount",
@@ -2228,7 +2223,7 @@
         {
           "id": 14,
           "name": "Mint to Checked",
-          "is_multisig": true,
+          "trailing_references": true,
           "parameters": [
             {
               "name": "amount",
@@ -2266,7 +2261,7 @@
             },
             {
               "account": "minting_authority",
-              "display_name": "Owner",
+              "display_name": "Mint authority",
               "default_value_to_hide": "signer"
             }
           ]
@@ -2274,7 +2269,7 @@
         {
           "id": 15,
           "name": "Burn Checked",
-          "is_multisig": true,
+          "trailing_references": true,
           "parameters": [
             {
               "name": "amount",
@@ -2320,7 +2315,7 @@
         {
           "id": 16,
           "name": "Initialize Account 2",
-          "is_multisig": false,
+          "trailing_references": false,
           "parameters": [
             {
               "name": "owner",
@@ -2352,7 +2347,7 @@
         {
           "id": 17,
           "name": "Sync Native",
-          "is_multisig": false,
+          "trailing_references": false,
           "parameters": [],
           "references": [
             "token_account"
@@ -2368,7 +2363,7 @@
         {
           "id": 18,
           "name": "Initialize Account 3",
-          "is_multisig": false,
+          "trailing_references": false,
           "parameters": [
             {
               "name": "owner",
@@ -2399,7 +2394,7 @@
         {
           "id": 22,
           "name": "Initialize Immutable Owner",
-          "is_multisig": false,
+          "trailing_references": false,
           "parameters": [],
           "references": [
             "account_to_initialize"
@@ -2422,7 +2417,7 @@
         {
           "id": null,
           "name": "Create",
-          "is_multisig": false,
+          "trailing_references": false,
           "parameters": [],
           "references": [
             "funding_account",
@@ -2457,7 +2452,7 @@
         {
           "id": 1,
           "name": "Create Idempotent",
-          "is_multisig": false,
+          "trailing_references": false,
           "parameters": [],
           "references": [
             "funding_account",
@@ -2491,7 +2486,7 @@
         {
           "id": 2,
           "name": "Recover Nested",
-          "is_multisig": false,
+          "trailing_references": false,
           "parameters": [],
           "references": [
             "nested_account",
@@ -2530,7 +2525,7 @@
         {
           "id": null,
           "name": "Memo",
-          "is_multisig": false,
+          "trailing_references": false,
           "parameters": [
             {
               "name": "memo",
@@ -2564,7 +2559,7 @@
         {
           "id": null,
           "name": "Memo",
-          "is_multisig": false,
+          "trailing_references": false,
           "parameters": [
             {
               "name": "memo",

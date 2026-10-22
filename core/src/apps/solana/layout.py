@@ -28,7 +28,7 @@ if TYPE_CHECKING:
     from .definitions import Definitions
     from .transaction import Fee
     from .transaction.instructions import Instruction, SystemProgramTransferInstruction
-    from .types import AddressReference
+    from .types import Account, AddressReference
 
 
 def _format_path(path: list[int]) -> str:
@@ -77,42 +77,40 @@ async def confirm_instruction(
             br_code=ButtonRequestType.Other,
         )
 
-    if instruction.multisig_signers:
-        await confirm_metadata(
-            "confirm_multisig",
-            TR.solana__confirm_multisig,
-            TR.solana__instruction_is_multisig,
-            br_code=ButtonRequestType.Other,
-        )
-
     for ui_property in instruction.ui_properties:
         if ui_property.parameter is not None:
             property_template = instruction.get_property_template(ui_property.parameter)
             value = instruction.parsed_data[ui_property.parameter]
 
-            if property_template.optional and value is None:
-                continue
+            default_value_to_hide = ui_property.default_value_to_hide
+            if default_value_to_hide == "none":
+                if value is None:
+                    continue
+            elif default_value_to_hide == "signer":
+                if property_template.is_pubkey() and signer_public_key == value:
+                    continue
+            elif default_value_to_hide is not None:
+                if default_value_to_hide == value:
+                    continue
 
-            if ui_property.default_value_to_hide == value:
-                continue
+            if value is None:
+                # only optional parameters can be None
+                formatted_value = "None"
+            else:
+                args = []
+                for arg in property_template.args:
+                    if arg == "#definitions":
+                        args.append(definitions)
+                    elif arg in instruction.parsed_data:
+                        args.append(instruction.parsed_data[arg])
+                    elif arg in instruction.parsed_accounts:
+                        args.append(instruction.parsed_accounts[arg][0])
+                    else:
+                        raise ValueError  # Invalid property template
 
-            if (
-                property_template.is_pubkey()
-                and ui_property.default_value_to_hide == "signer"
-                and signer_public_key == value
-            ):
-                continue
-
-            args = []
-            for arg in property_template.args:
-                if arg == "#definitions":
-                    args.append(definitions)
-                elif arg in instruction.parsed_data:
-                    args.append(instruction.parsed_data[arg])
-                elif arg in instruction.parsed_accounts:
-                    args.append(instruction.parsed_accounts[arg][0])
-                else:
-                    raise ValueError  # Invalid property template
+                formatted_value = property_template.format(value, *args)
+                if property_template.is_pubkey() and signer_public_key == value:
+                    formatted_value = f"{formatted_value} {TR.address__title_yours}"
 
             await confirm_properties(
                 br_name="confirm_instruction",
@@ -121,7 +119,7 @@ async def confirm_instruction(
                 props=(
                     (
                         ui_property.display_name,
-                        property_template.format(value, *args),
+                        formatted_value,
                         True,
                     ),
                 ),
@@ -146,7 +144,9 @@ async def confirm_instruction(
                 if token is not None:
                     account_description = f"{token.name}\n{account_description}"
                 elif account_value[0] == signer_public_key:
-                    account_description = f"{account_description} ({TR.words__signer})"
+                    account_description = (
+                        f"{account_description} {TR.address__title_yours}"
+                    )
 
                 account_data.append(
                     (ui_property.display_name, account_description, True)
@@ -166,31 +166,26 @@ async def confirm_instruction(
         else:
             raise ValueError  # Invalid ui property
 
-    if instruction.multisig_signers:
-        signers: list[StrPropertyType] = []
-        for i, multisig_signer in enumerate(instruction.multisig_signers, 1):
-            if not is_address_reference(multisig_signer):
-                multisig_signer_public_key = multisig_signer[0]
-                path_str = ""
-                if multisig_signer_public_key == signer_public_key:
-                    path_str = f" ({address_n_to_str(signer_path)})"
-                signers.append(
-                    (
-                        f"{TR.words__signer} {i}{path_str}",
-                        base58.encode(multisig_signer_public_key),
-                        True,
-                    )
-                )
-            else:
-                signers += _get_address_reference_props(
-                    multisig_signer, f"{TR.words__signer} {i}"
-                )
+    if instruction.trailing_accounts:
+        if instruction.trailing_accounts_warning is not None:
+            await confirm_metadata(
+                "confirm_trailing_accounts_warning",
+                instruction_full_title,
+                instruction.trailing_accounts_warning,
+                br_code=ButtonRequestType.Other,
+            )
+
+        trailing_account_props: list[StrPropertyType] = []
+        for i, trailing_account in enumerate(instruction.trailing_accounts, 1):
+            trailing_account_props += _get_account_props(
+                trailing_account, i, signer_path, signer_public_key
+            )
 
         await confirm_properties(
             br_name="confirm_instruction",
             title=instruction_title_index,
             subtitle=instruction.ui_name,
-            props=signers,
+            props=trailing_account_props,
         )
 
 
@@ -204,6 +199,34 @@ def get_address_type(address_type: AddressType) -> str:
     if address_type == AddressType.AddressRw:
         return f"({TR.words__writable})"
     raise ValueError  # Invalid address type
+
+
+def _get_account_props(
+    account: Account,
+    account_index: int,
+    signer_path: list[int],
+    signer_public_key: bytes,
+) -> Sequence[StrPropertyType]:
+    if not is_address_reference(account):
+        account_public_key = account[0]
+        address_type = get_address_type(account[1])
+
+        path_str = ""
+        if account_public_key == signer_public_key:
+            path_str = f" ({address_n_to_str(signer_path)})"
+
+        return (
+            (
+                f"{TR.words__account} {account_index}{path_str} {address_type}",
+                base58.encode(account_public_key),
+                True,
+            ),
+        )
+    else:
+        address_type = get_address_type(account[2])
+        return _get_address_reference_props(
+            account, f"{TR.words__account} {account_index} {address_type}"
+        )
 
 
 async def confirm_unsupported_instruction_details(
@@ -242,32 +265,14 @@ async def confirm_unsupported_instruction_details(
         )
 
         for i, account in enumerate(instruction.accounts, 1):
-            accounts: list[StrPropertyType] = []
-            if not is_address_reference(account):
-                account_public_key = account[0]
-                address_type = get_address_type(account[1])
-
-                path_str = ""
-                if account_public_key == signer_public_key:
-                    path_str = f" ({address_n_to_str(signer_path)})"
-
-                accounts.append(
-                    (
-                        f"{TR.words__account} {i}{path_str} {address_type}",
-                        base58.encode(account_public_key),
-                        True,
-                    )
-                )
-            else:
-                address_type = get_address_type(account[2])
-                accounts += _get_address_reference_props(
-                    account, f"{TR.words__account} {i} {address_type}"
-                )
-
             await confirm_properties(
                 "accounts",
                 title,
-                list(maybe_with_colon(accounts)),
+                list(
+                    maybe_with_colon(
+                        _get_account_props(account, i, signer_path, signer_public_key)
+                    )
+                ),
             )
 
 

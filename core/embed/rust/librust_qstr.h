@@ -1187,6 +1187,7 @@ static void _librust_qstrs(void) {
   MP_QSTR_cardano__no_output_tx;
   MP_QSTR_cardano__nonce;
   MP_QSTR_cardano__other;
+  MP_QSTR_cardano__output_contains_datum_or_ref_script;
   MP_QSTR_cardano__path;
   MP_QSTR_cardano__pledge;
   MP_QSTR_cardano__pointer;
@@ -1479,7 +1480,6 @@ static void _librust_qstrs(void) {
   MP_QSTR_solana__expected_fee;
   MP_QSTR_solana__instruction_accounts_template;
   MP_QSTR_solana__instruction_data;
-  MP_QSTR_solana__instruction_is_multisig;
   MP_QSTR_solana__is_provided_via_lookup_table_template;
   MP_QSTR_solana__lookup_table_address;
   MP_QSTR_solana__max_fees_rent;

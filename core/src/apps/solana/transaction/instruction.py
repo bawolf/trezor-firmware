@@ -29,9 +29,10 @@ class Instruction:
     instruction_data: InstructionData
     accounts: list[Account]
 
-    multisig_signers: list[Account]
+    trailing_accounts: list[Account]
 
     is_deprecated_warning: str | None = None
+    trailing_accounts_warning: str | None = None
 
     @staticmethod
     def parse_instruction_data(
@@ -88,8 +89,9 @@ class Instruction:
         is_program_supported: bool = True,
         is_instruction_supported: bool = True,
         is_ui_hidden: bool = False,
-        supports_multisig: bool = False,
+        supports_trailing_accounts: bool = False,
         is_deprecated_warning: str | None = None,
+        trailing_accounts_warning: str | None = None,
     ) -> None:
         self.program_id = program_id
         self.instruction_id = instruction_id
@@ -107,6 +109,7 @@ class Instruction:
         self.is_instruction_supported = is_instruction_supported
 
         self.is_deprecated_warning = is_deprecated_warning
+        self.trailing_accounts_warning = trailing_accounts_warning
 
         self.instruction_data = instruction_data
         self.accounts = accounts
@@ -122,13 +125,13 @@ class Instruction:
                 account_templates,
             )
 
-            self.multisig_signers = accounts[len(account_templates) :]
-            if self.multisig_signers and not supports_multisig:
-                raise ValueError  # Multisig not supported
+            self.trailing_accounts = accounts[len(account_templates) :]
+            if self.trailing_accounts and not supports_trailing_accounts:
+                raise ValueError  # Trailing accounts not supported
         else:
             self.parsed_data = {}
             self.parsed_accounts = {}
-            self.multisig_signers = []
+            self.trailing_accounts = []
 
     def __getattr__(self, attr: str) -> Any:
         if attr in self.parsed_data:

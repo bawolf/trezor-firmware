@@ -69,8 +69,7 @@
               "accounts": {
                 "multisig_account": 1,
                 "rent_sysvar": 3,
-                "signer_accounts": 0,
-                "multisig_signers": [2]
+                "trailing_accounts": [0, 2]
               },
               "data": {
                 "instruction_id": 2,
@@ -186,7 +185,7 @@
               "accounts": {
                 "source_account": 1,
                 "owner": 0,
-                "multisig_signers": []
+                "trailing_accounts": []
               },
               "data": {
                 "instruction_id": 5
@@ -225,7 +224,7 @@
               "accounts": {
                 "source_account": 2,
                 "owner": 3,
-                "multisig_signers": [0, 1]
+                "trailing_accounts": [0, 1]
               },
               "data": {
                 "instruction_id": 5
@@ -262,7 +261,7 @@
               "accounts": {
                 "mint_account": 1,
                 "current_authority": 0,
-                "multisig_signers": []
+                "trailing_accounts": []
               },
               "data": {
                 "instruction_id": 6,
@@ -305,7 +304,7 @@
               "accounts": {
                 "mint_account": 2,
                 "current_authority": 0,
-                "multisig_signers": [0, 1]
+                "trailing_accounts": [0, 1]
               },
               "data": {
                 "instruction_id": 6,
@@ -322,6 +321,47 @@
       },
       "result": {
         "expected_signature": "a12a94f3eb362c680f343713789425f9809c54cf4cb5f5fbfd5330cf9e60731cb45c489fe42a07a2bfd0bff1ec64b6ca3389c94aaee1b618893cc9666dc74c0c"
+      }
+    },
+    {
+      "description": "Set Authority - remove authority",
+      "parameters": {
+        "address": "m/44'/501'/0'/0'",
+        "construct": {
+          "version": null,
+          "header": {
+            "signers": 1,
+            "readonly_signers": 0,
+            "readonly_non_signers": 1
+          },
+          "accounts": [
+            "14CCvQzQzHCVgZM3j9soPnXuJXh1RmCfwLVUcdfbZVBS",
+            "FUqrjRRtF1LiptdFqaFxipE8R3YfCE4k56xwm5n1piqX",
+            "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+          ],
+          "blockhash": "2p4rYZAaFfV5Uk5ugdG5KPNty9Uda9B3b4gWB8qnNqak",
+          "instructions": [
+            {
+              "program_index": 2,
+              "accounts": {
+                "mint_account": 1,
+                "current_authority": 0,
+                "trailing_accounts": []
+              },
+              "data": {
+                "instruction_id": 6,
+                "authority_type": 0,
+                "new_authority": {
+                  "is_included": 0
+                }
+              }
+            }
+          ],
+          "luts": []
+        }
+      },
+      "result": {
+        "expected_signature": "29af6a6a960b6e6a7cd67a07310c2f19267f4135750ac6575aab6e9e7df6dc43417883db032b0a67381c5f5495e47770c36095065755f9f9e0197bbb75124c0a"
       }
     },
     {
@@ -427,7 +467,7 @@
                 "account_to_close": 2,
                 "destination_account": 1,
                 "owner": 0,
-                "multisig_signers": []
+                "trailing_accounts": []
               },
               "data": {
                 "instruction_id": 9
@@ -468,7 +508,7 @@
                 "account_to_close": 3,
                 "destination_account": 2,
                 "owner": 4,
-                "multisig_signers": [0, 1]
+                "trailing_accounts": [0, 1]
               },
               "data": {
                 "instruction_id": 9
@@ -507,7 +547,7 @@
                 "account_to_freeze": 1,
                 "token_mint": 2,
                 "freeze_authority": 0,
-                "multisig_signers": []
+                "trailing_accounts": []
               },
               "data": {
                 "instruction_id": 10
@@ -548,7 +588,7 @@
                 "account_to_freeze": 2,
                 "token_mint": 3,
                 "freeze_authority": 4,
-                "multisig_signers": [0, 1]
+                "trailing_accounts": [0, 1]
               },
               "data": {
                 "instruction_id": 10
@@ -587,7 +627,7 @@
                 "account_to_freeze": 1,
                 "token_mint": 2,
                 "freeze_authority": 0,
-                "multisig_signers": []
+                "trailing_accounts": []
               },
               "data": {
                 "instruction_id": 11
@@ -628,7 +668,7 @@
                 "account_to_freeze": 2,
                 "token_mint": 3,
                 "freeze_authority": 4,
-                "multisig_signers": [0, 1]
+                "trailing_accounts": [0, 1]
               },
               "data": {
                 "instruction_id": 11
@@ -669,7 +709,7 @@
                 "token_mint": 3,
                 "destination_account": 1,
                 "owner": 0,
-                "multisig_signers": []
+                "trailing_accounts": []
               },
               "data": {
                 "instruction_id": 12,
@@ -712,7 +752,7 @@
                 "token_mint": 3,
                 "destination_account": 1,
                 "owner": 0,
-                "multisig_signers": []
+                "trailing_accounts": []
               },
               "data": {
                 "instruction_id": 12,
@@ -765,7 +805,7 @@
                 "token_mint": 5,
                 "destination_account": 3,
                 "owner": 6,
-                "multisig_signers": [0, 2, 1]
+                "trailing_accounts": [0, 2, 1]
               },
               "data": {
                 "instruction_id": 12,
@@ -808,7 +848,7 @@
                 "token_mint": 2,
                 "delegate": 3,
                 "owner": 0,
-                "multisig_signers": []
+                "trailing_accounts": []
               },
               "data": {
                 "instruction_id": 13,
@@ -851,7 +891,7 @@
                 "token_mint": 2,
                 "delegate": 3,
                 "owner": 0,
-                "multisig_signers": []
+                "trailing_accounts": []
               },
               "data": {
                 "instruction_id": 13,
@@ -903,7 +943,7 @@
                 "token_mint": 3,
                 "delegate": 5,
                 "owner": 4,
-                "multisig_signers": [0, 1]
+                "trailing_accounts": [0, 1]
               },
               "data": {
                 "instruction_id": 13,
@@ -944,7 +984,7 @@
                 "mint": 1,
                 "account_to_mint": 2,
                 "minting_authority": 0,
-                "multisig_signers": []
+                "trailing_accounts": []
               },
               "data": {
                 "instruction_id": 14,
@@ -985,7 +1025,7 @@
                 "mint": 1,
                 "account_to_mint": 2,
                 "minting_authority": 0,
-                "multisig_signers": []
+                "trailing_accounts": []
               },
               "data": {
                 "instruction_id": 14,
@@ -1035,7 +1075,7 @@
                 "mint": 2,
                 "account_to_mint": 3,
                 "minting_authority": 4,
-                "multisig_signers": [0, 1]
+                "trailing_accounts": [0, 1]
               },
               "data": {
                 "instruction_id": 14,
@@ -1077,7 +1117,7 @@
                 "account_to_burn_from": 3,
                 "token_mint": 2,
                 "owner": 0,
-                "multisig_signers": [0, 1]
+                "trailing_accounts": [0, 1]
               },
               "data": {
                 "instruction_id": 15,
@@ -1119,7 +1159,7 @@
                 "account_to_burn_from": 3,
                 "token_mint": 2,
                 "owner": 0,
-                "multisig_signers": [0, 1]
+                "trailing_accounts": [0, 1]
               },
               "data": {
                 "instruction_id": 15,
@@ -1169,7 +1209,7 @@
                 "account_to_burn_from": 3,
                 "token_mint": 2,
                 "owner": 4,
-                "multisig_signers": [0, 1]
+                "trailing_accounts": [0, 1]
               },
               "data": {
                 "instruction_id": 15,

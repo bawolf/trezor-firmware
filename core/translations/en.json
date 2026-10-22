@@ -534,6 +534,7 @@
     "cardano__no_output_tx": "Transaction has no outputs, network cannot be verified.",
     "cardano__nonce": "Nonce",
     "cardano__other": "Other",
+    "cardano__output_contains_datum_or_ref_script": "Output contains a datum or reference script.",
     "cardano__path": "path",
     "cardano__pledge": "Pledge",
     "cardano__pointer": "pointer",
@@ -2837,7 +2838,6 @@
     "solana__expected_fee": "Expected fee",
     "solana__instruction_accounts_template": "Instruction contains {0} accounts and its data is {1} bytes long.",
     "solana__instruction_data": "Instruction data",
-    "solana__instruction_is_multisig": "The following instruction is a multisig instruction.",
     "solana__is_provided_via_lookup_table_template": "{0} is provided via a lookup table.",
     "solana__lookup_table_address": "Lookup table address",
     "solana__max_fees_rent": "Max fees and rent",
@@ -2965,49 +2965,49 @@
     "thp__autoconnect": {
       "Bolt": "",
       "Caesar": "",
-      "Delizia": "",
+      "Delizia": "Allow {0} to connect automatically to this Trezor?",
       "Eckhart": "Allow {0} to connect automatically to this Trezor?"
     },
     "thp__autoconnect_app": {
       "Bolt": "",
       "Caesar": "",
-      "Delizia": "",
+      "Delizia": "Allow {0} on {1} to connect automatically to this Trezor?",
       "Eckhart": "Allow {0} on {1} to connect automatically to this Trezor?"
     },
     "thp__autoconnect_title": {
       "Bolt": "",
       "Caesar": "",
-      "Delizia": "",
+      "Delizia": "Autoconnect credential",
       "Eckhart": "Autoconnect credential"
     },
     "thp__code_entry": {
       "Bolt": "",
       "Caesar": "",
-      "Delizia": "",
+      "Delizia": "Enter this one-time security code on {0}",
       "Eckhart": "Enter this one-time security code on {0}"
     },
     "thp__code_title": {
       "Bolt": "",
       "Caesar": "",
-      "Delizia": "",
+      "Delizia": "One more step",
       "Eckhart": "One more step"
     },
     "thp__connect": {
       "Bolt": "",
       "Caesar": "",
-      "Delizia": "",
+      "Delizia": "Allow {0} to connect with this Trezor?",
       "Eckhart": "Allow {0} to connect with this Trezor?"
     },
     "thp__connect_app": {
       "Bolt": "",
       "Caesar": "",
-      "Delizia": "",
+      "Delizia": "Allow {0} on {1} to connect with this Trezor?",
       "Eckhart": "Allow {0} on {1} to connect with this Trezor?"
     },
     "thp__connect_title": {
       "Bolt": "",
       "Caesar": "",
-      "Delizia": "",
+      "Delizia": "Connection dialog",
       "Eckhart": "Connection dialog"
     },
     "thp__nfc_text": {
@@ -3019,37 +3019,37 @@
     "thp__pair": {
       "Bolt": "",
       "Caesar": "",
-      "Delizia": "",
+      "Delizia": "Allow {0} to pair with this Trezor?",
       "Eckhart": "Allow {0} to pair with this Trezor?"
     },
     "thp__pair_app": {
       "Bolt": "",
       "Caesar": "",
-      "Delizia": "",
+      "Delizia": "Allow {0} on {1} to pair with this Trezor?",
       "Eckhart": "Allow {0} on {1} to pair with this Trezor?"
     },
     "thp__pair_name": {
       "Bolt": "",
       "Caesar": "",
-      "Delizia": "",
+      "Delizia": "{0} is your Trezor's name.",
       "Eckhart": "{0} is your Trezor's name."
     },
     "thp__pair_new_device": {
       "Bolt": "",
       "Caesar": "",
-      "Delizia": "",
+      "Delizia": "Pair with new device",
       "Eckhart": "Pair with new device"
     },
     "thp__pair_title": {
       "Bolt": "",
       "Caesar": "",
-      "Delizia": "",
+      "Delizia": "Before you continue",
       "Eckhart": "Before you continue"
     },
     "thp__qr_title": {
       "Bolt": "",
       "Caesar": "",
-      "Delizia": "",
+      "Delizia": "Scan QR code to pair",
       "Eckhart": "Scan QR code to pair"
     },
     "tron__claim_unfrozen_balance": "Claim unfrozen balance?",

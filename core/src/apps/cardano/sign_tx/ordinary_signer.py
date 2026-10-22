@@ -31,6 +31,7 @@ class OrdinarySigner(Signer):
     ) -> None:
         super().__init__(msg, keychain, slip21_keychain)
         self.suite_tx_type: SuiteTxType = self._suite_tx_type()
+        self._details_level_asked = False
 
     def _validate_tx_init(self) -> None:
         msg = self.msg  # local_cache_attribute
@@ -50,6 +51,7 @@ class OrdinarySigner(Signer):
             msg.minting_asset_groups_count > 0
             or msg.required_signers_count > 0
             or msg.has_auxiliary_data
+            or msg.script_data_hash is not None
         ):
             # transaction has more advanced features
             return SuiteTxType.NOT_SUITE_TX
@@ -79,14 +81,26 @@ class OrdinarySigner(Signer):
         # super() omitted intentionally
         # for OrdinarySigner, we do not show the prompt to choose level of details
         if self.suite_tx_type is SuiteTxType.NOT_SUITE_TX:
-            self.should_show_details = await layout.show_tx_init(
+            self.should_show_details = await layout.should_show_details(
                 self.signing_mode_title
             )
+            self._details_level_asked = True
         else:
+            # the choice is deferred until an output with plutus data is encountered
             self.should_show_details = False
 
         if not self._is_network_id_verifiable():
             await layout.warn_tx_network_unverifiable()
+
+    async def _should_show_output(self, output: messages.CardanoTxOutput) -> bool:
+        if not self._details_level_asked and self._output_has_plutus_data(output):
+            # Plutus data are shown only with details, so the user must be able to choose.
+            self.should_show_details = await layout.should_show_details(
+                TR.cardano__output_contains_datum_or_ref_script
+            )
+            self._details_level_asked = True
+
+        return await super()._should_show_output(output)
 
     async def _confirm_tx(self, tx_hash: bytes) -> None:
         # super() omitted intentionally

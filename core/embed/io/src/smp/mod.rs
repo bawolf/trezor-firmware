@@ -12,7 +12,7 @@ use core::convert::Infallible;
 use base64::{base64_decode, base64_encode};
 use crc16::crc16_itu_t;
 use minicbor::encode::write::Write;
-use rtl::error::{fatal_error, unwrap};
+use rtl::error::unwrap;
 use sys::irq::{irq_lock, irq_unlock};
 use sys::time::{Duration, Instant};
 
@@ -263,7 +263,7 @@ impl SmpReceiver {
 
         if byte == b'\n' {
             // end of a frame
-            if self.rx_frame_len > 0 {
+            if self.rx_frame_len >= FRAME_HEADER_SIZE {
                 let frame = &self.rx_frame[..self.rx_frame_len];
 
                 // init or continuation?
@@ -305,11 +305,26 @@ impl SmpReceiver {
 
                 let received_len = self.rx_msg_len + len;
 
+                if received_len < MSG_HEADER_SIZE {
+                    self.rx_msg_len = 0;
+                    return;
+                }
+
                 // the first two bytes of rx_msg are the length field
-                let msg_len = (u16::from(self.rx_msg[0]) << 8) | u16::from(self.rx_msg[1]);
+                let msg_len = usize::from(u16::from_be_bytes([self.rx_msg[0], self.rx_msg[1]]));
+
+                // The length field is attacker-controlled and `rx_msg` is a
+                // fixed buffer, so a message that claims more than we can hold
+                // is dropped rather than tracked. Without this the offset below
+                // walks past the end of `rx_msg`, because it advances by the
+                // full decoded length while the copy above is clamped.
+                if msg_len + MSG_HEADER_SIZE > self.rx_msg.len() {
+                    self.rx_msg_len = 0;
+                    return;
+                }
 
                 // too long? (received_len - 2) > msg_len
-                if received_len.saturating_sub(2) > msg_len as usize {
+                if received_len.saturating_sub(MSG_HEADER_SIZE) > msg_len {
                     self.rx_msg_len = 0;
                     return;
                 }
@@ -318,10 +333,10 @@ impl SmpReceiver {
                 self.rx_msg_len = received_len;
 
                 // complete?
-                if received_len.saturating_sub(2) == msg_len as usize {
+                if received_len.saturating_sub(MSG_HEADER_SIZE) == msg_len {
                     // TODO: CRC check here
 
-                    self.process_msg(msg_len as _);
+                    self.process_msg(msg_len);
                 }
             }
         }
@@ -431,17 +446,24 @@ unsafe fn received_read_msg(buf: &mut [u8]) -> Result<usize, SmpError> {
         unwrap!(opt_ref.as_ref(), "Receiver is not initialized")
     };
 
-    if receiver_ref.rx_msg_len == 0 {
+    let data_start = MSG_HEADER_SIZE + SMP_HEADER_SIZE;
+
+    // A response can claim a length that leaves no room for the payload the
+    // layout below assumes - `process_msg()` only requires the SMP header, and
+    // the footer is subtracted here. Reject instead of slicing an inverted or
+    // underflowing range.
+    if receiver_ref.rx_msg_len < data_start + MSG_FOOTER_SIZE {
         return Err(SmpError::WrongMessage);
     }
 
-    let data_start = MSG_HEADER_SIZE + SMP_HEADER_SIZE;
     let data_end = receiver_ref.rx_msg_len - MSG_FOOTER_SIZE;
     let data = &receiver_ref.rx_msg[data_start..data_end];
     let data_len = data.len();
 
+    // The response length is chosen by the peer, so a payload that does not
+    // fit the caller's buffer is its problem to report, not a reason to abort.
     if data_len > buf.len() {
-        fatal_error!("Buffer too small");
+        return Err(SmpError::WrongMessage);
     }
 
     buf[..data_len].copy_from_slice(data);
@@ -468,12 +490,14 @@ pub fn wait_for_response(
 
             let key = irq_lock();
             // SAFETY: IRQ locked, safe to read and clear receiver
-            let len = unsafe { unwrap!(received_read_msg(buf)) };
+            let result = unsafe { received_read_msg(buf) };
             irq_unlock(key);
 
             receiver_release();
 
-            return Ok(len);
+            // a malformed response is the peer's problem, not ours: report it
+            // rather than unwrapping into a panic
+            return result;
         }
 
         if Instant::now().checked_duration_since(start) > Some(timeout) {
@@ -481,5 +505,126 @@ pub fn wait_for_response(
             receiver_release();
             return Err(SmpError::Timeout);
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Feed one wire frame: [hdr0, hdr1] + base64(chunk) + '\n'
+    fn feed_frame(r: &mut SmpReceiver, chunk: &[u8], init: bool) {
+        let mut enc = [0u8; 256];
+        let n = base64_encode(chunk, &mut enc).unwrap();
+        if init {
+            r.process_byte(START_INIT_FRAME_BYTE_0);
+            r.process_byte(START_INIT_FRAME_BYTE_1);
+        } else {
+            r.process_byte(START_CONT_FRAME_BYTE_0);
+            r.process_byte(START_CONT_FRAME_BYTE_1);
+        }
+        for b in &enc[..n] {
+            r.process_byte(*b);
+        }
+        r.process_byte(b'\n');
+    }
+
+    /// A message body: two-byte length field followed by `payload`.
+    fn body(claimed_len: u16, payload: &[u8]) -> Vec<u8> {
+        let mut v = Vec::new();
+        v.extend_from_slice(&claimed_len.to_be_bytes());
+        v.extend_from_slice(payload);
+        v
+    }
+
+    /// A frame shorter than the two-byte frame header must not be inspected
+    /// as though it had one.
+    #[test]
+    fn short_frame_is_dropped() {
+        let mut r = SmpReceiver::new();
+        r.process_byte(START_INIT_FRAME_BYTE_0);
+        r.process_byte(b'\n');
+        assert!(r.msg_type.is_none());
+        assert_eq!(r.rx_msg_len, 0);
+    }
+
+    /// An init frame carrying only one byte leaves the length field half
+    /// written; it must be dropped rather than parsed against a stale byte.
+    #[test]
+    fn init_frame_without_full_length_field_is_dropped() {
+        let mut r = SmpReceiver::new();
+        // leave a stale low byte behind from a dropped message
+        feed_frame(&mut r, &body(0xFF10, &[0xAA; 91]), true);
+        assert_eq!(r.rx_msg[1], 0x10);
+
+        // one byte alone would have claimed 0x0110 with that stale byte
+        feed_frame(&mut r, &[0x01], true);
+        assert_eq!(r.rx_msg_len, 0);
+        assert!(r.msg_type.is_none());
+
+        // a continuation must not resurrect it
+        feed_frame(&mut r, &[0xBB; 16], false);
+        assert_eq!(r.rx_msg_len, 0);
+        assert!(r.msg_type.is_none());
+    }
+
+    /// The offset advances by the full decoded length while the copy is
+    /// clamped, so a message claiming more than `rx_msg` holds must be
+    /// dropped up front.
+    #[test]
+    fn message_longer_than_buffer_is_dropped() {
+        let mut r = SmpReceiver::new();
+        feed_frame(&mut r, &body(0xFFFF, &[0xAA; 91]), true);
+        for _ in 0..8 {
+            feed_frame(&mut r, &[0xBB; 93], false);
+        }
+        assert!(r.msg_type.is_none());
+        assert_eq!(r.rx_msg_len, 0);
+    }
+
+    /// Same, for a claimed length that would complete exactly one frame past
+    /// the end of the buffer.
+    #[test]
+    fn message_completing_past_buffer_is_dropped() {
+        let mut r = SmpReceiver::new();
+        feed_frame(&mut r, &body(600, &[0xAA; 91]), true);
+        for _ in 0..4 {
+            feed_frame(&mut r, &[0xBB; 93], false);
+        }
+        feed_frame(&mut r, &[0xBB; 44], false);
+        feed_frame(&mut r, &[0xBB; 93], false);
+        assert!(r.msg_type.is_none());
+    }
+
+    /// A response whose length field leaves no room for the payload the
+    /// layout assumes must be reported, not sliced.
+    #[test]
+    fn response_without_payload_room_is_rejected() {
+        let mut r = SmpReceiver::new();
+        let hdr = [SMP_OP_READ_RSP, 0, 0, 0, 0, 0, 0, 0]; // group 0, cmd 0 = echo
+        feed_frame(&mut r, &body(8, &hdr), true);
+
+        // the parser accepts it as complete, so the guard has to be downstream
+        assert!(r.msg_type.is_some());
+        assert_eq!(r.rx_msg_len, 10);
+
+        let data_start = MSG_HEADER_SIZE + SMP_HEADER_SIZE;
+        assert!(r.rx_msg_len < data_start + MSG_FOOTER_SIZE);
+    }
+
+    /// A well-formed echo response is still accepted and located correctly.
+    #[test]
+    fn well_formed_response_is_accepted() {
+        let mut r = SmpReceiver::new();
+        let mut payload = Vec::new();
+        payload.extend_from_slice(&[SMP_OP_READ_RSP, 0, 0, 0, 0, 0, 0, 0]);
+        payload.extend_from_slice(b"hi");
+        payload.extend_from_slice(&[0, 0]); // CRC placeholder
+        feed_frame(&mut r, &body(payload.len() as u16, &payload), true);
+
+        assert!(matches!(r.msg_type, Some(MsgType::Echo)));
+        let data_start = MSG_HEADER_SIZE + SMP_HEADER_SIZE;
+        let data_end = r.rx_msg_len - MSG_FOOTER_SIZE;
+        assert_eq!(&r.rx_msg[data_start..data_end], b"hi");
     }
 }

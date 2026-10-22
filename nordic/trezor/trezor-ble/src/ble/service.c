@@ -99,6 +99,10 @@ int service_notify(struct bt_conn *conn, uint8_t *data, size_t len) {
   const struct bt_gatt_attr *attr = &trz_svc.attrs[4];
 
   uint8_t *buf = k_malloc(len);
+  if (buf == NULL) {
+    LOG_WRN("Not able to allocate notification buffer");
+    return -ENOMEM;
+  }
   memcpy(buf, data, len);
 
   params.attr = attr;
@@ -132,8 +136,17 @@ void service_send_busy(void) {
       0x65, 0x64, 0x20, 0x6f, 0x72, 0x20, 0x62, 0x75, 0x73, 0x79};
 
   if (buf) {
+    // The notification is a whole packet, so everything past the message is
+    // padding, and it has to be padding we chose rather than whatever the
+    // heap block last held.
+    memset(buf->data, 0, sizeof(buf->data));
     memcpy(buf->data, busy_packet, sizeof(busy_packet));
     buf->len = BLE_TX_PACKET_SIZE;
-    service_send(conn, buf);
+
+    int err = service_send(conn, buf);
+    if (err != 0) {
+      // `on_sent` only runs once the notification is accepted
+      k_free(buf);
+    }
   }
 }

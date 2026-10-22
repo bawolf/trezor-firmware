@@ -269,7 +269,9 @@ class Signer:
         validate_network_info(msg.network_id, msg.protocol_magic)
 
     async def _show_tx_init(self) -> None:
-        self.should_show_details = await layout.show_tx_init(self.signing_mode_title)
+        self.should_show_details = await layout.should_show_details(
+            self.signing_mode_title
+        )
 
         if not self._is_network_id_verifiable():
             await layout.warn_tx_network_unverifiable()
@@ -318,7 +320,7 @@ class Signer:
         self, outputs_list: HashBuilderList, output: CardanoTxOutput, output_index: int
     ) -> None:
         self._validate_output(output)
-        should_show = self._should_show_output(output)
+        should_show = await self._should_show_output(output)
         if should_show:
             await self._show_output_init(output, output_index)
 
@@ -451,7 +453,7 @@ class Signer:
             Credential.stake_credential(address_parameters),
         )
 
-    def _should_show_output(self, output: CardanoTxOutput) -> bool:
+    async def _should_show_output(self, output: CardanoTxOutput) -> bool:
         """
         Determines whether the output should be shown. Extracted from _show_output
         because of readability.
@@ -468,12 +470,7 @@ class Signer:
 
         if self._is_simple_change_output(output):
             # Show change output only if showing details and if it contains plutus data
-            has_plutus_data = (
-                output.datum_hash is not None
-                or output.inline_datum_size > 0
-                or output.reference_script_size > 0
-            )
-            return self.should_show_details and has_plutus_data
+            return self.should_show_details and self._output_has_plutus_data(output)
 
         return True
 
@@ -487,6 +484,13 @@ class Signer:
 
         return output.address_parameters is not None and not should_show_credentials(
             output.address_parameters
+        )
+
+    def _output_has_plutus_data(self, output: CardanoTxOutput) -> bool:
+        return (
+            output.datum_hash is not None
+            or output.inline_datum_size > 0
+            or output.reference_script_size > 0
         )
 
     async def _process_legacy_output(
