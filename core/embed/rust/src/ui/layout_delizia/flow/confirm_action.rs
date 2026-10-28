@@ -1,7 +1,8 @@
 use heapless::Vec;
 
 use super::super::component::{
-    Footer, Frame, Header, PromptScreen, SwipeContent, VerticalMenu, VerticalMenuChoiceMsg,
+    Footer, Frame, FrameMsg, Header, PromptMsg, PromptScreen, SwipeContent, VerticalMenu,
+    VerticalMenuChoiceMsg,
 };
 use super::super::theme;
 use crate::maybe_trace::MaybeTrace;
@@ -12,7 +13,7 @@ use crate::ui::component::swipe_detect::SwipeSettings;
 use crate::ui::component::text::paragraphs::{
     Paragraph, ParagraphSource, ParagraphVecShort, VecExt,
 };
-use crate::ui::component::{Component, ComponentExt, EventCtx, Paginate};
+use crate::ui::component::{Component, ComponentExt, EventCtx, MsgMap, Paginate};
 use crate::ui::flow::base::{Decision, DecisionBuilder as _};
 use crate::ui::flow::{FlowController, FlowMsg, SwipeFlow, SwipePage};
 use crate::ui::geometry::Direction;
@@ -61,13 +62,9 @@ impl ConfirmActionStrings {
     }
 }
 
-pub enum HoldTheme {
-    Normal,
-    Danger,
-}
-
 pub struct ConfirmActionOptions {
-    pub hold: Option<HoldTheme>,
+    pub hold: bool,
+    pub danger: bool,
     pub swipe_down: bool,
     pub swipe_up: bool,
     pub page_limit: Option<u16>,
@@ -78,7 +75,8 @@ pub struct ConfirmActionOptions {
 impl ConfirmActionOptions {
     pub fn new() -> Self {
         Self {
-            hold: None,
+            hold: false,
+            danger: false,
             swipe_down: false,
             swipe_up: false,
             page_limit: None,
@@ -88,12 +86,12 @@ impl ConfirmActionOptions {
     }
 
     pub fn with_hold(mut self, hold: bool) -> Self {
-        self.hold = if hold { Some(HoldTheme::Normal) } else { None };
+        self.hold = hold;
         self
     }
 
-    pub fn with_hold_danger(mut self) -> Self {
-        self.hold = Some(HoldTheme::Danger);
+    pub fn with_danger(mut self, danger: bool) -> Self {
+        self.danger = danger;
         self
     }
 
@@ -285,14 +283,28 @@ pub fn new_confirm_action(
     action: Option<TString<'static>>,
     description: Option<TString<'static>>,
     subtitle: Option<TString<'static>>,
+    verb: Option<TString<'static>>,
     verb_cancel: Option<TString<'static>>,
     reverse: bool,
     hold: bool,
-    hold_danger: bool,
+    danger: bool,
     prompt_screen: bool,
     prompt_title: TString<'static>,
     external_menu: bool,
 ) -> Result<SwipeFlow, Error> {
+    if external_menu && hold && action.is_none() && description.is_none() {
+        // nothing to show before the prompt, so show the prompt alone
+        let content = prompt_frame(title, subtitle, hold, danger, true, verb).with_external_menu();
+        // not `Frame::map`, which would pass on `FlowMsg::Next` from a tap on the
+        // footer, confirming without the hold
+        let content = MsgMap::new(content, |msg| match msg {
+            FrameMsg::Content(PromptMsg::Confirmed) => Some(FlowMsg::Confirmed),
+            FrameMsg::Button(FlowMsg::Info) => Some(FlowMsg::Info),
+            _ => None,
+        });
+        return super::util::single_page(content);
+    }
+
     let paragraphs = {
         let action = action.unwrap_or("".into());
         let description = description.unwrap_or("".into());
@@ -309,18 +321,12 @@ pub fn new_confirm_action(
         paragraphs.into_paragraphs()
     };
 
-    if external_menu && (prompt_screen || hold || hold_danger) {
+    if external_menu && (prompt_screen || hold) {
         return Err(Error::ValueError(
-            c"external_menu currently not supported in tandem with prompt_screen/hold",
+            c"external_menu not supported with a tap prompt, nor with hold and action/description",
         ));
     }
 
-    let mut options = ConfirmActionOptions::new();
-    options = if hold_danger {
-        options.with_hold_danger()
-    } else {
-        options.with_hold(hold)
-    };
     new_confirm_action_simple(
         paragraphs,
         if external_menu {
@@ -329,7 +335,9 @@ pub fn new_confirm_action(
             ConfirmActionExtra::Menu(ConfirmActionMenuStrings::new().with_verb_cancel(verb_cancel))
         },
         ConfirmActionStrings::new(title, subtitle, None, prompt_screen.then_some(prompt_title)),
-        options,
+        ConfirmActionOptions::new()
+            .with_hold(hold)
+            .with_danger(danger),
     )
 }
 
@@ -340,12 +348,8 @@ fn new_confirm_action_uni<T: Component + Paginate + MaybeTrace + 'static>(
     strings: ConfirmActionStrings,
     options: ConfirmActionOptions,
 ) -> Result<SwipeFlow, Error> {
-    let (prompt_screen, prompt_pages, mut flow, page) = create_flow(
-        strings.title,
-        strings.prompt_screen,
-        options.hold.is_some(),
-        &extra,
-    );
+    let (prompt_screen, prompt_pages, mut flow, page) =
+        create_flow(strings.title, strings.prompt_screen, options.hold, &extra);
 
     let header = Header::left_aligned(strings.title);
     let has_external_menu = matches!(extra, ConfirmActionExtra::ExternalMenu);
@@ -354,6 +358,9 @@ fn new_confirm_action_uni<T: Component + Paginate + MaybeTrace + 'static>(
         ConfirmActionExtra::Menu(_) => header.with_menu_button(),
         ConfirmActionExtra::Cancel => header.with_cancel_button(),
     };
+    if options.danger {
+        header = danger_header(header);
+    }
     if let Some(subtitle) = strings.subtitle {
         header = header.with_subtitle(subtitle);
     }
@@ -411,6 +418,7 @@ fn new_confirm_action_uni<T: Component + Paginate + MaybeTrace + 'static>(
             &extra,
             strings.subtitle,
             options.hold,
+            options.danger,
             prompt_title,
             prompt_state,
         )?;
@@ -485,39 +493,71 @@ fn create_confirm(
     flow: &mut SwipeFlow,
     extra: &ConfirmActionExtra,
     subtitle: Option<TString<'static>>,
-    hold: Option<HoldTheme>,
+    hold: bool,
+    danger: bool,
     prompt_title: TString<'static>,
     prompt_state: &'static dyn FlowController,
 ) -> Result<(), Error> {
-    let (prompt, prompt_action) = if let Some(hold) = hold {
-        let prompt = match hold {
-            HoldTheme::Normal => PromptScreen::new_hold_to_confirm(),
-            HoldTheme::Danger => PromptScreen::new_hold_to_confirm_danger(),
-        };
-        (prompt, TR::instructions__hold_to_confirm.into())
-    } else {
-        (
-            PromptScreen::new_tap_to_confirm(),
-            TR::instructions__tap_to_confirm.into(),
-        )
-    };
-
-    let mut header = Header::left_aligned(prompt_title);
-    if matches!(extra, ConfirmActionExtra::Menu(_)) {
-        header = header.with_menu_button();
-    }
-    if let Some(subtitle) = subtitle {
-        header = header.with_subtitle(subtitle);
-    }
-    let content_confirm = Frame::with_header(header, SwipeContent::new(prompt))
-        .with_footer(prompt_action, None)
-        .with_swipe(Direction::Down, SwipeSettings::Default);
+    let content_confirm = prompt_frame(
+        prompt_title,
+        subtitle,
+        hold,
+        danger,
+        matches!(extra, ConfirmActionExtra::Menu(_)),
+        None,
+    )
+    .with_swipe(Direction::Down, SwipeSettings::Default);
 
     flow.add_page(
         prompt_state,
         content_confirm.map(super::util::map_to_confirm),
     )?;
     Ok(())
+}
+
+// The "Tap to confirm" or "Hold to confirm" screen, `instruction` overrides its
+// footer.
+fn prompt_frame(
+    title: TString<'static>,
+    subtitle: Option<TString<'static>>,
+    hold: bool,
+    danger: bool,
+    menu_button: bool,
+    instruction: Option<TString<'static>>,
+) -> Frame<SwipeContent<PromptScreen>> {
+    let (prompt, default_instruction) = match (hold, danger) {
+        (true, false) => (
+            PromptScreen::new_hold_to_confirm(),
+            TR::instructions__hold_to_confirm,
+        ),
+        (true, true) => (
+            PromptScreen::new_hold_to_confirm_danger(),
+            TR::instructions__hold_to_confirm,
+        ),
+        (false, _) => (
+            PromptScreen::new_tap_to_confirm(),
+            TR::instructions__tap_to_confirm,
+        ),
+    };
+
+    let mut header = Header::left_aligned(title);
+    if menu_button {
+        header = header.with_menu_button();
+    }
+    if danger {
+        header = danger_header(header);
+    }
+    if let Some(subtitle) = subtitle {
+        header = header.with_subtitle(subtitle);
+    }
+    Frame::with_header(header, SwipeContent::new(prompt))
+        .with_footer(instruction.unwrap_or(default_instruction.into()), None)
+}
+
+fn danger_header(header: Header) -> Header {
+    header
+        .with_static_icon(theme::ICON_WARNING, theme::ORANGE_LIGHT)
+        .styled(theme::label_title_danger())
 }
 
 #[inline(never)]
