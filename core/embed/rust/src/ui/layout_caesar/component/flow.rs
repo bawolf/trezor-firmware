@@ -2,7 +2,7 @@ use super::scrollbar::SCROLLBAR_SPACE;
 use super::title::Title;
 use super::{
     theme, ButtonAction, ButtonController, ButtonControllerMsg, ButtonLayout, ButtonPos,
-    CancelInfoConfirmMsg, FlowPages, Page, ScrollBar,
+    CancelConfirmMsg, FlowPages, Page, ScrollBar,
 };
 use crate::strutil::TString;
 use crate::ui::component::{Child, Component, ComponentExt, Event, EventCtx, Pad, Paginate};
@@ -28,12 +28,6 @@ where
     buttons: Child<ButtonController>,
     page_counter: usize,
     return_confirmed_index: bool,
-    show_scrollbar: bool,
-    /// Possibly enforcing the second button to be ignored after some time after
-    /// pressing the first button
-    ignore_second_button_ms: Option<u32>,
-    #[cfg(feature = "ui_debug")]
-    has_menu: bool,
 }
 
 impl<F> Flow<F>
@@ -58,10 +52,6 @@ where
             buttons: Child::new(ButtonController::new(ButtonLayout::empty())),
             page_counter: 0,
             return_confirmed_index: false,
-            show_scrollbar: true,
-            ignore_second_button_ms: None,
-            #[cfg(feature = "ui_debug")]
-            has_menu: false,
         }
     }
 
@@ -79,31 +69,8 @@ where
         self
     }
 
-    /// Show scrollbar or not.
-    pub fn with_scrollbar(mut self, show_scrollbar: bool) -> Self {
-        self.show_scrollbar = show_scrollbar;
-        self
-    }
-
-    /// Ignoring the second button duration
-    pub fn with_ignore_second_button_ms(mut self, ignore_second_button_ms: u32) -> Self {
-        self.ignore_second_button_ms = Some(ignore_second_button_ms);
-        self
-    }
-
     pub fn confirmed_index(&self) -> Option<usize> {
         self.return_confirmed_index.then_some(self.page_counter)
-    }
-
-    #[cfg(feature = "ui_debug")]
-    pub fn with_menu(mut self, has_menu: bool) -> Self {
-        self.has_menu = has_menu;
-        self
-    }
-
-    #[cfg(not(feature = "ui_debug"))]
-    pub fn with_menu(self, _has_menu: bool) -> Self {
-        self
     }
 
     /// Getting new current page according to page counter.
@@ -219,7 +186,7 @@ impl<F> Component for Flow<F>
 where
     F: Fn(usize) -> Page,
 {
-    type Msg = CancelInfoConfirmMsg;
+    type Msg = CancelConfirmMsg;
 
     fn place(&mut self, bounds: Rect) -> Rect {
         let (title_content_area, button_area) = bounds.split_bottom(theme::BUTTON_HEIGHT);
@@ -240,11 +207,8 @@ where
         // (scrollbar will be active - counting pages - even when not placed and
         // painted)
         if self.title.is_some() {
-            let (title_area, scrollbar_area) = if self.show_scrollbar {
-                title_area.split_right(self.scrollbar.inner().overall_width() + SCROLLBAR_SPACE)
-            } else {
-                (title_area, Rect::zero())
-            };
+            let (title_area, scrollbar_area) =
+                title_area.split_right(self.scrollbar.inner().overall_width() + SCROLLBAR_SPACE);
 
             self.title.place(title_area);
             self.title_area = title_area;
@@ -253,14 +217,7 @@ where
 
         // We finally found how long is the first page, and can set its button layout.
         self.current_page.place(content_area);
-        if let Some(ignore_ms) = self.ignore_second_button_ms {
-            self.buttons = Child::new(
-                ButtonController::new(self.current_page.btn_layout())
-                    .with_ignore_btn_delay(ignore_ms),
-            );
-        } else {
-            self.buttons = Child::new(ButtonController::new(self.current_page.btn_layout()));
-        }
+        self.buttons = Child::new(ButtonController::new(self.current_page.btn_layout()));
 
         self.pad.place(title_content_area);
         self.buttons.place(button_area);
@@ -301,9 +258,8 @@ where
                         self.go_to_last_page(ctx);
                         return None;
                     }
-                    ButtonAction::Cancel => return Some(CancelInfoConfirmMsg::Cancelled),
-                    ButtonAction::Confirm => return Some(CancelInfoConfirmMsg::Confirmed),
-                    ButtonAction::Info => return Some(CancelInfoConfirmMsg::Info),
+                    ButtonAction::Cancel => return Some(CancelConfirmMsg::Cancelled),
+                    ButtonAction::Confirm => return Some(CancelConfirmMsg::Confirmed),
                 }
             }
         };
@@ -312,11 +268,9 @@ where
 
     fn render<'s>(&'s self, target: &mut impl Renderer<'s>) {
         self.pad.render(target);
-        // Scrollbars are painted only with a title and when requested
+        // Scrollbars are painted only with a title
         if self.title.is_some() {
-            if self.show_scrollbar {
-                self.scrollbar.render(target);
-            }
+            self.scrollbar.render(target);
             self.title.render(target);
         }
         self.buttons.render(target);
@@ -346,9 +300,5 @@ where
         t.child("scrollbar", &self.scrollbar);
         t.child("buttons", &self.buttons);
         t.child("flow_page", &self.current_page);
-        t.bool(
-            "has_menu",
-            self.has_menu && self.current_page.pager().is_last(),
-        );
     }
 }
