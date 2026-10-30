@@ -45,6 +45,26 @@ void cli_set_commands(cli_t* cli, const cli_command_t* cmd_array,
   cli->cmd_count = cmd_count;
 }
 
+const cli_command_t* cli_next_command(cli_t* cli, const char* prefix,
+                                      const cli_command_t* prev) {
+  // The command array is const, so instead of sorting it, select the
+  // smallest name greater than the previous one.
+  const cli_command_t* next = NULL;
+  for (size_t i = 0; i < cli->cmd_count; i++) {
+    const cli_command_t* cmd = &cli->cmd_array[i];
+    if (cmd->name[0] == '$' || !cstr_starts_with(cmd->name, prefix)) {
+      continue;
+    }
+    if (prev != NULL && strcmp(cmd->name, prev->name) <= 0) {
+      continue;
+    }
+    if (next == NULL || strcmp(cmd->name, next->name) < 0) {
+      next = cmd;
+    }
+  }
+  return next;
+}
+
 static void cli_vprintf(cli_t* cli, const char* format, va_list args) {
   char buffer[CLI_LINE_BUFFER_SIZE];
   int len = vsnprintf_(buffer, sizeof(buffer), format, args);
@@ -383,6 +403,24 @@ static char cli_autocomplete(cli_t* cli, const char* prefix) {
   return next_char;
 }
 
+// Prints all commands starting with the prefix in alphabetical order,
+// followed by the prompt and the current line. Does nothing if there are
+// fewer than two such commands.
+static void cli_list_completions(cli_t* cli, const char* prefix) {
+  const cli_command_t* first = cli_next_command(cli, prefix, NULL);
+  if (first == NULL || cli_next_command(cli, prefix, first) == NULL) {
+    return;
+  }
+
+  cli_printf(cli, "\r\n");
+  const cli_command_t* cmd = first;
+  while (cmd != NULL) {
+    cli_printf(cli, "%s\r\n", cmd->name);
+    cmd = cli_next_command(cli, prefix, cmd);
+  }
+  cli_printf(cli, "> %s", prefix);
+}
+
 // Processes a received character
 //
 // Returns 1 if the input line is complete,
@@ -390,6 +428,9 @@ static char cli_autocomplete(cli_t* cli, const char* prefix) {
 // returns negative value if the input line is too long
 static int cli_process_char(cli_t* cli, int ch) {
   char* buf = cli->line_buffer;
+
+  bool last_tab = cli->last_tab;
+  cli->last_tab = (ch == '\t');
 
   switch (ch) {
     case ESC_SEQ('A'):  // ESC[A
@@ -503,6 +544,7 @@ static int cli_process_char(cli_t* cli, int ch) {
     case '\t':
       // tab => autocomplete
       if (cli->interactive && cli->line_len == cli->line_cursor) {
+        int orig_len = cli->line_len;
         char ch;
         while ((ch = cli_autocomplete(cli, buf)) != '\0') {
           if (cli->line_len < CLI_LINE_BUFFER_SIZE - 1) {
@@ -511,6 +553,10 @@ static int cli_process_char(cli_t* cli, int ch) {
             buf[cli->line_len] = '\0';
             cli->line_cursor++;
           }
+        }
+        // Second tab without progress => list the possible completions
+        if (last_tab && cli->line_len == orig_len) {
+          cli_list_completions(cli, buf);
         }
       }
       break;
@@ -544,6 +590,7 @@ static void cli_clear_line(cli_t* cli) {
   cli->line_cursor = 0;
   cli->hist_idx = 0;
   cli->hist_prefix = 0;
+  cli->last_tab = false;
   cli->response_crc = CRC32_INITIAL;
   cli->crc_req = cli->crc_auto;
   memset(cli->line_buffer, 0, sizeof(cli->line_buffer));

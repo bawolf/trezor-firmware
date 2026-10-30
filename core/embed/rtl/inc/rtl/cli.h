@@ -111,6 +111,8 @@ struct cli {
   int hist_idx;
   /** prefix to search in the history */
   int hist_prefix;
+  /** previous character was a tab */
+  bool last_tab;
 
   /** Command name (pointer to the line buffer) */
   const char* cmd_name;
@@ -153,6 +155,16 @@ bool cli_init(cli_t* cli, cli_read_cb_t read, cli_write_cb_t write,
 /** Registers the command handlers */
 void cli_set_commands(cli_t* cli, const cli_command_t* cmd_array,
                       size_t cmd_count);
+
+/**
+ * Iterates over the registered commands in alphabetical order.
+ *
+ * Returns the command following `prev` whose name starts with `prefix`,
+ * or the first such command if `prev` is NULL. Hidden commands (names
+ * starting with '$') are skipped. Returns NULL if there are no more commands.
+ */
+const cli_command_t* cli_next_command(cli_t* cli, const char* prefix,
+                                      const cli_command_t* prev);
 
 /** Process the newly received characters from the console input */
 const cli_command_t* cli_process_io(cli_t* cli);
