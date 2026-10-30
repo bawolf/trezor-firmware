@@ -8,8 +8,6 @@ on:
       - synchronize  # branch head update
       - labeled
   workflow_dispatch:
-  schedule:
-    - cron: '15 23 * * *'  # every day @ 23:15
   push:
     branches:
       - 'release/**'
